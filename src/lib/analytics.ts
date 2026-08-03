@@ -10,10 +10,13 @@ const host = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 const client: PostHog | null = key ? new PostHog(key, { host }) : null;
 
-export function track(event: string, properties?: Record<string, unknown>) {
+// PostHog wants JSON-serializable property values.
+type Props = Record<string, string | number | boolean | null>;
+
+export function track(event: string, properties?: Props) {
   client?.capture(event, properties);
 }
 
-export function identify(distinctId: string, properties?: Record<string, unknown>) {
+export function identify(distinctId: string, properties?: Props) {
   client?.identify(distinctId, properties);
 }
