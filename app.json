@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "The Wall",
+    "slug": "the-wall",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "thewall",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "resizeMode": "cover",
+      "backgroundColor": "#fbf9f4"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.thewall.app"
+    },
+    "android": {
+      "package": "com.thewall.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#f3e300"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The Wall needs access to your photos so you can share memories.",
+          "cameraPermission": "The Wall needs your camera so you can capture a memory."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": ""
+    }
+  }
+}
