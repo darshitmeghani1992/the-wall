@@ -11,6 +11,13 @@ minor version per shipped slice; note schema/doc changes.
   criteria, edge cases, DB, architecture w/ games-as-plugins, AI rules, DoD,
   and living analytics/perf/security/release docs).
 
+## 0.5 — Memory / Photo mark
+- The Writer gains a photo mode: pick from library or snap with the camera
+  (permission-gated), an optional caption (≤200 chars), and a polaroid preview.
+- On submit, the image uploads to the `attachments` bucket (`lib/upload.ts`,
+  ≤6 MB) and the memory drops onto the wall.
+- Create picker: Memory promoted from "coming soon" to an active tile.
+
 ## 0.4 — Write a Mark (Sticky / Roast / Secret)
 - Create picker tiles open the Writer (`app/write/[type].tsx`).
 - Writer: adaptive title, paper textarea (≤500 chars), **color picker** (Sticky),

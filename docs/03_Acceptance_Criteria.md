@@ -40,12 +40,12 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 - ✓ Secret: purple; text hidden (blurred) until tapped; author line still shows
 - ✓ Both honor anonymous toggle and ≤500 chars
 
-## Memory / Photo mark `[ ]`
+## Memory / Photo mark `[built]`
 - ✓ Pick from gallery **or** capture with camera (permission requested)
 - ✓ Image ≤ 6 MB; over-limit rejected with a clear message
 - ✓ Optional caption ≤ 200 chars
 - ✓ Uploads to the `attachments` bucket; renders as a polaroid on the wall
-- ✓ Upload progress shown; failure offers retry
+- ⏳ Upload progress: a "Posting…" busy state today; a % bar is a later polish. Failure re-enables the button to retry.
 
 ## Poll mark `[ ]`
 - ✓ Question required; 2–4 options, each non-empty

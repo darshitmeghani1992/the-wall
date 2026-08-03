@@ -13,6 +13,7 @@ const TYPES = [
   { key: "sticky", label: "Sticky", sub: "A quick note", bg: markColors.stickyYellow },
   { key: "roast", label: "Roast", sub: "Lovingly savage", bg: markColors.roastOrange },
   { key: "secret", label: "Secret", sub: "Blurred til tapped", bg: markColors.secretPurple },
+  { key: "memory", label: "Memory", sub: "A photo + caption", bg: markColors.memoryCream },
 ] as const;
 
 export default function CreateScreen() {
@@ -67,7 +68,7 @@ export default function CreateScreen() {
         COMING SOON
       </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
-        {["Memory", "Poll", "Award", "Predict", "Doodle"].map((label) => (
+        {["Poll", "Award", "Predict", "Doodle"].map((label) => (
           <View
             key={label}
             style={{
