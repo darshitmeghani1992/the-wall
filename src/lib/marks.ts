@@ -1,5 +1,52 @@
 import { supabase } from "./supabase";
-import type { Mark } from "./types";
+import { track } from "./analytics";
+import type { Mark, MarkPayload, MarkType } from "./types";
+
+/** The fields the Writer collects for a new mark. */
+export type MarkDraft = {
+  wallId: string;
+  type: MarkType;
+  text?: string | null;
+  color?: string | null;
+  anonymous?: boolean;
+  mediaUrl?: string | null;
+  payload?: MarkPayload | null;
+};
+
+/**
+ * Insert a new mark authored by the signed-in user. The DB trigger
+ * `marks_set_defaults` sets its status (active, or pending when the wall
+ * requires approval) and guards anonymity; realtime then drops it onto the wall.
+ */
+export async function createMark(draft: MarkDraft): Promise<Mark> {
+  const { data: authData } = await supabase.auth.getUser();
+  const uid = authData.user?.id ?? null;
+  const rotation = Math.round((Math.random() * 5 - 2.5) * 10) / 10; // -2.5°..+2.5°
+
+  const { data, error } = await supabase
+    .from("marks")
+    .insert({
+      wall_id: draft.wallId,
+      author_id: uid,
+      type: draft.type,
+      text: draft.text ?? null,
+      color: draft.color ?? null,
+      anonymous: draft.anonymous ?? false,
+      media_url: draft.mediaUrl ?? null,
+      payload: draft.payload ?? null,
+      rotation,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  track("Mark Created", {
+    mark_type: draft.type,
+    is_anonymous: draft.anonymous ?? false,
+    wall_id: draft.wallId,
+  });
+  return data as Mark;
+}
 
 export type Author = {
   id: string;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Masonry } from "@/components/Masonry";
@@ -31,13 +31,15 @@ const FILTERS: Filter[] = [
 export default function MyWall() {
   const router = useRouter();
   const { session, profile } = useAuth();
+  // When we arrive here right after creating a mark, animate that one in.
+  const { justCreated } = useLocalSearchParams<{ justCreated?: string }>();
 
   const [wall, setWall] = useState<Wall | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
   const [friendCount, setFriendCount] = useState(0);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
-  const dropIds = useRef<Set<string>>(new Set());
+  const dropIds = useRef<Set<string>>(new Set(justCreated ? [String(justCreated)] : []));
 
   // Initial load: wall + marks + friend count.
   useEffect(() => {

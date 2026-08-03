@@ -24,7 +24,7 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 - ✓ Empty wall shows "invite your crew" with a share action
 - ✓ Only `active` marks show to viewers; author & owner also see their `pending`
 
-## Sticky mark `[ ]` (first build slice)
+## Sticky mark `[built]` (first build slice)
 - ✓ Can choose one of 4 colors; default yellow
 - ✓ Text required, non-empty, **≤ 500 chars** (counter shown near limit)
 - ✓ Anonymous toggle; when on, author is hidden everywhere for that mark
@@ -33,9 +33,9 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 - ✓ Mark appears instantly via realtime drop-in
 - ✓ Chosen color persisted and re-rendered
 - ✓ RLS: only a permitted contributor can insert (owner always can)
-- ✓ Author can edit/delete their own mark; owner can pin/hide it
+- ⏳ Author can edit/delete their own mark; owner can pin/hide it *(UI in slice B2)*
 
-## Roast / Secret marks `[ ]`
+## Roast / Secret marks `[built]`
 - ✓ Roast: orange bg, 2px ink border, larger type; no color picker
 - ✓ Secret: purple; text hidden (blurred) until tapped; author line still shows
 - ✓ Both honor anonymous toggle and ≤500 chars

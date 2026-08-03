@@ -6,15 +6,13 @@ import { MarkCard } from "@/components/MarkCard";
 import { colors, markColors, radius } from "@/theme";
 
 /**
- * Leave a Mark — the type picker (Create modal). Phase 3 wires each tile to its
- * Writer. For now the four active types are shown to validate the modal + dock
- * FAB routing.
+ * Leave a Mark — the type picker (Create modal). Active tiles open the Writer;
+ * the rest are "coming soon" until their own slice lands.
  */
 const TYPES = [
   { key: "sticky", label: "Sticky", sub: "A quick note", bg: markColors.stickyYellow },
   { key: "roast", label: "Roast", sub: "Lovingly savage", bg: markColors.roastOrange },
   { key: "secret", label: "Secret", sub: "Blurred til tapped", bg: markColors.secretPurple },
-  { key: "memory", label: "Memory", sub: "A photo + caption", bg: markColors.memoryCream },
 ] as const;
 
 export default function CreateScreen() {
@@ -45,9 +43,7 @@ export default function CreateScreen() {
               background={t.bg}
               bordered={t.key === "roast"}
               fastener="none"
-              onPress={() => {
-                // Phase 3: router.push(`/write/${t.key}`)
-              }}
+              onPress={() => router.push(`/write/${t.key}`)}
             >
               <Text
                 variant="headline"
@@ -71,7 +67,7 @@ export default function CreateScreen() {
         COMING SOON
       </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
-        {["Doodle", "Poll", "Award", "Predict"].map((label) => (
+        {["Memory", "Poll", "Award", "Predict", "Doodle"].map((label) => (
           <View
             key={label}
             style={{

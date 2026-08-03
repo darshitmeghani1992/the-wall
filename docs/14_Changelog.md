@@ -11,6 +11,16 @@ minor version per shipped slice; note schema/doc changes.
   criteria, edge cases, DB, architecture w/ games-as-plugins, AI rules, DoD,
   and living analytics/perf/security/release docs).
 
+## 0.4 — Write a Mark (Sticky / Roast / Secret)
+- Create picker tiles open the Writer (`app/write/[type].tsx`).
+- Writer: adaptive title, paper textarea (≤500 chars), **color picker** (Sticky),
+  **anonymous** toggle, and a **live preview** rendered with the real `MarkView`.
+- "Stick it on the Wall ✦" inserts the mark (`createMark` in `lib/marks.ts`);
+  it drops in at the top of My Wall via realtime (+ `justCreated` animation).
+- Analytics: `Mark Created` event via `lib/analytics.ts` (no-op without a key).
+- CI: GitHub Actions type-check + lint on every PR; ESLint (`eslint-config-expo`);
+  disabled expo-router typed-routes (needs generated types) to keep `tsc` green.
+
 ## 0.3 — My Wall hero
 - 2-column masonry of tilted, pinned marks with hard shadows.
 - Per-type renderers: sticky, roast, secret (tap-to-reveal), memory/photo

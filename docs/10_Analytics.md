@@ -17,7 +17,7 @@ properties.
 | `Signup Started` | welcome → sign-in | `method` | ⬜ |
 | `Signup Completed` | profile created | `interests_count` | ⬜ |
 | `Wall Viewed` | wall screen open | `wall_id`, `is_own` | ⬜ |
-| `Mark Created` | mark inserted | `mark_type`, `is_anonymous`, `wall_id` | ⬜ (A1+) |
+| `Mark Created` | mark inserted | `mark_type`, `is_anonymous`, `wall_id` | ✅ |
 | `Mark Deleted` | author/owner removes | `mark_type` | ⬜ |
 | `Mark Reacted` | reaction added | `emoji`, `mark_type` | ⬜ |
 | `Comment Added` | comment posted | `mark_type` | ⬜ |

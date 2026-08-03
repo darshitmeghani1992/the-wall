@@ -29,6 +29,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(onboarding)" />
           <Stack.Screen name="create" options={{ presentation: "modal" }} />
+          <Stack.Screen name="write/[type]" options={{ presentation: "modal" }} />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>
