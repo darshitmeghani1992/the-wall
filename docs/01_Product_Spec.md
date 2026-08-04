@@ -13,6 +13,35 @@ Audience: Gen-Z / late-millennial users who want authenticity over polished feed
 Aesthetic: tactile "physical digital" — paper surface, marks pinned with tape and
 push-pins, hand-cut shadows. (See design system in `06_Tech_Architecture.md`.)
 
+## Core interaction model (important)
+
+The Wall **inverts the feed model.** In a feed app the primary action is "post to
+my own timeline." Here, the primary action is **leaving a Mark on *someone
+else's* wall.** Your own wall is mostly what *others* write about *you* — a
+living guestbook / yearbook page — not a place you broadcast from.
+
+Consequences for the UI:
+
+- **The primary create action is target-first and aimed at others.** "Leave a
+  Mark" always answers "on *whose* wall?" — it never silently defaults to your
+  own wall. Two entry points:
+  1. **On a wall you're viewing** (a friend's wall) → a "Leave a Mark" button
+     pre-aimed at *that* wall. This is the star path.
+  2. **The dock ✚** → opens a **"whose wall?" picker** (a friend / search) →
+     then the writer, aimed at the chosen wall. Keeps a fast global entry, but
+     the target is always explicit.
+- **Your own wall is receive-first** (read the marks others left). Posting to
+  your *own* wall is **allowed but secondary** (e.g. pin a short intro) — never
+  the headline action, never the default of the ✚.
+- The backend already supports this: a Mark may target any wall the user is
+  permitted to contribute to (`can_contribute`), so this is a navigation/UX
+  rule, not a data change.
+
+> Design note: the raised yellow ✚ stays (it's part of the tactile identity) —
+> it's re-aimed, not removed. It means "leave a Mark on someone," which requires
+> picking who, so it depends on the **friend system** (built before the ✚ picker
+> goes live). Until then, creating is reachable but self-targeted by necessity.
+
 ## Core objects
 
 | Object | Meaning |

@@ -27,18 +27,27 @@ Each screen is a complete **vertical slice**:
 
 ## Backlog (ordered)
 
-**A · Write-a-Mark**
-- A1+A2 — Create picker → **Sticky writer** (first slice)
-- A3 — Roast & Secret (same Writer, different config)
-- A4 — Memory / Photo writer (camera/gallery + caption; reuse `upload.ts`)
-- A5 — Poll builder (question + 2–4 options)
-- A6 — Award picker (choose + note)
-- A7 — Prediction writer (text + unlock date)
-- A8 — Doodle canvas (Skia → export image → save)
+**A · Write-a-Mark (done)**
+- A1+A2 — Create picker → **Sticky writer** ✅
+- A3 — Roast & Secret (same Writer) ✅
+- A4 — Memory / Photo writer (camera/gallery + caption) ✅
+- (A5 Poll · A6 Award · A7 Prediction · A8 Doodle → moved to **A′** below, after friends)
+
+> **Re-sequenced (per the Core interaction model):** the core act is marking
+> *others'* walls, so we prioritize the pieces that make that real next —
+> friends, the Friend Wall, and the target-first ✚ — before finishing the
+> remaining mark writers (Poll/Award/Prediction/Doodle).
+
+**C · Friends & social (NEXT)** — C1 find/invite + search · C2 requests · C3 Friend
+Wall (permission-gated) with a pre-aimed "Leave a Mark" · C4 Discover
+
+**A✚ · Target-first create** — ✚ opens "whose wall?" (friend picker) → writer
+aimed at that wall; writer/`createMark` take a target `wallId`; own wall becomes
+receive-first (self-posts secondary). *(Depends on C1–C3.)*
+
+**A′ · Remaining mark writers** — A5 Poll · A6 Award · A7 Prediction · A8 Doodle
 
 **B · Mark interactions** — B1 detail (react + comment) · B2 report / hide / owner pin & approve
-
-**C · Friends & social** — C1 find/invite + search · C2 requests · C3 Friend Wall (permission-gated) · C4 Discover
 
 **D · Feeds & identity** — D1 Home feed · D2 Profile edit · D3 Notifications + push (incl. DB notification producers)
 

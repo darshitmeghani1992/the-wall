@@ -37,12 +37,19 @@ flowchart TD
 ```
 Routes: `(onboarding)/welcome`, `about`, `interests`, `sign-in`, `profile-setup`.
 
-## 3. Leave a Mark (the core loop)
+## 3. Leave a Mark (the core loop — on SOMEONE ELSE'S wall)
+
+The primary action targets another person's wall (see `01 · Core interaction
+model`). Two entry points converge on the type picker; the target wall is always
+chosen *before* writing, never defaulted to self.
 
 ```mermaid
 flowchart TD
-  G[Any screen] --> P[Tap ✚ dock button]
-  P --> C[Create: choose Mark type]
+  A[On a friend's wall] --> LM[Leave a Mark button — pre-aimed at THIS wall]
+  B[Any screen] --> P[Tap ✚ dock button]
+  P --> WHO[Whose wall? pick a friend / search]
+  WHO --> C
+  LM --> C[Create: choose Mark type]
   C --> T{Type}
   T -- Sticky/Roast/Secret --> WR[Writer: text + color + anonymous + live preview]
   T -- Memory/Photo --> PH[Photo writer: pick/capture + caption]
@@ -56,8 +63,8 @@ flowchart TD
   AW --> SUB
   PR --> SUB
   DO --> UP((Upload image)) --> SUB
-  SUB --> RT((Realtime → drops onto wall))
-  RT --> PU((Notify wall owner → push))
+  SUB --> RT((Realtime → drops onto the TARGET wall))
+  RT --> PU((Notify that wall's owner → push))
   RT --> WALL[My Wall / target wall shows the new Mark]
 ```
 `✚` and Create exist; writers are the current build focus (`write/[type]`).
