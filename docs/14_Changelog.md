@@ -4,6 +4,12 @@ Version-per-feature log for The Wall (Expo app). Newest first. Bump the
 minor version per shipped slice; note schema/doc changes.
 
 ## Unreleased
+- **Product decision — core interaction model:** the primary action is leaving a
+  Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
+  ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).
+  Docs updated (`01`, `02`, `07`); backlog re-sequenced to build friends + Friend
+  Wall + target-first ✚ next. No data change (RLS already allows contributing to
+  any permitted wall).
 - Extracted The Wall into its own standalone repository (`the-wall`) with its own
   Supabase project, independent of the "Here Community" web app it was prototyped
   in. App code promoted to the repo root; first migration renumbered `0001_init.sql`.
