@@ -18,7 +18,7 @@ personal **Wall**.
 | 05 | [Database](05_Database.md) | Tables, RLS, triggers |
 | 06 | [Tech Architecture](06_Tech_Architecture.md) | App structure, data layer, games-as-plugins |
 | 07 | [Engineering Plan](07_Engineering_Plan.md) | Build order (screen-by-screen) + status |
-| 08 | [AI Coding Rules](08_AI_Coding_Rules.md) | Rules every contributor/agent follows |
+| 08 | [AI Engineering Operating Manual](08_AI_Coding_Rules.md) | How the AI engineer thinks & codes (role, rules, review, lenses) |
 | 09 | [Definition of Done](09_Definition_of_Done.md) | The gate every feature passes |
 | 10 | [Analytics](10_Analytics.md) | Events we track *(living)* |
 | 11 | [Performance](11_Performance.md) | Budgets & targets *(living)* |

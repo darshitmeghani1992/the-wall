@@ -15,6 +15,8 @@ when all of the following are true. (Workflow context: `15_Workflow.md`.)
       (mark building, permissions, validation), per the testing policy in `15_`
 - [ ] **Docs updated** — acceptance status, `14_Changelog`, schema notes in `05_`
 - [ ] **Linked into navigation** — reachable, with working back/close
+- [ ] **Manual QA checklist provided** — expected behavior, failure scenarios,
+      edge cases, regression risks (the founder runs it on-device)
 - [ ] **Committed** on a feature branch with a clear message + PR
 - [ ] **Visual preview + plain-language note sent to the founder**
 

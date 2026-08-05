@@ -4,6 +4,11 @@ Version-per-feature log for The Wall (Expo app). Newest first. Bump the
 minor version per shipped slice; note schema/doc changes.
 
 ## Unreleased
+- **Absorbed the "AI Engineering Operating Manual" into `08`** (retitled from AI
+  Coding Rules): role, engineering philosophy, pre-flight reasoning, coding
+  rules, self-review, security/performance/product/growth lenses, communication.
+  DoD (`09`) now also requires a **manual QA checklist** per feature. Kept as one
+  doc, not a parallel file.
 - **Consolidated stack + workflow into the docs as the single source of truth.**
   New `15_Workflow` (lean-vs-full process, CI as an explicit stage, who-runs-what
   division of labor, testing policy, feature flags, env/secrets, hotfix/rollback).
