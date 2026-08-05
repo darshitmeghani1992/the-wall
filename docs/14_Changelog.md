@@ -4,6 +4,14 @@ Version-per-feature log for The Wall (Expo app). Newest first. Bump the
 minor version per shipped slice; note schema/doc changes.
 
 ## Unreleased
+- **Consolidated stack + workflow into the docs as the single source of truth.**
+  New `15_Workflow` (lean-vs-full process, CI as an explicit stage, who-runs-what
+  division of labor, testing policy, feature flags, env/secrets, hotfix/rollback).
+  `06_Tech_Architecture` gains the official locked stack table (installed vs
+  to-add: EAS, Skia, expo-image-manipulator, expo-linking, Sentry, Zod, Prettier,
+  tests) + standing decisions (keep design tokens over NativeWind; adopt TanStack
+  Query deliberately) + moderation/rate-limit/search approach. `09` is now the
+  single DoD (CI + core-logic unit tests + founder on-device gate).
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).

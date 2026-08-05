@@ -1,17 +1,12 @@
 # 07 · Engineering Plan
 
-## Working method — one screen at a time
+## Working method
 
-Each screen is a complete **vertical slice**:
-1. Build the screen to the design system.
-2. Wire its workflow (real Supabase reads/writes under RLS).
-3. Link it into navigation (reachable + back/close).
-4. Meet the **Definition of Done** (`09_`) and its **Acceptance Criteria** (`03_`).
-5. Commit on a feature branch (open a PR); update `10_Analytics` + `14_Changelog`.
-6. Send the user a **visual HTML preview + plain-language note**; wait for OK.
-
-> The first slice pairs the type picker with the first writer (smallest unit that
-> runs end-to-end). Later writers/screens are each their own slice.
+The full process (lean vs full, CI stage, who-runs-what, testing, rollback) lives
+in **`15_Workflow.md`**; the gate is **`09_Definition_of_Done.md`**. In short:
+each screen is a **vertical slice** — build → wire workflow (Supabase under RLS)
+→ link into nav → CI green → preview → founder on-device check → merge. This doc
+just tracks **what** we build and in **what order**.
 
 ## Status
 

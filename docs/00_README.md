@@ -25,9 +25,14 @@ personal **Wall**.
 | 12 | [Security](12_Security.md) | Abuse, privacy, hardening *(living)* |
 | 13 | [Release Checklist](13_Release_Checklist.md) | Ship steps *(living)* |
 | 14 | [Changelog](14_Changelog.md) | Version-per-feature log *(living)* |
+| 15 | [Engineering Workflow](15_Workflow.md) | How we build (lean/full, CI, who runs what) |
 
-**Core docs (01–09)** are the source of truth and should be kept current.
+**Core docs (01–09, 15)** are the source of truth and should be kept current.
 **Living docs (10–14)** are filled in as each feature ships.
+
+> **Single source of truth.** Tech-stack and workflow decisions live *only* in
+> these docs (`06` stack, `09` DoD, `15` workflow). Don't create parallel
+> stack/workflow/DoD files — they drift. Propose changes here.
 
 ## Conventions
 
