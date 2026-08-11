@@ -29,6 +29,19 @@ begin
 end $$;
 \echo 'STORAGE (bucket reproducible)      : PASS  (attachments exists + public)'
 
+-- ── RLS enabled on storage.objects (F6): the platform pre-enables and manages
+-- RLS on storage.objects on hosted Supabase; 0003 deliberately does NOT toggle
+-- it (non-owner migration role → 42501). Here the shim (00_bootstrap.sql)
+-- enables it, mirroring the platform. Prove RLS is actually ON, else every
+-- write/own-management assertion below would be vacuous. ─────────────────────
+do $$
+begin
+  if not (select relrowsecurity from pg_class where oid = 'storage.objects'::regclass) then
+    raise exception 'STORAGE FAIL: RLS is NOT enabled on storage.objects';
+  end if;
+end $$;
+\echo 'STORAGE (RLS enabled)              : PASS  (relrowsecurity = true)'
+
 -- ── Public read: anon can SELECT objects in the public bucket ────────────────
 BEGIN;
 set local role anon;

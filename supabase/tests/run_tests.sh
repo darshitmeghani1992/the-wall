@@ -31,6 +31,45 @@ echo "════════════════════════�
 psql_admin -c "DROP DATABASE IF EXISTS $TEST_DB WITH (FORCE);"
 psql_admin -c "CREATE DATABASE $TEST_DB;"
 
+# ── Regression guard: no migration may issue an ownership-gated op on
+# storage.objects. On hosted Supabase that table is owned by
+# supabase_storage_admin, so `ALTER TABLE storage.objects …` (e.g. ENABLE ROW
+# LEVEL SECURITY) fails with `42501: must be owner of table objects` and rolls
+# back the whole transaction. RLS is platform-managed there; CREATE POLICY is
+# permitted, ALTER TABLE is not. This guard fails the suite deterministically if
+# that hosted-incompatible assumption is ever reintroduced. (case-insensitive,
+# whitespace-tolerant)
+echo "── guard: no ownership-gated ALTER on storage.objects in migrations"
+# SQL line-comments (-- …) are stripped before matching so this flags only real
+# STATEMENTS, not the explanatory prose in a migration header that names the
+# forbidden operation on purpose.
+GUARD_HIT=0
+for f in "$MIG"/*.sql; do
+  stripped="$(sed 's/--.*$//' "$f")"
+  if printf '%s\n' "$stripped" | grep -niE 'alter[[:space:]]+table[[:space:]]+storage\.objects' >/dev/null; then
+    echo "   OFFENDING FILE: $f"
+    echo "$(printf '%s\n' "$stripped" | grep -niE 'alter[[:space:]]+table[[:space:]]+storage\.objects')"
+    GUARD_HIT=1
+  fi
+  # Belt-and-suspenders: an 'enable row level security' that targets
+  # storage.objects even if worded slightly differently on the same line.
+  if printf '%s\n' "$stripped" | grep -niE 'storage\.objects[[:space:]]+enable[[:space:]]+row[[:space:]]+level[[:space:]]+security' >/dev/null; then
+    echo "   OFFENDING FILE: $f (enables RLS on storage.objects)"
+    GUARD_HIT=1
+  fi
+done
+if [ "$GUARD_HIT" -ne 0 ]; then
+  echo ""
+  echo "!! REGRESSION GUARD FAILED: a migration issues an ownership-gated op on"
+  echo "   storage.objects. That table is owned by supabase_storage_admin on hosted"
+  echo "   Supabase; ALTER TABLE (incl. ENABLE ROW LEVEL SECURITY) fails there with"
+  echo "   42501: must be owner of table objects, and rolls back the whole migration"
+  echo "   transaction. RLS is platform-managed — do NOT toggle it from a migration."
+  echo "   Use CREATE POLICY only (not ownership-gated). See 0003 header."
+  exit 1
+fi
+echo "   PASS (no migration toggles RLS / ALTERs storage.objects)"
+
 echo "── load: 00_bootstrap (Supabase-compat shim)"
 psql_test -f "$HERE/00_bootstrap.sql" >/dev/null
 echo "── load: 0001_init.sql"

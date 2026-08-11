@@ -72,6 +72,13 @@ create table storage.objects (
   created_at timestamptz not null default now()
 );
 
+-- Faithfully emulate hosted Supabase, where RLS on storage.objects is already
+-- ENABLED and platform-managed (table owned by supabase_storage_admin). 0003
+-- deliberately does NOT toggle RLS here (it cannot, as the non-owner migration
+-- role — see 0003 header / production 42501 finding), so the shim owns enabling
+-- it. The shim owns storage.objects locally, so this ALTER is valid here.
+alter table storage.objects enable row level security;
+
 -- Match Supabase semantics: path segments EXCLUDING the filename.
 create or replace function storage.foldername(name text)
 returns text[] language sql immutable as $$
