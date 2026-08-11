@@ -27,9 +27,15 @@ const COPY: Record<string, { title: string; placeholder: string }> = {
 
 export default function Writer() {
   const router = useRouter();
-  const { type: rawType } = useLocalSearchParams<{ type: string }>();
+  const { type: rawType, wallId: targetWallId, recipientId, handle } = useLocalSearchParams<{
+    type: string;
+    wallId?: string;
+    recipientId?: string;
+    handle?: string;
+  }>();
   const type = (rawType ?? "sticky") as MarkType;
   const { session, profile } = useAuth();
+  const currentUserId = session?.user.id;
 
   const isPhoto = type === "memory" || type === "photo";
   const isSticky = type === "sticky";
@@ -40,11 +46,28 @@ export default function Writer() {
   const [anonymous, setAnonymous] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [wallId, setWallId] = useState<string | null>(null);
+  const [targetError, setTargetError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (session?.user) getPersonalWall(session.user.id).then((w) => setWallId(w?.id ?? null));
-  }, [session?.user?.id]);
+    let active = true;
+    (async () => {
+      if (!currentUserId || !recipientId || !targetWallId || recipientId === currentUserId) {
+        if (active) setTargetError("Choose another person's Wall before writing a Mark.");
+        return;
+      }
+      const target = await getPersonalWall(recipientId);
+      if (!active) return;
+      if (!target || target.id !== targetWallId) {
+        setTargetError("That recipient and Wall no longer match.");
+        return;
+      }
+      setWallId(target.id);
+    })().catch((cause: any) => {
+      if (active) setTargetError(cause?.message ?? "Couldn't verify this Wall.");
+    });
+    return () => { active = false; };
+  }, [currentUserId, recipientId, targetWallId]);
 
   const copy = COPY[type] ?? COPY.sticky;
   const overLimit = text.length > maxLen;
@@ -75,7 +98,7 @@ export default function Writer() {
     () => ({
       id: "preview",
       wall_id: wallId ?? "",
-      author_id: session?.user?.id ?? null,
+      author_id: currentUserId ?? null,
       type,
       text: text.trim() || (isPhoto ? "" : copy.placeholder),
       color: isSticky ? color : null,
@@ -89,13 +112,13 @@ export default function Writer() {
       author: anonymous
         ? null
         : {
-            id: session?.user?.id ?? "me",
+            id: currentUserId ?? "me",
             display_name: profile?.display_name ?? "You",
             avatar_url: profile?.avatar_url ?? null,
             handle: profile?.handle ?? "you",
           },
     }),
-    [type, text, color, anonymous, isSticky, isPhoto, imageUri, wallId, session?.user?.id, profile, copy.placeholder],
+    [type, text, color, anonymous, isSticky, isPhoto, imageUri, wallId, currentUserId, profile, copy.placeholder],
   );
 
   async function submit() {
@@ -115,7 +138,7 @@ export default function Writer() {
         mediaUrl,
       });
       if (router.canDismiss()) router.dismissAll();
-      router.push(`/wall?justCreated=${mark.id}`);
+      router.push(`/person/${recipientId}?justCreated=${mark.id}`);
     } catch (e: any) {
       Alert.alert("Couldn't post that", e?.message ?? "Please try again.");
     } finally {
@@ -134,13 +157,28 @@ export default function Writer() {
     );
   }
 
+  if (targetError) {
+    return (
+      <Screen scroll={false} dockInset={false}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <Text variant="headline">This Mark needs a recipient</Text>
+          <Text variant="body" color={colors.error} style={{ textAlign: "center" }}>{targetError}</Text>
+          <Button label="Choose a person" onPress={() => router.replace("/people-picker")} />
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen dockInset={false}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, marginBottom: 18 }}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Text variant="label" color={colors.outline}>‹ BACK</Text>
         </Pressable>
-        <Text variant="display" style={{ fontSize: 22 }}>{copy.title}</Text>
+        <View style={{ alignItems: "center" }}>
+          <Text variant="display" style={{ fontSize: 22 }}>{copy.title}</Text>
+          <Text variant="label" color={colors.outline}>FOR @{handle}</Text>
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
@@ -285,7 +323,7 @@ export default function Writer() {
       ) : null}
 
       <View style={{ marginTop: 16, marginBottom: 8 }}>
-        {wallId === null && session?.user ? (
+        {wallId === null && currentUserId ? (
           <ActivityIndicator color={markColors.brandYellow} />
         ) : (
           <Button

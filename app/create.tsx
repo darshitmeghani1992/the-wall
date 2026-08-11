@@ -1,5 +1,5 @@
 import { View, Pressable } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { MarkCard } from "@/components/MarkCard";
@@ -18,6 +18,25 @@ const TYPES = [
 
 export default function CreateScreen() {
   const router = useRouter();
+  const { wallId, recipientId, handle } = useLocalSearchParams<{
+    wallId?: string;
+    recipientId?: string;
+    handle?: string;
+  }>();
+
+  if (!wallId || !recipientId || !handle) {
+    return (
+      <Screen dockInset={false}>
+        <View style={{ marginTop: 40, gap: 12 }}>
+          <Text variant="headline">Choose whose Wall this is for</Text>
+          <Text variant="body" color={colors.onSurfaceVariant}>A Mark can't be created without a real recipient.</Text>
+          <Pressable onPress={() => router.replace("/people-picker")} style={{ minHeight: 48, justifyContent: "center" }}>
+            <Text variant="label">CHOOSE A PERSON →</Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
+  }
   return (
     <Screen scroll dockInset={false}>
       <View
@@ -28,7 +47,10 @@ export default function CreateScreen() {
           marginVertical: 16,
         }}
       >
-        <Text variant="display">Leave a Mark</Text>
+        <View>
+          <Text variant="display">Leave a Mark</Text>
+          <Text variant="label" color={colors.outline}>FOR @{handle}</Text>
+        </View>
         <Pressable onPress={() => router.back()}>
           <Text variant="label" color={colors.outline}>
             CLOSE
@@ -44,7 +66,7 @@ export default function CreateScreen() {
               background={t.bg}
               bordered={t.key === "roast"}
               fastener="none"
-              onPress={() => router.push(`/write/${t.key}`)}
+              onPress={() => router.push(`/write/${t.key}?wallId=${wallId}&recipientId=${recipientId}&handle=${encodeURIComponent(handle)}`)}
             >
               <Text
                 variant="headline"

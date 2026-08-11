@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Masonry } from "@/components/Masonry";
@@ -29,7 +29,6 @@ const FILTERS: Filter[] = [
  * at the top. Filter chips narrow by type; an empty wall nudges "invite crew".
  */
 export default function MyWall() {
-  const router = useRouter();
   const { session, profile } = useAuth();
   // When we arrive here right after creating a mark, animate that one in.
   const { justCreated } = useLocalSearchParams<{ justCreated?: string }>();
@@ -174,11 +173,6 @@ export default function MyWall() {
       )}
 
       <View style={{ height: 12 }} />
-      <Pressable onPress={() => router.push("/create")} style={{ alignSelf: "center", padding: 12 }}>
-        <Text variant="label" color={colors.outline}>
-          ✦ LEAVE A MARK
-        </Text>
-      </Pressable>
     </Screen>
   );
 }

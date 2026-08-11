@@ -7,7 +7,7 @@ import { Icon, type IconName } from "./Icon";
 /**
  * The persistent bottom dock (handoff §Bottom Dock): a black 78px bar with five
  * slots — Home · Walls · ✚ · Discover · Profile. The center ✚ is a raised,
- * tilted yellow FAB that routes to the Create modal (not a tab). Active tab
+ * tilted yellow FAB that routes to the recipient picker (not a tab). Active tab
  * icons turn brand-yellow and tilt + scale up.
  *
  * Wired as a custom `tabBar` on the expo-router Tabs navigator. The four real
@@ -86,12 +86,12 @@ export function BottomDock({ state, navigation }: BottomTabBarProps) {
     >
       {left.map((r) => renderTab(r.name))}
 
-      {/* Center ✚ FAB → Create modal */}
+      {/* A Mark must target another person, so the global action starts with them. */}
       <View style={{ width: 68, alignItems: "center", justifyContent: "center" }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Leave a Mark"
-          onPress={() => router.push("/create")}
+          onPress={() => router.push("/people-picker")}
           style={{
             width: 52,
             height: 52,
