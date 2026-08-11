@@ -1,9 +1,15 @@
 /**
  * Font families + a tiered type scale.
  *
+ * The system moves toward TWO primary voices (VD-3): an expression face for
+ * human content and a clean body/UI face for everything else. The mono face is
+ * demoted from "the voice of every label" to a sparse, literal accent.
+ *
  *  - Expression (Bricolage Grotesque): user-generated titles & marks.
- *  - Body UI (Geist): navigation, list rows, metadata.
- *  - Mono (Space Mono): timestamps, "// ACTIVE GAME", attribution "— name".
+ *  - Body UI (Geist): navigation, list rows, metadata, AND section/attribution
+ *    labels (the `label` variant — warmed off mono, VD-3).
+ *  - Mono (Space Mono): RESERVED for sparse literal machine timestamps only
+ *    (the `mono` variant), never section labels or attribution.
  *
  * The keys here are the names we register with expo-font in app/_layout.tsx.
  */
@@ -23,7 +29,8 @@ export type TypeVariant =
   | "mark" // user-generated mark text
   | "headline" // card titles, buttons
   | "body" // metadata, list rows
-  | "label"; // timestamps, section labels (mono, uppercase)
+  | "label" // section labels / attribution (Geist, uppercase, spaced)
+  | "mono"; // sparse literal machine timestamps only
 
 export const type: Record<
   TypeVariant,
@@ -57,10 +64,19 @@ export const type: Record<
     lineHeight: 22,
   },
   label: {
-    fontFamily: fontFamily.monoBold,
+    // Warmed off Space-Mono → Geist-SemiBold uppercase (VD-3). Reads as a
+    // small hand-label / index-card caption, not a code comment.
+    fontFamily: fontFamily.bodySemi,
     fontSize: 11,
     lineHeight: 15,
-    letterSpacing: 0.8,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
+  },
+  mono: {
+    // Sparse literal timestamps only — the deliberate "machine" counterpoint.
+    fontFamily: fontFamily.mono,
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.4,
   },
 };

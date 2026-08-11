@@ -73,32 +73,67 @@ export const radius = {
 
 /**
  * Hard offset shadows simulate a physical piece of paper pinned to a wall.
- * RN needs iOS (shadow*) + Android (elevation) — but the signature look is the
- * *offset with zero blur*, which Android's elevation can't reproduce, so on
- * Android we lean on a bottom/right border trick at the component layer.
+ * The `shadowRadius: 0` (zero blur) offset is the single most ownable move in
+ * the whole system — it reads as a real object under raking light, not a
+ * Material elevation. Kept sacred; only the *opacity* is raised (from the old
+ * near-subliminal 0.12/0.16) so "pinned paper" is felt, not guessed (VD §3).
+ *
+ * Depth is a ranking language (Principle 2): a real Mark from another person
+ * sits on `mark` (top tier); the owner's own seed sits on `markSeed` (middle,
+ * quieter — this is how AC-8 reads visually); chrome/CTAs sit on `cta`/`chip`.
+ *
+ * RN needs iOS (shadow*) + Android (elevation). Android's elevation can't
+ * reproduce a zero-blur offset, so the `androidEdge` token below is the
+ * first-class, tokenized dual-edge fallback (was an ad-hoc per-component gap,
+ * tokens.ts) — components spread it on Android so the signature look degrades
+ * gracefully rather than silently vanishing on half the devices.
  */
 export const shadow = {
+  /** Top tier — a real Mark left by another person. */
   mark: {
     shadowColor: "#000",
     shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.2,
     shadowRadius: 0,
-    elevation: 4,
+    elevation: 5,
   },
-  cta: {
-    shadowColor: "#000",
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 0.16,
-    shadowRadius: 0,
-    elevation: 6,
-  },
-  chip: {
+  /** Middle tier — the owner's own seed Mark (quieter than others' Marks). */
+  markSeed: {
     shadowColor: "#000",
     shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.13,
     shadowRadius: 0,
     elevation: 3,
   },
+  /** CTA / hero chrome. */
+  cta: {
+    shadowColor: "#000",
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 0.22,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  /** Lowest tier — quiet chips / chrome. */
+  chip: {
+    shadowColor: "#000",
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 0,
+    elevation: 3,
+  },
+} as const;
+
+/**
+ * Android dual-edge fallback (tokenized). A hairline bottom+right edge that
+ * approximates the iOS hard-offset shadow on Android, where zero-blur elevation
+ * isn't reproducible. Spread onto a card's style behind `Platform.OS ===
+ * "android"`. Reversible and additive — never applied on iOS.
+ */
+export const androidEdge = {
+  borderRightWidth: 2,
+  borderBottomWidth: 2,
+  borderRightColor: "rgba(0,0,0,0.16)",
+  borderBottomColor: "rgba(0,0,0,0.16)",
 } as const;
 
 export const border = {
@@ -115,13 +150,22 @@ export const frame = {
 } as const;
 
 /**
- * Deterministic tilt for a mark, seeded by its id so a card keeps the *same*
- * rotation across re-renders (the handoff calls for a persistent random
- * rotation roughly between -2.5° and +2.5°).
+ * Tilt discipline (VD §3). A dense wall should read as *casually pinned*, not
+ * *chaotic*, so the default range is narrowed to ±`TILT_DEFAULT`°. Loud types
+ * (roast) pass a larger `amplitude` to tilt more expressively; chrome/static UI
+ * passes 0° (never tilts — a tilted button reads as unstable, not playful).
  */
-export function tiltFor(seed: string): number {
+export const TILT_DEFAULT = 1.75; // narrow, "casually pinned"
+export const TILT_LOUD = 3.25; // roast and other loud marks
+
+/**
+ * Deterministic tilt for a mark, seeded by its id so a card keeps the *same*
+ * rotation across re-renders (never jumps). Returns a value in
+ * [-amplitude, +amplitude].
+ */
+export function tiltFor(seed: string, amplitude: number = TILT_DEFAULT): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
   const t = (Math.abs(h) % 1000) / 1000; // 0..1
-  return -2.5 + t * 5; // -2.5°..+2.5°
+  return -amplitude + t * (amplitude * 2);
 }

@@ -63,7 +63,7 @@ export default function SignIn() {
     <Screen dockInset={false}>
       <View style={{ paddingTop: 24, gap: 8, marginBottom: 24 }}>
         <Text variant="label" color={colors.outline}>
-          // {sent ? "CHECK YOUR EMAIL" : "SIGN IN"}
+          {sent ? "CHECK YOUR EMAIL" : "SIGN IN"}
         </Text>
         <Text variant="display" style={{ fontSize: 30 }}>
           {sent ? "Enter your code" : "Let's get you in"}

@@ -6,8 +6,11 @@ import { MarkCard } from "@/components/MarkCard";
 import { colors, markColors, radius } from "@/theme";
 
 /**
- * Leave a Mark — the type picker (Create modal). Active tiles open the Writer;
- * the rest are "coming soon" until their own slice lands.
+ * The seed type picker (Create modal). This cycle it is reached ONLY via the
+ * dedicated EmptyWall "Leave the first note" CTA — a one-time onboarding seed,
+ * not the global `+` (the dock `+` is hidden and never routes here; Global `+`
+ * Contract, D). Copy is framed as seeding/introducing your wall, not "posting to
+ * a feed" (Decision C). Active tiles open the Writer; the rest are "coming soon".
  */
 const TYPES = [
   { key: "sticky", label: "Sticky", sub: "A quick note", bg: markColors.stickyYellow },
@@ -25,16 +28,19 @@ export default function CreateScreen() {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          marginVertical: 16,
+          marginTop: 16,
         }}
       >
-        <Text variant="display">Leave a Mark</Text>
+        <Text variant="display">Start your wall</Text>
         <Pressable onPress={() => router.back()}>
           <Text variant="label" color={colors.outline}>
             CLOSE
           </Text>
         </Pressable>
       </View>
+      <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 6, marginBottom: 16 }}>
+        Leave the first note to set the tone. Your wall fills up from here — mostly with what others pin.
+      </Text>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
         {TYPES.map((t) => (

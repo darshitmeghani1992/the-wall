@@ -28,7 +28,7 @@ export default function Interests() {
     <Screen dockInset={false}>
       <View style={{ paddingTop: 24, gap: 8, marginBottom: 20 }}>
         <Text variant="label" color={colors.outline}>
-          // PICK A FEW
+          PICK A FEW
         </Text>
         <Text variant="display" style={{ fontSize: 30 }}>
           What are you into?

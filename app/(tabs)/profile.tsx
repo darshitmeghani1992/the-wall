@@ -4,7 +4,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
-import { colors, markColors } from "@/theme";
+import { colors } from "@/theme";
 
 /** Profile — real user identity + sign-out. Stats/edit expand in Phase 4. */
 export default function ProfileScreen() {
@@ -25,7 +25,8 @@ export default function ProfileScreen() {
             borderRadius: 20,
             borderWidth: 2,
             borderColor: colors.ink,
-            backgroundColor: markColors.brandYellow,
+            // Neutral avatar tile — brandYellow is reserved for Invite (VD §3).
+            backgroundColor: colors.surfaceContainerHigh,
             alignItems: "center",
             justifyContent: "center",
             overflow: "hidden",

@@ -4,7 +4,8 @@ import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
-import { colors, markColors, radius } from "@/theme";
+import { Icon } from "@/components/Icon";
+import { colors, markColors, TILT_LOUD } from "@/theme";
 import type { MarkWithAuthor } from "@/lib/marks";
 import type { MarkType } from "@/lib/types";
 
@@ -61,9 +62,12 @@ function SecretMark({ mark }: { mark: MarkWithAuthor }) {
               borderRadius: 4,
             }}
           >
-            <Text variant="label" color={markColors.secretOnPurple}>
-              🤫 TAP TO REVEAL
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Icon name="hidden" size={14} color={markColors.secretOnPurple} />
+              <Text variant="label" color={markColors.secretOnPurple}>
+                TAP TO REVEAL
+              </Text>
+            </View>
           </BlurView>
         ) : null}
       </View>
@@ -111,9 +115,12 @@ function PredictionMark({ mark }: { mark: MarkWithAuthor }) {
 
   return (
     <View>
-      <Text variant="label" color={colors.outline}>
-        {locked ? "🔒 PREDICTION" : "🔮 PREDICTION"}
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Icon name={locked ? "lock" : "unlock"} size={13} color={colors.outline} />
+        <Text variant="label" color={colors.outline}>
+          PREDICTION
+        </Text>
+      </View>
       {locked ? (
         <Text variant="mark" color={colors.onSurfaceVariant} style={{ marginTop: 8 }}>
           Unlocks {unlockAt?.toLocaleDateString()}
@@ -171,7 +178,7 @@ function AwardMark({ mark }: { mark: MarkWithAuthor }) {
           marginBottom: 10,
         }}
       >
-        <Text style={{ fontSize: 24 }}>🏆</Text>
+        <Icon name="award" size={26} color="#3a2f00" />
       </View>
       <Text variant="headline" color="#f2f1ec" style={{ textAlign: "center" }}>
         {payload?.award ?? mark.text ?? "Award"}
@@ -217,7 +224,11 @@ function TextMark({ mark, roast }: { mark: MarkWithAuthor; roast?: boolean }) {
   );
 }
 
-/** Background + border + fastener chrome per mark type. */
+/**
+ * Background + border + fastener chrome per mark type. A fastener is a signal,
+ * not wallpaper (VD §3): only the higher-emotion types wear one; quiet types
+ * (sticky/poll/prediction/doodle) let shadow + tilt carry the "pinned" feeling.
+ */
 function chromeFor(type: MarkType, color: string | null) {
   switch (type) {
     case "roast":
@@ -226,26 +237,41 @@ function chromeFor(type: MarkType, color: string | null) {
       return { bg: markColors.secretPurple, bordered: false, fastener: "tape" as const };
     case "memory":
     case "photo":
-      return { bg: colors.card, bordered: false, fastener: "pin" as const };
-    case "award":
-      return { bg: "#232221", bordered: false, fastener: "pin" as const };
-    case "poll":
-      return { bg: markColors.memoryCream, bordered: false, fastener: "pin" as const };
-    case "prediction":
-      return { bg: markColors.skyBlue, bordered: false, fastener: "tape" as const };
-    case "doodle":
       return { bg: colors.card, bordered: false, fastener: "tape" as const };
+    case "award":
+      return { bg: "#232221", bordered: false, fastener: "tape" as const };
+    case "poll":
+      return { bg: markColors.memoryCream, bordered: false, fastener: "none" as const };
+    case "prediction":
+      return { bg: markColors.skyBlue, bordered: false, fastener: "none" as const };
+    case "doodle":
+      return { bg: colors.card, bordered: false, fastener: "none" as const };
     case "sticky":
     default:
-      return { bg: color ?? markColors.stickyYellow, bordered: false, fastener: "tape" as const };
+      return { bg: color ?? markColors.stickyYellow, bordered: false, fastener: "none" as const };
   }
 }
 
 /**
  * Renders one Mark of any type inside a tilted, pinned MarkCard. This is the
  * switchboard the wall's masonry calls for every item.
+ *
+ * `isOwn` demotes the owner's own Mark to the middle elevation tier (quieter
+ * than others' Marks) — Principle 2, and the visual reading of the seed's
+ * "not the loud, repeatable hero" guardrail (AC-8). `settleDelay` staggers the
+ * card's SETTLE entrance on a populated wall's first paint.
  */
-export function MarkView({ mark, dropIn }: { mark: MarkWithAuthor; dropIn?: boolean }) {
+export function MarkView({
+  mark,
+  dropIn,
+  isOwn,
+  settleDelay,
+}: {
+  mark: MarkWithAuthor;
+  dropIn?: boolean;
+  isOwn?: boolean;
+  settleDelay?: number;
+}) {
   const chrome = chromeFor(mark.type, mark.color);
 
   let inner: React.ReactNode;
@@ -282,7 +308,10 @@ export function MarkView({ mark, dropIn }: { mark: MarkWithAuthor; dropIn?: bool
       background={chrome.bg}
       bordered={chrome.bordered}
       fastener={chrome.fastener}
+      tier={isOwn ? "seed" : "mark"}
+      tiltAmplitude={mark.type === "roast" ? TILT_LOUD : undefined}
       dropIn={dropIn}
+      settleDelay={settleDelay}
     >
       {inner}
     </MarkCard>

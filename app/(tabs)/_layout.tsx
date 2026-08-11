@@ -2,9 +2,9 @@ import { Tabs } from "expo-router";
 import { BottomDock } from "@/components/BottomDock";
 
 /**
- * The four dock tabs: Home · Walls · Discover · Profile. The center ✚ FAB and
- * the black bar itself are drawn by <BottomDock/> (a custom tabBar), which also
- * routes ✚ to the Create modal.
+ * The dock tabs: Home · Discover · Profile. The `walls` tab was removed —
+ * the Personal Wall is now the Home tab (Option C, wall-as-home). The black bar
+ * and (this cycle, hidden) center ✚ are drawn by <BottomDock/>, a custom tabBar.
  */
 export default function TabsLayout() {
   return (
@@ -13,7 +13,6 @@ export default function TabsLayout() {
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="home" />
-      <Tabs.Screen name="walls" />
       <Tabs.Screen name="discover" />
       <Tabs.Screen name="profile" />
     </Tabs>

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@shopify/flash-list": "1.6.4",
     "@shopify/react-native-skia": "1.2.3",

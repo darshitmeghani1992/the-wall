@@ -7,11 +7,12 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth";
 import { createProfile, isHandleAvailable } from "@/lib/profiles";
 import { uploadImage } from "@/lib/upload";
 import { onboardingDraft } from "@/lib/onboarding";
-import { colors, markColors, radius } from "@/theme";
+import { colors } from "@/theme";
 
 /** Final onboarding step: claim a handle, set a display name, bio and avatar.
  *  Creating the profile row triggers the DB to spin up the Personal Wall. */
@@ -87,7 +88,7 @@ export default function ProfileSetup() {
     <Screen dockInset={false}>
       <View style={{ paddingTop: 24, gap: 8, marginBottom: 22 }}>
         <Text variant="label" color={colors.outline}>
-          // ALMOST THERE
+          ALMOST THERE
         </Text>
         <Text variant="display" style={{ fontSize: 30 }}>
           Set up your wall
@@ -104,7 +105,9 @@ export default function ProfileSetup() {
               borderRadius: 20,
               borderWidth: 2,
               borderColor: colors.ink,
-              backgroundColor: markColors.brandYellow,
+              // Neutral until a photo is chosen — brandYellow is reserved for
+              // Invite (VD §3); the identity (name/handle) is the focal point.
+              backgroundColor: colors.surfaceContainerHigh,
               alignItems: "center",
               justifyContent: "center",
               overflow: "hidden",
@@ -126,25 +129,41 @@ export default function ProfileSetup() {
       </View>
 
       <View style={{ gap: 16 }}>
-        <Input
-          label="Username"
-          prefix="@"
-          placeholder="maya"
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={handle}
-          onChangeText={setHandle}
-          error={handleFree === false}
-          hint={
-            cleanHandle.length > 0 && cleanHandle.length < 3
-              ? "At least 3 characters"
-              : handleFree === false
-                ? "That handle is taken"
-                : handleFree === true
-                  ? "Available ✓"
-                  : undefined
-          }
-        />
+        <View style={{ gap: 6 }}>
+          <Input
+            label="Username"
+            prefix="@"
+            placeholder="maya"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={handle}
+            onChangeText={setHandle}
+            error={handleFree === false}
+            hint={
+              cleanHandle.length > 0 && cleanHandle.length < 3
+                ? "At least 3 characters"
+                : undefined
+            }
+          />
+          {/* Availability as a color + icon + text triple — never color alone
+              (accessibility, VD surface 4). */}
+          {cleanHandle.length >= 3 && handleFree !== null ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Icon
+                name={handleFree ? "check" : "close"}
+                size={14}
+                color={handleFree ? colors.onSurfaceVariant : colors.error}
+              />
+              <Text
+                variant="body"
+                color={handleFree ? colors.onSurfaceVariant : colors.error}
+                style={{ fontSize: 13 }}
+              >
+                {handleFree ? "Available" : "That handle is taken"}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <Input label="Display name" placeholder="Maya" value={name} onChangeText={setName} />
         <Input
           label="Bio"

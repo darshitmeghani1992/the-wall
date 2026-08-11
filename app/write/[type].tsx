@@ -115,7 +115,8 @@ export default function Writer() {
         mediaUrl,
       });
       if (router.canDismiss()) router.dismissAll();
-      router.push(`/wall?justCreated=${mark.id}`);
+      // Land on the consolidated wall-as-home so the seed/new Mark DROPs there.
+      router.push(`/home?justCreated=${mark.id}`);
     } catch (e: any) {
       Alert.alert("Couldn't post that", e?.message ?? "Please try again.");
     } finally {
