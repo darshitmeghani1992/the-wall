@@ -3,9 +3,10 @@
 **Author:** Architect Role · **Date:** 2026-08-11
 **Governs under:** Architect Charter v2.1 / Architect Playbook v1.1 / AIOS Constitution v1.1
 **Source scope:** `docs/product/PRD-SEC-001-security-foundation.md` (AC-S1…AC-S10, decisions A–E, Founder pre-approved)
-**Status:** PROPOSED — HIGH-RISK (auth/authz + schema). Design-level Two-Key required: this plan + an
-independent design review **before** implementation begins (Charter §19). This document does **not**
-mark itself ready to implement.
+**Status:** PROPOSED (Rev 2, revised after independent design review REQUEST-CHANGES) — HIGH-RISK (auth/authz +
+schema). Design-level Two-Key required: this plan + an independent design review **before** implementation begins
+(Charter §19). Rev 2 incorporates the three review defects (F4 two-trigger anonymity, F1 INSERT-vector, F4
+service_role grant) and returns for re-review. This document does **not** mark itself ready to implement.
 
 ---
 
@@ -50,9 +51,15 @@ later features land. The invisible correctness is the feature.
 - No existing `docs/architecture/`, ADRs, or Technical Debt Register file present — this plan seeds the first ADRs.
 - **Empirically validated** the load-bearing SQL in the local `sec001_test` PG16 DB (shim → 0001 → prototypes;
   all scratch objects dropped afterward). Validated: (a) `least()/greatest()` unordered-pair unique index blocks
-  reverse duplicates; (b) RLS `WITH CHECK` is evaluated **after** a `BEFORE INSERT` trigger (enables the anonymity
-  design); (c) the friendship transition trigger denies requester self-accept and allows addressee accept;
-  (d) several harness-shim requirements (below) that are non-obvious and would otherwise silently break tests.
+  reverse duplicates; (b) RLS `WITH CHECK` is evaluated **after** a `BEFORE INSERT` trigger; (c) the friendship
+  transition trigger denies requester self-accept and allows addressee accept; (d) several harness-shim requirements
+  (below) that are non-obvious and would otherwise silently break tests.
+- **Revision round (post independent design review, 2026-08-11)** — re-validated the three review defects and their
+  fixes end-to-end in `sec001_test`: (F4) the corrected **two-trigger** anonymity design inserts anonymous marks
+  successfully with base-row `author_id = NULL` and a populated side table (the earlier single BEFORE-INSERT trigger
+  failed the side-table FK — recalibrated in ADR-004); (F1) friendship **INSERT-as-accepted** is denied while
+  insert-as-pending is allowed; (F4 carve-out) `service_role` reads the side table only after an explicit `GRANT`
+  (BYPASSRLS alone is insufficient). Scratch dropped.
 
 ---
 
@@ -71,9 +78,14 @@ Concrete SQL objects below are the specification Backend implements in `0002` (F
 Names are normative. All new tables get `created_at timestamptz not null default now()`.
 
 ## F1 — Requester can self-accept  (0001_init.sql:327-329; G-C; AC-S1, AC-S2)
-**Fix:** a `BEFORE UPDATE` transition-guard trigger on `friendships` + a tightened UPDATE policy `WITH CHECK`.
-Model cancel/decline/unfriend as **DELETE** (the existing delete policy already lets either party delete),
-so no ambiguous status collapse and no new enum value.
+G-C is violable by **two** vectors, both closed here: (1) the UPDATE vector — a requester flipping their own
+pending row to `accepted`; and (2) the **INSERT vector** — a requester inserting a row directly with
+`status='accepted'` (incl. delete-then-reinsert-as-accepted), which the transition trigger alone does not catch
+because it is UPDATE-only. Vector (2) is closed by the `status = 'pending'` clause added to the friendships INSERT
+policy under **F3** (below); the harness must attack **both** vectors for AC-S1 (see Test Harness).
+**Fix:** a `BEFORE UPDATE` transition-guard trigger on `friendships` + a tightened UPDATE policy `WITH CHECK`, plus
+the INSERT-status constraint. Model cancel/decline/unfriend as **DELETE** (the existing delete policy already lets
+either party delete), so no ambiguous status collapse and no new enum value.
 
 ```sql
 -- Trigger: only the addressee may move pending -> accepted; no transition back to pending.
@@ -170,10 +182,15 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
--- Friend request blocked if a block exists in either direction.
+-- Friend request: requester only, must start 'pending' (closes the INSERT-as-accepted vector, F1/G-C),
+-- and blocked if a block exists in either direction.
 drop policy if exists "friendships insert requester" on friendships;
 create policy "friendships insert requester" on friendships for insert to authenticated
-  with check (requester_id = auth.uid() and not is_blocked(auth.uid(), addressee_id));
+  with check (
+    requester_id = auth.uid()
+    and status = 'pending'
+    and not is_blocked(auth.uid(), addressee_id)
+  );
 ```
 `can_view_wall` is unchanged: public walls stay world-readable (public-content resolution, ADR-007); private-wall
 access is friend-gated and `are_friends` now yields false under a block, so a block removes private access between
@@ -192,24 +209,37 @@ create table if not exists anonymous_mark_authors (
   created_at timestamptz not null default now()
 );
 alter table anonymous_mark_authors enable row level security;
--- No policy for anon/authenticated => zero client access. service_role (BYPASSRLS) is the protected moderation path.
+-- Zero client access. service_role is the protected moderation path — BYPASSRLS bypasses RLS policies but NOT
+-- table-privilege GRANTs, so service_role needs an EXPLICIT grant to read the side table (else permission denied).
 revoke all on anonymous_mark_authors from anon, authenticated;
+grant select on anonymous_mark_authors to service_role;
 
--- On insert of an anonymous mark: record the TRUE author from auth.uid() (not client input), then NULL author_id.
-create or replace function marks_capture_anonymous()
+-- Anonymity uses TWO triggers (see ADR-004). The side table has an FK to marks(id); inside a BEFORE INSERT the
+-- parent marks row does not exist yet, so writing the side table there fails the FK on every anonymous insert.
+-- Therefore: BEFORE INSERT only NULLs author_id (this MUST stay BEFORE so the base row AND the realtime INSERT
+-- payload carry author_id = NULL); AFTER INSERT writes the true author from auth.uid() into the side table.
+create or replace function marks_null_anonymous_author()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if new.anonymous then
+  if new.anonymous then new.author_id := null; end if;   -- base row + realtime payload never carry the anon author
+  return new;
+end $$;
+drop trigger if exists marks_null_anon on marks;
+create trigger marks_null_anon before insert on marks
+  for each row execute function marks_null_anonymous_author();
+
+create or replace function marks_record_anonymous_author()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.anonymous then                                  -- AFTER INSERT: parent marks row now exists, FK satisfied
     insert into anonymous_mark_authors (mark_id, author_id) values (new.id, auth.uid())
       on conflict (mark_id) do update set author_id = excluded.author_id;
-    new.author_id := null;                 -- base row (REST + realtime) never carries the anon author
   end if;
   return new;
 end $$;
-
-drop trigger if exists marks_capture_anon on marks;
-create trigger marks_capture_anon before insert on marks
-  for each row execute function marks_capture_anonymous();   -- runs before marks_set_defaults ordering not critical; see note
+drop trigger if exists marks_record_anon on marks;
+create trigger marks_record_anon after insert on marks
+  for each row execute function marks_record_anonymous_author();
 
 -- Insert policy tolerates the nulled anon author (WITH CHECK runs AFTER the BEFORE trigger — validated).
 drop policy if exists "marks insert contributor" on marks;
@@ -223,10 +253,13 @@ create policy "marks insert contributor" on marks for insert to authenticated
   );
 ```
 `marks_set_defaults` (0001:190) must also stop deriving ownership from the now-nullable `new.author_id`: change its
-owner check to `auth.uid() = w.owner_id` (trustworthy, and correct for an owner posting anonymously). Both BEFORE
-INSERT triggers coexist; sequence them so ownership/status is computed from `auth.uid()` regardless of nulling
-(recommend renaming to a single ordered trigger or naming `marks_capture_anon` to fire first — Backend to keep both
-deterministic; the logic does not depend on order because neither reads the other's mutation).
+owner check to `auth.uid() = w.owner_id` (trustworthy, and correct for an owner posting anonymously). Trigger
+inventory on `marks` after this migration: two BEFORE INSERT (`marks_set_defaults` computing status from `auth.uid()`,
+and `marks_null_anon` nulling the anon author) and one AFTER INSERT (`marks_record_anon` writing the side table). The
+two BEFORE triggers are order-independent (neither reads the other's mutation, both derive from `auth.uid()`); the
+side-table write is AFTER INSERT specifically because a BEFORE-INSERT write would violate the side table's FK to
+`marks(id)` before the parent row exists (verified defect — see ADR-004). The nulling stays BEFORE so the base row
+and realtime INSERT payload carry `author_id = NULL`.
 
 **Client read-path change:** **none required.** `getWallMarks`/`hydrateAuthors` (`src/lib/marks.ts`) already treat
 `anonymous || !author_id` as authorless, and the base row now returns `author_id = null` for anonymous marks, so no
@@ -332,9 +365,10 @@ local PG16 (`pg_available_extensions` has no `pgtap`) and cannot be assumed inst
 supabase/tests/
   00_bootstrap.sql     -- the Supabase-compat SHIM (see required contents below)
   01_seed.sql          -- fixtures: users in auth.users, profiles, walls, marks, friendships, blocks
-  10_friendships.sql   -- AC-S1, AC-S2, AC-S3
+  10_friendships.sql   -- AC-S1 (BOTH vectors: UPDATE self-accept denied AND INSERT-as-accepted denied), AC-S2, AC-S3
   20_blocking.sql      -- AC-S4, AC-S5
-  30_anonymity.sql     -- AC-S6 (assert author_id null via REST path AND simulated realtime row; moderator can read side table)
+  30_anonymity.sql     -- AC-S6: base-row author_id NULL via REST path AND on a simulated realtime row;
+                       --        AND a positive moderator assertion (service_role SELECTs the true author from the side table)
   40_mark_moderation.sql -- AC-S7, AC-S8, AC-S9, AC-S10
   50_storage.sql       -- storage insert/read policy assertions + F6 reproducibility
   run_tests.sh         -- runner
@@ -355,7 +389,15 @@ empirically because their absence silently breaks tests:
   without this, policies calling `auth.uid()` fail with "permission denied for schema auth" and mask the real result.
 - **`grant select,insert,update,delete on all tables in schema public to authenticated` (+ `select` to `anon`)** —
   Supabase grants these by default; without them every test dies on "permission denied for table" *before* RLS is
-  evaluated, producing false negatives. Re-run this grant after loading each migration (new tables).
+  evaluated, producing false negatives. Apply this **before** loading `0002`; for `0002`'s new tables rely on the
+  explicit grants inside `0002` (see below) rather than a second blanket grant.
+- **Side-table exposure trap (must handle):** `anonymous_mark_authors` is deliberately revoked from `anon`/
+  `authenticated`. A blanket `grant … on all tables … to authenticated` run *after* `0002` would silently re-expose
+  it and break AC-S6. The bootstrap's **final** step must re-apply
+  `revoke all on anonymous_mark_authors from anon, authenticated;` so no earlier blanket grant can leak it. The
+  moderator assertion depends on `0002`'s explicit `grant select on anonymous_mark_authors to service_role;`
+  (service_role's BYPASSRLS does **not** confer this) — the shim must keep `service_role` present with `BYPASSRLS`
+  so that grant is meaningful.
 - `storage.buckets`, `storage.objects`, and `storage.foldername(name)` returning path segments **excluding the
   filename** (`(string_to_array(name,'/'))[1:cardinality(string_to_array(name,'/'))-1]`) to match Supabase semantics.
 - `create publication supabase_realtime;` (so 0001's `alter publication … add table` succeeds).
@@ -376,7 +418,7 @@ be weakened to accommodate current unsafe behavior (Constitution §13; PRD Succe
 ## Migration file list
 | File | Contents | Reversibility |
 |---|---|---|
-| `supabase/migrations/0002_security_foundation.sql` | F1 transition trigger + policy; F2 unordered-pair unique index; F3 `blocks` table + `is_blocked` + `are_friends`/`can_contribute` update + friendship-insert block guard; F4 `anonymous_mark_authors` + capture trigger + `marks_set_defaults` owner-via-`auth.uid()` + insert policy; F5 moderation guard trigger. | Additive; down-migration drops new objects and restores 0001 policy bodies. One-time backfill of pre-existing anonymous marks into `anonymous_mark_authors` then null `marks.author_id` (pre-launch → ~0 rows). |
+| `supabase/migrations/0002_security_foundation.sql` | F1 transition trigger + UPDATE policy WITH CHECK + INSERT `status='pending'` clause; F2 unordered-pair unique index; F3 `blocks` table (+ `grant select,insert,delete on blocks to authenticated`) + `is_blocked` + `are_friends`/`can_contribute` update + friendship-insert block guard; F4 `anonymous_mark_authors` (+ `revoke from anon,authenticated` + `grant select to service_role`) + **two triggers** (`marks_null_anon` BEFORE INSERT nulls author_id, `marks_record_anon` AFTER INSERT writes side table) + `marks_set_defaults` owner-via-`auth.uid()` + insert policy; F5 moderation guard trigger. | Additive; down-migration drops new objects and restores 0001 policy bodies. One-time backfill of pre-existing anonymous marks into `anonymous_mark_authors` then null `marks.author_id` (pre-launch → ~0 rows). |
 | `supabase/migrations/0003_storage_attachments.sql` | F6 bucket + `storage.objects` RLS. | Drop policies + bucket. Independent of 0002. |
 
 Down-migration note: `friendship_status` enum keeps the now-unused `'blocked'` value (removing an enum value is not
@@ -388,7 +430,11 @@ cleanly reversible in Postgres). Tracked as debt (below).
 | Risk | Category | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
 | `friendships_pair_uniq` creation fails on pre-existing reverse-dup data | Data | Low (pre-launch) | Medium | Backfill/dedupe check before index create; validated no such data expected. |
-| Anon author leaks via realtime INSERT payload | Security | — | High | Closed by design: anon author never enters the base row (F4), so nothing to leak. Harness asserts it on a simulated realtime row. |
+| Anon author leaks via realtime INSERT payload | Security | — | High | Closed by design: the BEFORE INSERT trigger nulls author_id so it never enters the base row (F4); harness asserts it on a simulated realtime row. |
+| Anonymous inserts fail on side-table FK (single-BEFORE-trigger design) | Correctness/Security | Was High | High | Fixed: split into BEFORE (null) + AFTER (write) triggers so the FK to `marks(id)` is satisfied; verified end-to-end. |
+| Requester escalates via INSERT-as-accepted (transition trigger is UPDATE-only) | Security | Med | High | INSERT policy pins `status='pending'`; harness attacks the INSERT vector for AC-S1. |
+| service_role cannot read side table (BYPASSRLS ≠ table GRANT) | Test/Moderation | Med | High | Explicit `grant select … to service_role` in 0002; harness moderator assertion proves it. |
+| Blanket table re-grant re-exposes the anon side table | Test integrity | Med | High | Bootstrap re-applies the side-table revoke as its final step; 0002 grants side table only to service_role. |
 | SECURITY DEFINER on moderation trigger would break service-role branch | Security | Med if implemented wrong | High | Spec mandates SECURITY INVOKER; harness exercises service_role path (AC via moderation) to catch regressions. |
 | Owner-posts-anonymously mis-statused after nulling author_id | Correctness | Low | Low | `marks_set_defaults` computes ownership from `auth.uid()`, not `author_id`. |
 | Harness gives false "denied" from missing grants / GUC scoping | Test integrity | Med | High | Shim grants + per-test `BEGIN/SET LOCAL` idiom documented as mandatory (discovered empirically). |
@@ -421,11 +467,16 @@ Status: Proposed · Date: 2026-08-11
 **Context:** 0001's UPDATE policy (using requester OR addressee, no WITH CHECK) lets a requester self-accept (F1).
 Reversibility: two-way door.
 **Decision:** A `BEFORE UPDATE` trigger authorizes `pending→accepted` to the addressee only and forbids reversion to
-`pending`; UPDATE policy gains a `WITH CHECK`. Cancel (requester), decline (addressee), and unfriend (either) are
-DELETEs under the existing delete policy — no new status/enum.
-**Consequences:** Role-correct transitions server-enforced; no ambiguous status collapse. Trigger is authoritative;
-policy is defense-in-depth. **Alternatives:** WITH CHECK alone (cannot express OLD→NEW addressee-only rule); a
-`declined` status (adds enum + lifecycle for no benefit over DELETE). Confidence: **Verified** (prototyped).
+`pending`; UPDATE policy gains a `WITH CHECK`. **In addition**, because the trigger is UPDATE-only, the INSERT
+escalation vector (requester inserts a row already `status='accepted'`, incl. delete-then-reinsert) is closed by a
+`status = 'pending'` clause on the friendships INSERT policy (F3). Cancel (requester), decline (addressee), and
+unfriend (either) are DELETEs under the existing delete policy — no new status/enum.
+**Consequences:** Role-correct transitions server-enforced across **both** the UPDATE and INSERT vectors; no ambiguous
+status collapse. Trigger is authoritative for transitions; INSERT policy pins the starting state; UPDATE policy
+WITH CHECK is defense-in-depth. **Alternatives:** WITH CHECK alone (cannot express OLD→NEW addressee-only rule); a
+`declined` status (adds enum + lifecycle for no benefit over DELETE). Confidence: **Verified** — both vectors
+prototyped in `sec001_test` (self-accept UPDATE denied, addressee accept allowed, insert-as-accepted denied,
+insert-as-pending allowed).
 
 ## ADR-002: Unordered-pair uniqueness via `least()/greatest()` unique index
 Status: Proposed · Date: 2026-08-11
@@ -450,16 +501,29 @@ Status: Proposed · Date: 2026-08-11
 **Context:** F4 leaks `author_id` for anonymous marks through the `marks` view **and** the realtime payload; masking
 in `hydrateAuthors` is client-side only. G-A requires boundary enforcement with a moderation carve-out (no crypto).
 Reversibility: two-way door (data move reversible).
-**Decision:** A `BEFORE INSERT` trigger records the true author (from `auth.uid()`) into moderator-only
-`anonymous_mark_authors` and sets `marks.author_id = null` for anonymous marks. Ordinary REST reads and realtime
-therefore never carry the anon author; `service_role` reads the side table for moderation.
-**Consequences:** Strongest boundary (nothing sensitive in the client-readable row) and it neutralizes the realtime
-leak with **no** publication change and **no** client read-path redirect. Requires an optional one-line write
-hardening in `createMark`. **Alternatives considered & rejected:** (a) `security_invoker` security-barrier VIEW +
+**Decision:** **Two triggers** on `marks`, not one. A `BEFORE INSERT` trigger (`marks_null_anon`) sets
+`marks.author_id = null` for anonymous marks — this **must** stay BEFORE so the base row and the realtime INSERT
+payload carry `NULL`. An `AFTER INSERT` trigger (`marks_record_anon`) records the true author (from `auth.uid()`)
+into moderator-only `anonymous_mark_authors`. The side table is read by the `service_role` moderation path, which
+requires an **explicit `grant select … to service_role`** (BYPASSRLS bypasses RLS, not table GRANTs).
+**Revised rationale (why two triggers, not one BEFORE INSERT):** the side table has an FK to `marks(id)`; writing it
+from a BEFORE INSERT fails the FK on every anonymous insert because the parent `marks` row does not exist yet — this
+would make anonymous marks uninsertable and break shipping 0001 behavior. The nulling therefore cannot be co-located
+with the side-table write; splitting into BEFORE (null) + AFTER (record) resolves it while keeping the payload clean.
+**Consequences:** Strongest boundary (nothing sensitive in the client-readable row), neutralizes the realtime leak
+with **no** publication change and **no** client read-path redirect. Requires an optional one-line write hardening in
+`createMark` and the explicit service_role grant. **Alternatives considered & rejected:** (a) single BEFORE INSERT
+trigger doing both null + side-table write — **fails** (FK violation, above). (b) `deferrable initially deferred` FK
+on the side table with a single BEFORE trigger — works, but the two-trigger split is more explicit and self-documenting
+about *why* the write is deferred; chosen over the deferrable FK. (c) `security_invoker` security-barrier VIEW +
 `revoke select on marks` — cannot column-mask the realtime payload, and revoking base SELECT breaks realtime
-postgres_changes delivery; more moving parts. (b) SECURITY DEFINER RPC for reads — same realtime gap, and diverges
-the read path from the existing `.from('marks')` client. Confidence: **Verified** (WITH-CHECK-after-BEFORE-trigger
-ordering prototyped).
+postgres_changes delivery. (d) SECURITY DEFINER RPC for reads — same realtime gap, diverges from the existing
+`.from('marks')` client.
+**Confidence recalibrated:** the original "Verified" covered only the WITH-CHECK-after-BEFORE-trigger ordering in
+isolation, **not** the end-to-end insert against the FK side table — which is exactly where the single-trigger design
+failed (independent review + re-prototype). The **two-trigger** design is now **Verified** end-to-end in `sec001_test`:
+anonymous insert succeeds, base row returns `author_id = NULL`, side table is populated, and `service_role` reads it
+after the explicit grant.
 
 ## ADR-005: Mark moderation via SECURITY INVOKER BEFORE UPDATE column-guard trigger
 Status: Proposed · Date: 2026-08-11
