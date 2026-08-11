@@ -4,7 +4,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { colors, markColors, radius } from "@/theme";
+import { colors, markColors, motion, radius } from "@/theme";
 import { Text } from "./Text";
 
 type Variant = "primary" | "yellow" | "ghost";
@@ -15,12 +15,19 @@ type Props = {
   variant?: Variant;
   disabled?: boolean;
   loading?: boolean;
+  /**
+   * Press-tilt discipline (VD §3): tilt on press is charming on Mark-adjacent
+   * actions and gimmicky on a form's Submit. Off by default (chrome-clean);
+   * opt in only for wall/Mark-adjacent CTAs. The press-down + shadow-collapse
+   * feedback still applies either way.
+   */
+  tactile?: boolean;
 };
 
 /**
- * A button that looks like a physical label (handoff §Buttons & Inputs):
- * primary is black on paper with a hard offset shadow; it "presses" down and
- * tilts slightly when tapped. Yellow is the brand CTA; ghost is a quiet link.
+ * A button that looks like a physical label: primary is black on paper with a
+ * hard offset shadow; it "presses" down when tapped (the shared PRESS language,
+ * tokenized in `motion`). Yellow is the brand CTA; ghost is a quiet link.
  */
 export function Button({
   label,
@@ -28,6 +35,7 @@ export function Button({
   variant = "primary",
   disabled = false,
   loading = false,
+  tactile = false,
 }: Props) {
   const pressed = useSharedValue(0);
 
@@ -36,7 +44,10 @@ export function Button({
   const fg = variant === "primary" ? colors.white : colors.ink;
 
   const animated = useAnimatedStyle(() => ({
-    transform: [{ translateY: pressed.value * 2 }, { rotate: `${pressed.value * -1.5}deg` }],
+    transform: [
+      { translateY: pressed.value * 2 },
+      { rotate: `${pressed.value * (tactile ? -1.5 : 0)}deg` },
+    ],
     shadowOpacity: (variant === "ghost" ? 0 : 0.16) * (1 - pressed.value),
   }));
 
@@ -44,8 +55,8 @@ export function Button({
     <Pressable
       disabled={disabled || loading}
       onPress={onPress}
-      onPressIn={() => (pressed.value = withTiming(1, { duration: 80 }))}
-      onPressOut={() => (pressed.value = withTiming(0, { duration: 120 }))}
+      onPressIn={() => (pressed.value = withTiming(1, { duration: motion.duration.pressIn }))}
+      onPressOut={() => (pressed.value = withTiming(0, { duration: motion.duration.pressOut }))}
     >
       <Animated.View
         style={[

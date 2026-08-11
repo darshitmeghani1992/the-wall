@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
-import { colors, markColors } from "@/theme";
+import { colors } from "@/theme";
 
 const POINTS = [
   { k: "A wall, not a feed", d: "Your wall is a living scrapbook — meaningful memories, not a chat that scrolls away." },
@@ -18,7 +18,7 @@ export default function About() {
     <Screen dockInset={false}>
       <View style={{ paddingTop: 24, gap: 8 }}>
         <Text variant="label" color={colors.outline}>
-          // WHAT IS A WALL?
+          WHAT IS A WALL
         </Text>
         <Text variant="display" style={{ fontSize: 32 }}>
           People help write your story.
@@ -33,7 +33,8 @@ export default function About() {
                 width: 34,
                 height: 34,
                 borderRadius: 6,
-                backgroundColor: markColors.brandYellow,
+                // Neutral number chip — brandYellow is reserved for Invite (VD §3).
+                backgroundColor: colors.surfaceContainerHigh,
                 borderWidth: 2,
                 borderColor: colors.ink,
                 alignItems: "center",
@@ -52,7 +53,8 @@ export default function About() {
         ))}
       </View>
 
-      <Button label="Next" variant="primary" onPress={() => router.push("/interests")} />
+      {/* Interests step is deferred (Decision B) — go straight to sign-in. */}
+      <Button label="Next" variant="primary" onPress={() => router.push("/sign-in")} />
     </Screen>
   );
 }

@@ -13,7 +13,7 @@ export default function Welcome() {
     <Screen scroll={false} dockInset={false}>
       <View style={{ flex: 1, justifyContent: "center", gap: 22 }}>
         <Text variant="label" color={colors.outline}>
-          // WELCOME TO
+          WELCOME TO
         </Text>
         <Text variant="display" style={{ fontSize: 44, lineHeight: 46 }}>
           the wall
@@ -23,7 +23,9 @@ export default function Welcome() {
         </Text>
 
         <View style={{ height: 8 }} />
-        <MarkCard id="welcome-sticky" background={markColors.stickyYellow} fastener="tape">
+        {/* The example Mark is the star — it DROPs on entry, demonstrating the
+            signature moment wordlessly in the first seconds (VD-7 / surface 1). */}
+        <MarkCard id="welcome-sticky" background={markColors.stickyYellow} fastener="tape" dropIn>
           <Text variant="mark">you're the reason we always run late 😭</Text>
           <Text variant="label" color={colors.outline} style={{ marginTop: 10 }}>
             — SOFIA
