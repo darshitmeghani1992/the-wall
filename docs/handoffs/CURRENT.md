@@ -3,40 +3,46 @@
 > Operational state, NOT canonical governance. Canonical authority is `docs/aios/`.
 
 ## Feature
-**SEC-001 — Security Foundation** (friendship integrity, blocking, moderated anonymity, mark-moderation authorization, reproducible Storage authorization, + an executable RLS security test suite). Hardening the authorization foundation before Friends / Friend Wall / recipient picker / Shared Walls.
+**SEC-001 — Security Foundation** (friendship integrity, blocking, moderated anonymity, mark-moderation authorization, reproducible Storage authorization, + an executable RLS security test suite).
 
 ## Status
-**COMPLETE — Reviewer APPROVE + QA PASS.** Awaiting Founder acceptance + merge. NOT merged, NOT deployed. All work is on the feature branch below.
+**COMPLETE + hosted-Supabase production fix applied.** Reviewer APPROVE + QA PASS on the fixed version. NOT merged, NOT deployed. **Blocked on the Founder hosted retest** (below) — the fix targets a real hosted deploy failure that can only be finally proven on the hosted project.
 
 ## Role results
-- **Product:** PRD-SEC-001 — guarantees A–E → acceptance criteria AC-S1…AC-S10. ✅
-- **Architect:** FP-SEC-001 (Rev 2) + 7 ADRs; block-vs-public-content resolved within approved model (no Founder gate). ✅
-- **Independent high-risk design review (Two-Key design key):** REQUEST-CHANGES on Rev 1 (found a BLOCKER: anon insert FK-timing; + INSERT self-friend vector; + service_role grant gap) → **APPROVE-DESIGN on Rev 2.** ✅
-- **Backend:** `0002_security_foundation.sql` (F1–F5), `0003_storage_attachments.sql` (F6), `supabase/tests/` harness. `run_tests.sh` exit 0, all AC-S1…AC-S10 + moderator-read + storage PASS. ✅
-- **Frontend:** one-line defense-in-depth in `src/lib/marks.ts` (anon marks don't transmit `author_id`; DB trigger is the real enforcement). typecheck/lint 0 errors. ✅
-- **Reviewer (code Two-Key key):** APPROVE (commit `4452552`) — independently re-executed + adversarially re-attacked F1/F4/F5 with SQLSTATE capture. ✅
-- **QA (behavioral Two-Key key):** PASS — drove end-user authorization scenarios against live PostgreSQL 16; every denial confirmed as the intended rule. ✅
+- **Product:** PRD-SEC-001 — guarantees A–E → AC-S1…AC-S10. ✅
+- **Architect:** FP-SEC-001 (Rev 2) + 7 ADRs; block-vs-public-content resolved in-model (no gate). ✅
+- **Independent high-risk design review:** REQUEST-CHANGES (Rev 1: BLOCKER anon-insert FK timing + INSERT self-friend vector + service_role grant gap) → **APPROVE-DESIGN (Rev 2).** ✅
+- **Backend:** `0002` (F1–F5) + `0003` (F6) + `supabase/tests/` harness; suite green. ✅
+- **Frontend:** one-line anon hardening in `src/lib/marks.ts`. ✅
+- **Reviewer (code Two-Key):** APPROVE `4452552` (initial) → **APPROVE `cbe9725`** (after fix). ✅
+- **QA (behavioral Two-Key):** PASS `4452552` (initial) → **PASS `cbe9725`** (after fix). ✅
+- **Hosted-Supabase fix (Founder deploy finding):** `0003:19 ALTER TABLE storage.objects ENABLE RLS` → `ERROR 42501: must be owner of table objects`. Removed the ownership-gated ALTER (Supabase pre-enables RLS on `storage.objects`); RLS-enable moved into the test shim; regression guard + `relrowsecurity` assertion added. F6 guarantee unchanged. ✅
 
 ## Founder decisions (pre-approved, encoded)
-A moderated anonymity (no irreversible crypto) · B blocking = hard interaction boundary · C friendship transitions (no requester self-accept) · D one logical relationship per unordered pair · E server-side mark moderation. No new Founder decision surfaced.
+A moderated anonymity · B blocking = hard interaction boundary · C friendship transitions (no self-accept) · D one relationship per unordered pair · E server-side mark moderation. No new decision surfaced.
 
 ## Branch
-`claude/sec-001-security-foundation` (based on latest `main`, which includes merged PR #6 AGENTS.md).
+`claude/sec-001-security-foundation` (off latest `main`).
 
 ## Latest commit
-`4452552` — `feat(sec-001): don't transmit author_id for anonymous marks (defense-in-depth)`
+`cbe9725` — `fix(sec-001): hosted-Supabase storage compat — don't toggle RLS on storage.objects (F6)`
 
 ## PR
-Draft PR (SEC-001) — see repository PR list. Base `main`. **Do not merge without Founder approval** (security/schema/Two-Key category).
+**#8 (draft)** — https://github.com/darshitmeghani1992/the-wall/pull/8 (updated in place with the fix). **Do not merge without Founder approval + a successful hosted retest.**
 
 ## Known issues
-- Advisory/cosmetic only (non-blocking): harness uses a broad `exception when others` catch (QA/Reviewer independently pinned SQLSTATEs to confirm genuine causes); moderation guard allows `postgres`/`service_role` (admin/superuser, not a JWT-reachable client path). Tracked debts: DEBT-001 (retained unused `'blocked'` enum value on `friendship_status`), DEBT-002 (moderator == `service_role` only; no first-class moderator identity — a Non-Goal this cycle).
+- Advisory/cosmetic only (non-blocking): harness `exception when others` breadth (Reviewer/QA independently SQLSTATE-pinned real causes); moderation guard admits `postgres`/`service_role` (admin, not JWT-reachable); regression guard is line-based (matches the single-line pattern that caused the incident; `relrowsecurity` assertion + hosted platform pre-enable are the real defenses). Tracked debts: DEBT-001 unused `'blocked'` enum; DEBT-002 moderator == `service_role` only.
+- A **pre-existing, differently-named `attachments` storage policy** exists on the hosted project — the Founder should review/remove it so the effective policy set matches `0003` exactly.
 
-## Manual Founder tests required (before/at deploy)
-1. Apply `0002`/`0003` to the real Supabase project.
-2. Confirm production `service_role` has no blanket grant that re-exposes `anonymous_mark_authors`; confirm prod default privileges match the test shim's assumptions.
-3. Confirm `storage.objects` RLS is enabled on the hosted project and the `attachments` bucket policies took.
-4. Run one end-to-end anonymous-mark flow through the live app + Realtime (author identity must not appear to an ordinary client).
+## Manual Founder tests required (the load-bearing final gate)
+1. Apply `0002`+`0003` in ONE transaction on hosted → confirm **no `42501: must be owner of table objects`**.
+2. Confirm the `attachments` bucket is public and the four `attachments …` policies took.
+3. Review/remove any pre-existing differently-named `attachments` storage policy (its `drop policy if exists` only clears its own names).
+4. Confirm `relrowsecurity = true` on hosted `storage.objects`.
+5. Run one end-to-end anonymous-mark flow (author identity must not reach an ordinary client) + one upload flow (own-avatar allowed; cross-uid/anon rejected).
 
 ## Recommended next action
-Founder: review the draft PR + `docs/qa/QA-SEC-001-report.md`, run the manual verification list, then approve merge. Next cycle candidate: **Friends system (server + minimal UI)** — the security primitives it depends on (friendship integrity, blocking, eligibility) now exist and are proven.
+Founder: run the hosted retest above; if green, approve PR #8 merge. Next cycle candidate: **Friends system (server + minimal UI)** — its security primitives (friendship integrity, blocking, eligibility) now exist and are proven.
+
+---
+_Related: FP-001 (FTUE) is a separate branch `claude/the-wall-aios-product-zlc5on` / draft PR #7, awaiting your device test — independent of SEC-001._
