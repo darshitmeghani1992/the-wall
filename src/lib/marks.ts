@@ -27,7 +27,9 @@ export async function createMark(draft: MarkDraft): Promise<Mark> {
     .from("marks")
     .insert({
       wall_id: draft.wallId,
-      author_id: uid,
+      // Server trigger `marks_null_anon` is the real enforcement (it NULLs
+      // author_id for anonymous marks); this just avoids sending it over the wire.
+      author_id: draft.anonymous ? null : uid,
       type: draft.type,
       text: draft.text ?? null,
       color: draft.color ?? null,
