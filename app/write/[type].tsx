@@ -91,6 +91,8 @@ export default function Writer() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageMime, setImageMime] = useState<string>("image/jpeg");
   const [wallId, setWallId] = useState<string | null>(null);
+  // Recipient's wall setting; when false the server trigger rejects anonymous marks.
+  const [allowAnonymous, setAllowAnonymous] = useState(true);
   const [targetError, setTargetError] = useState<string | null>(null);
   // idle → (uploading photo →) posting → idle. Drives progress + button copy.
   const [phase, setPhase] = useState<"idle" | "uploading" | "posting">("idle");
@@ -109,6 +111,10 @@ export default function Writer() {
         setTargetError("That recipient and Wall no longer match.");
         return;
       }
+      setAllowAnonymous(target.allow_anonymous);
+      // This wall forbids anonymous marks — force "Post as me" so we never
+      // submit a mark the server-side trigger would reject.
+      if (!target.allow_anonymous) setAnonymous(false);
       setWallId(target.id);
     })().catch((cause: any) => {
       if (active) setTargetError(cause?.message ?? "Couldn't verify this Wall.");
@@ -371,16 +377,18 @@ export default function Writer() {
           />
           <IdentityChoice
             active={anonymous}
-            disabled={busy}
+            disabled={busy || !allowAnonymous}
             onPress={() => setAnonymous(true)}
             title="Anonymous"
-            subtitle="Name hidden"
+            subtitle={allowAnonymous ? "Name hidden" : "Not allowed here"}
           />
         </View>
         <Text variant="body" color={colors.onSurfaceVariant} style={{ fontSize: 13, marginTop: 8 }}>
-          {anonymous
-            ? "Your name and avatar won't show on this Mark."
-            : "This Mark will show your name and avatar."}
+          {!allowAnonymous
+            ? "This Wall doesn't accept anonymous Marks — you'll post as you."
+            : anonymous
+              ? "Your name and avatar won't show on this Mark."
+              : "This Mark will show your name and avatar."}
         </Text>
       </View>
 
