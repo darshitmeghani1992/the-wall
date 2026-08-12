@@ -9,7 +9,10 @@ import { Text } from "@/components/Text";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
-import { getWallMarks, subscribeToWall, type MarkWithAuthor } from "@/lib/marks";
+import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
+import { useWallReactions } from "@/hooks/useWallReactions";
+import { sharePersonWall } from "@/lib/share";
 import { getPersonalWall, getProfile } from "@/lib/profiles";
 import type { Profile, Wall } from "@/lib/types";
 import { colors, markColors, radius } from "@/theme";
@@ -57,13 +60,13 @@ export default function PersonWall() {
     return () => { active = false; };
   }, [id, session?.user.id, router]);
 
-  useEffect(() => {
-    if (!wall) return;
-    return subscribeToWall(wall.id, (mark) => {
-      dropIds.current.add(mark.id);
-      setMarks((current) => current.some((item) => item.id === mark.id) ? current : [mark, ...current]);
-    });
-  }, [wall]);
+  // Staggered realtime arrivals (bundled cascade instead of ten at once).
+  useStaggeredArrivals(wall?.id, (mark) => {
+    dropIds.current.add(mark.id);
+    setMarks((current) => (current.some((item) => item.id === mark.id) ? current : [mark, ...current]));
+  });
+
+  const { summaries, toggle } = useWallReactions(marks, session?.user.id);
 
   const canLeaveMark = useMemo(
     () => relationship === "friends" && Boolean(wall) && wall?.contribution_policy !== "nobody",
@@ -101,19 +104,25 @@ export default function PersonWall() {
             </Text>
           ) : null}
 
-          {canLeaveMark ? (
-            <View style={{ marginBottom: 24 }}>
+          <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginBottom: canLeaveMark ? 24 : 12 }}>
+            {canLeaveMark ? (
               <Button
                 label={`Leave a Mark for @${profile.handle}`}
                 variant="yellow"
                 onPress={() => router.push(`/create?wallId=${wall.id}&recipientId=${profile.id}&handle=${encodeURIComponent(profile.handle)}`)}
               />
-            </View>
-          ) : (
+            ) : null}
+            <Button
+              label="Share ↗"
+              variant="primary"
+              onPress={() => sharePersonWall(profile.handle, profile.display_name)}
+            />
+          </View>
+          {!canLeaveMark ? (
             <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>
               {relationship === "friends" ? "This Wall isn't accepting Marks right now." : "Become friends to leave a Mark here."}
             </Text>
-          )}
+          ) : null}
 
           {marks.length ? (
             <Masonry
@@ -126,6 +135,8 @@ export default function PersonWall() {
                   enter={dropIds.current.has(mark.id) ? "drop" : "settle"}
                   enterIndex={index}
                   highlight={mark.id === justCreatedId}
+                  reactions={summaries[mark.id]}
+                  onToggleReaction={(emoji) => toggle(mark.id, emoji)}
                 />
               )}
             />

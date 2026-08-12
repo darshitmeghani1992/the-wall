@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { track } from "./analytics";
 import type { Friendship, Profile } from "./types";
 
 export type RelationshipState = "none" | "outgoing" | "incoming" | "friends";
@@ -106,6 +107,7 @@ export async function sendFriendRequest(userId: string, personId: string): Promi
     status: "pending",
   });
   if (error) throw error;
+  track("Friend Request Sent", {});
 }
 
 export async function acceptFriendRequest(userId: string, requesterId: string): Promise<void> {
@@ -119,6 +121,7 @@ export async function acceptFriendRequest(userId: string, requesterId: string): 
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("That request is no longer available.");
+  track("Friend Request Accepted", {});
 }
 
 export async function declineFriendRequest(userId: string, requesterId: string): Promise<void> {

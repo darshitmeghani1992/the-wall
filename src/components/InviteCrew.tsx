@@ -1,20 +1,18 @@
-import { View, Share } from "react-native";
+import { View } from "react-native";
 import { Text } from "./Text";
 import { Button } from "./Button";
+import { inviteFriends } from "@/lib/share";
 import { colors, markColors, radius } from "@/theme";
 
 /**
  * Empty-wall first-run state. A wall only comes alive when friends leave Marks,
  * so a brand-new user is nudged to invite their crew before anything else.
+ *
+ * Uses the shared `inviteFriends` helper (IMPLEMENTED `thewall://` deep link) so
+ * we never surface the deferred/unverified HTTPS link to users, and the invite
+ * is tracked in the growth funnel.
  */
 export function InviteCrew({ handle }: { handle?: string }) {
-  async function invite() {
-    const link = handle ? `https://thewall.app/@${handle}` : "https://thewall.app";
-    await Share.share({
-      message: `come leave a mark on my wall ✦ ${link}`,
-    });
-  }
-
   return (
     <View
       style={{
@@ -52,7 +50,7 @@ export function InviteCrew({ handle }: { handle?: string }) {
         Walls are written by the people around you. Invite your crew and watch the Marks roll in.
       </Text>
       <View style={{ alignSelf: "stretch", marginTop: 6 }}>
-        <Button label="Invite your crew" variant="yellow" onPress={invite} />
+        <Button label="Invite your crew" variant="yellow" onPress={() => inviteFriends(handle)} />
       </View>
     </View>
   );

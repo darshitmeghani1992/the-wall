@@ -57,6 +57,17 @@ export const motionTokens = {
     outDuration: 260,
     spring: { damping: 14, stiffness: 180, mass: 0.7 } as WithSpringConfig,
   },
+  /**
+   * Realtime ARRIVAL bundling: when several Marks land near-simultaneously we do
+   * NOT drop ten at once. Instead they're revealed one every `stagger` ms so the
+   * wall feels "alive, not chaotic"; `maxConcurrent` caps how many are released
+   * up-front before the rest cascade in. Each revealed Mark still runs the normal
+   * `drop` entrance (and degrades under reduced-motion like everything else).
+   */
+  arrival: {
+    stagger: 150, // ms between successive realtime drops during a burst
+    maxConcurrent: 3, // released immediately at the head of a burst; the rest cascade
+  },
   /** Fallback fade duration used whenever reduced-motion is on. */
   reducedFade: 150,
 } as const;

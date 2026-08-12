@@ -8,7 +8,9 @@ import { Button } from "@/components/Button";
 import { MarkView } from "@/components/marks/MarkView";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
+import { getWall } from "@/lib/walls";
 import { createMark, type MarkWithAuthor } from "@/lib/marks";
+import { track } from "@/lib/analytics";
 import { uploadImage } from "@/lib/upload";
 import type { MarkType } from "@/lib/types";
 import { colors, markColors, radius, shadow, stickySwatches } from "@/theme";
@@ -71,13 +73,25 @@ function IdentityChoice({
 
 export default function Writer() {
   const router = useRouter();
-  const { type: rawType, wallId: targetWallId, recipientId, handle } = useLocalSearchParams<{
+  const {
+    type: rawType,
+    wallId: targetWallId,
+    recipientId,
+    handle,
+    sharedWallId,
+    wallName,
+  } = useLocalSearchParams<{
     type: string;
     wallId?: string;
     recipientId?: string;
     handle?: string;
+    sharedWallId?: string;
+    wallName?: string;
   }>();
   const type = (rawType ?? "sticky") as MarkType;
+  // A Mark targets either a person's Wall (recipient) or a Shared Wall.
+  const sharedMode = Boolean(sharedWallId);
+  const targetLabel = sharedMode ? wallName ?? "a Shared Wall" : `@${handle}`;
   const { session, profile } = useAuth();
   const currentUserId = session?.user.id;
 
@@ -101,6 +115,22 @@ export default function Writer() {
   useEffect(() => {
     let active = true;
     (async () => {
+      // Shared Wall target: verify it exists and is a shared wall; RLS still
+      // enforces contribution on insert.
+      if (sharedMode) {
+        if (!sharedWallId) return;
+        const target = await getWall(sharedWallId);
+        if (!active) return;
+        if (!target || target.type !== "shared") {
+          setTargetError("That Shared Wall is no longer available.");
+          return;
+        }
+        setAllowAnonymous(target.allow_anonymous);
+        if (!target.allow_anonymous) setAnonymous(false);
+        setWallId(target.id);
+        return;
+      }
+
       if (!currentUserId || !recipientId || !targetWallId || recipientId === currentUserId) {
         if (active) setTargetError("Choose another person's Wall before writing a Mark.");
         return;
@@ -120,7 +150,7 @@ export default function Writer() {
       if (active) setTargetError(cause?.message ?? "Couldn't verify this Wall.");
     });
     return () => { active = false; };
-  }, [currentUserId, recipientId, targetWallId]);
+  }, [currentUserId, recipientId, targetWallId, sharedMode, sharedWallId]);
 
   const copy = COPY[type] ?? COPY.sticky;
   const overLimit = text.length > maxLen;
@@ -216,8 +246,15 @@ export default function Writer() {
         anonymous,
         mediaUrl,
       });
+      if (sharedMode) {
+        track("Shared Wall Mark Created", { wall_id: wallId, mark_type: type });
+      }
       if (router.canDismiss()) router.dismissAll();
-      router.push(`/person/${recipientId}?justCreated=${mark.id}`);
+      router.push(
+        sharedMode
+          ? `/shared/${sharedWallId}?justCreated=${mark.id}`
+          : `/person/${recipientId}?justCreated=${mark.id}`,
+      );
     } catch (e: any) {
       Alert.alert("Couldn't post that", e?.message ?? "Please try again in a moment.");
       setPhase("idle");
@@ -255,7 +292,9 @@ export default function Writer() {
         </Pressable>
         <View style={{ alignItems: "center" }}>
           <Text variant="display" style={{ fontSize: 22 }}>{copy.title}</Text>
-          <Text variant="label" color={colors.outline}>FOR @{handle}</Text>
+          <Text variant="label" color={colors.outline}>
+            {sharedMode ? `ON ${targetLabel}` : `FOR ${targetLabel}`}
+          </Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
