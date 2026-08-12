@@ -4,17 +4,39 @@ import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
-import { colors, markColors, radius } from "@/theme";
+import { colors, markColors, type EnterMode } from "@/theme";
 import type { MarkWithAuthor } from "@/lib/marks";
+import { isMarkShareable, shareMark } from "@/lib/share";
 import type { MarkType } from "@/lib/types";
 
-/** Attribution line ("— Sofia" / "— anonymous"), Space-Mono uppercase. */
+/** The display label for a Mark's author — anonymous Marks read "Anonymous". */
+function authorName(mark: MarkWithAuthor): string {
+  return mark.anonymous ? "Anonymous" : mark.author?.display_name ?? "someone";
+}
+
+/** Attribution line ("— Sofia" / "— Anonymous"), Space-Mono uppercase. */
 function AuthorLine({ mark }: { mark: MarkWithAuthor }) {
-  const name = mark.anonymous ? "anonymous" : (mark.author?.display_name ?? "someone");
   return (
     <Text variant="label" color={colors.outline} style={{ marginTop: 10 }}>
-      — {name}
+      — {authorName(mark)}
     </Text>
+  );
+}
+
+/** A quiet "share this Mark" affordance shown for received, shareable Marks. */
+function ShareRow({ mark, wallHandle }: { mark: MarkWithAuthor; wallHandle?: string | null }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Share this Mark from ${authorName(mark)}`}
+      onPress={() => {
+        void shareMark(mark, wallHandle);
+      }}
+      hitSlop={8}
+      style={{ marginTop: 10, alignSelf: "flex-start", minHeight: 32, justifyContent: "center" }}
+    >
+      <Text variant="label" color={colors.outline}>SHARE ↗</Text>
+    </Pressable>
   );
 }
 
@@ -177,7 +199,7 @@ function AwardMark({ mark }: { mark: MarkWithAuthor }) {
         {payload?.award ?? mark.text ?? "Award"}
       </Text>
       <Text variant="label" color="#c8c6c5" style={{ marginTop: 8 }}>
-        — {mark.anonymous ? "anonymous" : (mark.author?.display_name ?? "someone")}
+        — {authorName(mark)}
       </Text>
     </View>
   );
@@ -244,9 +266,29 @@ function chromeFor(type: MarkType, color: string | null) {
 /**
  * Renders one Mark of any type inside a tilted, pinned MarkCard. This is the
  * switchboard the wall's masonry calls for every item.
+ *
+ * `enter`/`enterIndex`/`highlight` drive the motion system (drop-in for a fresh
+ * Mark, staggered settle on wall load, a highlight pulse for the just-posted
+ * one). `shareable` opts a Mark into a "Share ↗" affordance — only shown on the
+ * owner's own Wall for received, non-Secret Marks.
  */
-export function MarkView({ mark, dropIn }: { mark: MarkWithAuthor; dropIn?: boolean }) {
+export function MarkView({
+  mark,
+  enter = "none",
+  enterIndex = 0,
+  highlight = false,
+  shareable = false,
+  wallHandle,
+}: {
+  mark: MarkWithAuthor;
+  enter?: EnterMode;
+  enterIndex?: number;
+  highlight?: boolean;
+  shareable?: boolean;
+  wallHandle?: string | null;
+}) {
   const chrome = chromeFor(mark.type, mark.color);
+  const canShare = shareable && isMarkShareable(mark);
 
   let inner: React.ReactNode;
   switch (mark.type) {
@@ -282,9 +324,12 @@ export function MarkView({ mark, dropIn }: { mark: MarkWithAuthor; dropIn?: bool
       background={chrome.bg}
       bordered={chrome.bordered}
       fastener={chrome.fastener}
-      dropIn={dropIn}
+      enter={enter}
+      enterIndex={enterIndex}
+      highlight={highlight}
     >
       {inner}
+      {canShare ? <ShareRow mark={mark} wallHandle={wallHandle} /> : null}
     </MarkCard>
   );
 }

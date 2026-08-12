@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -16,7 +16,8 @@ import { colors, markColors, radius } from "@/theme";
 
 export default function PersonWall() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, justCreated } = useLocalSearchParams<{ id: string; justCreated?: string }>();
+  const justCreatedId = justCreated ? String(justCreated) : null;
   const { session } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [wall, setWall] = useState<Wall | null>(null);
@@ -24,6 +25,8 @@ export default function PersonWall() {
   const [relationship, setRelationship] = useState<RelationshipState>("none");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Marks that should drop-in (the one I just left, plus any realtime arrivals).
+  const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
   useEffect(() => {
     let active = true;
@@ -57,6 +60,7 @@ export default function PersonWall() {
   useEffect(() => {
     if (!wall) return;
     return subscribeToWall(wall.id, (mark) => {
+      dropIds.current.add(mark.id);
       setMarks((current) => current.some((item) => item.id === mark.id) ? current : [mark, ...current]);
     });
   }, [wall]);
@@ -91,6 +95,11 @@ export default function PersonWall() {
               <Text variant="body" color={colors.outline}>@{profile.handle} · {marks.length} marks</Text>
             </View>
           </View>
+          {profile.bio ? (
+            <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: -6, marginBottom: 18 }}>
+              {profile.bio}
+            </Text>
+          ) : null}
 
           {canLeaveMark ? (
             <View style={{ marginBottom: 24 }}>
@@ -107,7 +116,19 @@ export default function PersonWall() {
           )}
 
           {marks.length ? (
-            <Masonry data={marks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark) => <MarkView mark={mark} />} />
+            <Masonry
+              data={marks}
+              keyFor={(mark) => mark.id}
+              estimate={estimateMarkHeight}
+              renderItem={(mark, index) => (
+                <MarkView
+                  mark={mark}
+                  enter={dropIds.current.has(mark.id) ? "drop" : "settle"}
+                  enterIndex={index}
+                  highlight={mark.id === justCreatedId}
+                />
+              )}
+            />
           ) : (
             <View style={{ paddingVertical: 36, alignItems: "center" }}>
               <Text variant="headline">No Marks yet</Text>

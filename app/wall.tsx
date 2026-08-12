@@ -4,9 +4,11 @@ import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
+import { Button } from "@/components/Button";
 import { Masonry } from "@/components/Masonry";
 import { InviteCrew } from "@/components/InviteCrew";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
+import { shareMyWall } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
 import { getWallMarks, subscribeToWall, type MarkWithAuthor } from "@/lib/marks";
@@ -30,8 +32,9 @@ const FILTERS: Filter[] = [
  */
 export default function MyWall() {
   const { session, profile } = useAuth();
-  // When we arrive here right after creating a mark, animate that one in.
+  // When we arrive here right after creating a mark, drop + highlight that one.
   const { justCreated } = useLocalSearchParams<{ justCreated?: string }>();
+  const justCreatedId = justCreated ? String(justCreated) : null;
 
   const [wall, setWall] = useState<Wall | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
@@ -121,6 +124,10 @@ export default function MyWall() {
           </View>
         </View>
 
+        <View style={{ alignSelf: "flex-start", marginTop: 14 }}>
+          <Button label="Share my Wall 👀" variant="yellow" onPress={() => shareMyWall(profile?.handle)} />
+        </View>
+
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 18 }}>
           {FILTERS.map((f) => {
             const on = f.key === filter;
@@ -168,7 +175,19 @@ export default function MyWall() {
           data={visible}
           keyFor={(m) => m.id}
           estimate={estimateMarkHeight}
-          renderItem={(m) => <MarkView mark={m} dropIn={dropIds.current.has(m.id)} />}
+          renderItem={(m, index) => {
+            const dropped = dropIds.current.has(m.id);
+            return (
+              <MarkView
+                mark={m}
+                enter={dropped ? "drop" : "settle"}
+                enterIndex={index}
+                highlight={m.id === justCreatedId}
+                shareable
+                wallHandle={profile?.handle}
+              />
+            );
+          }}
         />
       )}
 
