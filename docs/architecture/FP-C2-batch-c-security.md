@@ -21,8 +21,9 @@ required: this plan **plus an independent design review before implementation be
 - **Files affected:** 4 new migrations (`0004`–`0007`), 4 new test files + seed/runner edits under `supabase/tests/`,
   1 new Frontend read function (`src/lib/marks.ts` or a new `src/lib/secrets.ts`). No change to C1's write paths.
 - **Database impact:** Additive migration only — new tables (`mark_secrets`, `wall_members`), new nullable columns on
-  `profiles`, new enums, new triggers/functions, `create-or-replace` of two existing helpers (`can_view_wall`,
-  `can_contribute`). No destructive DDL, no data backfill (pre-launch → expected zero rows).
+  `profiles`, new enums, new triggers/functions, one additive `marks` table CHECK + one additive `notifications.kind`
+  CHECK, `create-or-replace` of two existing helpers (`can_view_wall`, `can_contribute`). No destructive DDL, no data
+  backfill (pre-launch → expected zero rows).
 - **Dependency risk:** None (no new third-party packages; psql harness reused, pgTAP still not adopted).
 - **Approximate AI session count:** 4–6.
 - **Implementation phases:** (1) `0004` secret marks + harness; (2) `0005` wall members + harness; (3) `0006`
@@ -133,6 +134,15 @@ begin
 end $$;
 create trigger marks_extract_secret before insert on marks
   for each row execute function marks_extract_secret();
+
+-- LIFECYCLE guard (see ADR-008 / R-A2): a plain table CHECK keeps secret content off the
+-- base row across the WHOLE row lifecycle, not just at INSERT. Evaluated AFTER BEFORE triggers,
+-- so the trigger-nulled INSERT passes; a later `update marks set text=… where <secret>` by the
+-- author OR the wall owner is rejected (check_violation) — closing the "authorized party can
+-- re-populate and broadcast the secret via realtime" path, and preventing a stale duplicate
+-- vs mark_secrets. Non-secret marks are unaffected.
+alter table marks add constraint marks_secret_text_null
+  check (type <> 'secret' or text is null);
 ```
 - **NOT** added to `supabase_realtime`. (Assertion in the harness guards this.)
 - Compatible with anonymity: for an anonymous **and** secret mark, `marks_null_anon` (0002) nulls `author_id` and
@@ -144,8 +154,11 @@ create trigger marks_extract_secret before insert on marks
 C1's `createMark` **already** sends the secret in `marks.text` with `type='secret'` — **no C1 write change**. The
 server, not the client, guarantees the content never persists on `marks`: the BEFORE-INSERT trigger moves it. Even a
 malicious client that inserts a secret with content in `text` has that content moved off the base row before commit.
-(Defense-in-depth option, deferred: a `marks` WITH-CHECK asserting `type<>'secret' OR text IS NULL` — unnecessary given
-the trigger already runs before the row is visible, and it would reject C1's current honest write; see Risk R-A2.)
+The `marks_secret_text_null` CHECK (above) extends that guarantee across the row's whole lifecycle: it is evaluated
+after the BEFORE trigger (so the trigger-nulled INSERT passes) and rejects any later UPDATE — by the author OR the wall
+owner — that would write `text` back onto a secret row. Note this makes the base `marks.text` **write-once-empty** for
+secrets; editing a secret's content is therefore an operation on `mark_secrets` (owner/author flow), not a future
+`update marks set text` — see R-A2 and Future Extensions.
 
 ### Client read path (Frontend, hands off from this plan)
 New read function (C1 follow-up, e.g. `getSecretContents(markIds): Record<markId, string>`): selects `mark_secrets` for
@@ -200,8 +213,12 @@ create policy "wall_members read" on wall_members for select to authenticated
 
 -- invite: ONLY the wall owner may create a membership, and it MUST start pending as 'member'
 -- (closes the "insert-as-accepted" / "insert-as-owner" vector — same lesson as 0002 F1).
+-- F3 tidy: require the target wall to be SHARED, so no inert membership rows can be created on
+-- personal walls (harmless today — is_wall_member is only consulted for type='shared' — but this
+-- keeps the table free of dead data).
 create policy "wall_members invite owner" on wall_members for insert to authenticated
-  with check (exists (select 1 from walls w where w.id = wall_id and w.owner_id = auth.uid())
+  with check (exists (select 1 from walls w
+                      where w.id = wall_id and w.owner_id = auth.uid() and w.type = 'shared')
               and status = 'pending' and role = 'member');
 
 -- accept: only the invited user flips their own pending→accepted (guard trigger enforces the transition).
@@ -338,11 +355,15 @@ New per-area files, same idiom (`SET LOCAL ROLE` + `SET LOCAL "test.uid"` + `DO`
   authenticated reader gets **0 rows** from `mark_secrets`; the wall owner reads the content; `service_role` reads the
   content; `pg_publication_tables` shows `mark_secrets` **absent** from `supabase_realtime` and `marks` present; an
   anonymous+secret mark hides **both** author (base row) and content (base row) while the owner reads content without
-  learning the author.
+  learning the author. **Lifecycle assertion (closes F1/R-A2):** after a secret is created, an author `update marks set
+  text='…'` on that secret is **rejected** (`check_violation`) and the base row's `text` stays NULL — proving the leak
+  cannot be re-introduced by an authorized editor; the same UPDATE by the wall owner is likewise rejected; a normal
+  (non-secret) mark's `text` UPDATE still succeeds (the CHECK does not over-restrict).
 - **`70_wall_members.sql`** — accepted member can view+contribute a private shared wall; non-member cannot view or
   contribute; owner can; a public shared wall stays viewable+contributable for an unrelated non-blocked user; the
   invite-as-owner / accept-as-invitee transition guard holds (non-owner cannot insert a membership; a third party
-  cannot accept someone else's invite; no move back to pending); `wall_members` roster SELECT does not recurse.
+  cannot accept someone else's invite; no move back to pending); an owner's invite targeting a **personal** wall is
+  rejected by the invite WITH CHECK (F3 — `type='shared'` required); `wall_members` roster SELECT does not recurse.
 - **`80_notifications.sql`** — each of the five triggers inserts exactly one row for the right recipient with the right
   `kind`; **no** self-notification (mark by owner on own wall; self-reaction); a reaction on an **anonymous** mark
   notifies the true author with `actor_id` = reactor and **no** de-anon of the base row; a `mark_left` for an anonymous
@@ -363,7 +384,7 @@ anonymous-secret marks are created inline in `60`/`80` (as `30_anonymity.sql` do
 | ID | Risk | Cat | L | I | Mitigation |
 |---|---|---|---|---|---|
 | R-A1 | A future column added to `marks` re-introduces a content leak via realtime (whole row is published) | Security | Med | High | Rule (ADR-008): no confidential field ever lands on a realtime-published table; harness asserts `mark_secrets` stays out of the publication. Reviewer checks any later `marks` column. |
-| R-A2 | Deferrable-FK side-table write inside a BEFORE INSERT is non-obvious; a later refactor could break secret inserts | Technical | Med | Med | ADR-008 documents the exact reason; harness proves an end-to-end secret insert; contrast with 0002's two-trigger anonymity is explicit. |
+| R-A2 | Secret-content leak/consistency across the row lifecycle: an INSERT-only trigger let an author/owner `update marks set text` re-populate the realtime-published base row (broadcast to all viewers) and leave a stale duplicate vs `mark_secrets` | Security | Med | High | **Fixed (design review F1):** plain table CHECK `type<>'secret' or text is null` — evaluated after BEFORE triggers, so INSERT passes and any later secret-text UPDATE (author or owner) is rejected; harness asserts both. Also documents that deferrable-FK BEFORE-INSERT write is non-obvious → ADR-008 records the reason and contrasts 0002's two-trigger anonymity. **Verified.** |
 | R-A3 | Secret on a **public** shared wall is readable by that wall's owner, who may be a stranger to the author | Product/Trust | Med | Med | **Founder decision F-1** (below). Design supports restricting via one predicate if Product wants secrets limited to personal/friend walls. |
 | R-B1 | Private-shared walls change from friend-gated to member-gated (semantic change to `can_view_wall`) | Security/Product | Low | Med | ADR-009; no private shared walls exist today (C1 = public only); harness proves personal + public paths unchanged. |
 | R-B2 | `is_wall_member` used inside `wall_members`' own SELECT policy could recurse | Technical | Low | High | SECURITY DEFINER bypasses RLS on the queried table (same as `are_friends`); **validated** no recursion. |
@@ -402,7 +423,13 @@ moderation. `mark_secrets` is **not** added to the realtime publication. A **sin
 moves the content into `mark_secrets` and nulls `text`; the side table's FK to `marks(id)` is
 `DEFERRABLE INITIALLY DEFERRED` so the child insert (which precedes the parent's visibility) validates at commit.
 `mark_secrets` deliberately stores **no `author_id`**, so an anonymous+secret mark cannot be de-anonymized by the owner
-reading its content.
+reading its content. A plain table CHECK on `marks` — `check (type <> 'secret' or text is null)` — makes the guarantee
+hold across the **whole row lifecycle**, not just at INSERT: because table CHECKs run *after* BEFORE triggers, the
+trigger-nulled INSERT passes, while any later `update marks set text=…` on a secret (by the author or the wall owner) is
+rejected. This closes the lifecycle leak an INSERT-only trigger left open — an authorized editor re-populating the
+client-readable, realtime-published `text` and broadcasting the secret to all viewers — and also prevents a stale
+duplicate diverging from `mark_secrets`. Editing a secret's content is therefore a `mark_secrets` operation, never a
+`marks.text` write.
 **Why single trigger here, vs. SEC-001's two triggers for anonymity:** anonymity's `AFTER` trigger only needs
 `auth.uid()`, which is available fresh in the `AFTER` phase — no data must cross from `BEFORE`. Secrets are different:
 the content exists only on the incoming row in the `BEFORE` phase and must not persist on `marks` at all (else the
@@ -414,13 +441,18 @@ chose two triggers *for anonymity's* self-documentation; the trade-off resolves 
 publication change and **no** client write change (C1 keeps sending `text`). The owner reads content via a new additive
 client query; everyone else sees the existing lock for free. Requires the explicit `service_role` grant (BYPASSRLS is
 not a table GRANT — same lesson as 0002 F4).
-**Alternatives rejected:** (a) client writes `mark_secrets` directly + a `marks` WITH-CHECK forbidding secret `text` —
-two non-atomic round trips and rejects C1's current honest write; (b) two triggers carrying content via a
-transaction-local GUC — more magic than a deferrable FK (Constitution §5 explicitness); (c) a security-barrier VIEW or
-`revoke select on marks` — cannot mask the realtime payload and breaks `postgres_changes` delivery; (d) encrypting
+**Alternatives rejected:** (a) client writes `mark_secrets` directly + a `marks` WITH-CHECK forbidding secret `text` on
+INSERT — two non-atomic round trips and rejects C1's current honest write (note: the chosen design keeps the honest
+client write via the trigger, and uses a *table* CHECK — which also covers UPDATE — rather than an INSERT-only WITH
+CHECK); (b) a BEFORE UPDATE trigger branch to block secret-text UPDATEs — works, but the plain table CHECK is cheaper,
+declarative, and self-documenting, and was preferred by the design review; (c) two triggers carrying content via a
+transaction-local GUC — more magic than a deferrable FK (Constitution §5 explicitness); (d) a security-barrier VIEW or
+`revoke select on marks` — cannot mask the realtime payload and breaks `postgres_changes` delivery; (e) encrypting
 content in-row — key management out of scope, still streams ciphertext.
-**Confidence: Verified** end-to-end in `sec001_test`/`c2_scratch` (base row NULL; non-owner 0 rows; owner + service_role
-read; absent from publication).
+**Confidence: Verified** end-to-end in `c2_scratch` (throwaway DB, dropped): a secret INSERT with content leaves base
+row `text` NULL and stores it in `mark_secrets`; non-owner 0 rows; owner + `service_role` read; absent from the realtime
+publication; and — post design-review — an author's **and** the owner's `update marks set text` on a secret is rejected
+by the `marks_secret_text_null` CHECK while a non-secret text edit still succeeds (the lifecycle-leak fix).
 
 ### ADR-009: Shared walls are membership-gated; private **personal** walls stay friend-gated
 Status: Proposed · Date: 2026-08-12 · Reversibility: two-way door (interaction rules); the shared-wall access *model* is
@@ -496,6 +528,10 @@ harness additions are defined. The **only** remaining blockers are governance-ma
   owner-unreadable there)? **Default recommendation:** allow, owner = recipient, consistent across wall types — the
   design supports restricting later via a single predicate. This is a product/trust call, not an engineering one; every
   other C2 security decision is implied by the task and resolved in this plan.
+- **F-2 — acknowledge (not a choice):** private **shared** walls become **member-gated** rather than friend-gated
+  (ADR-009). No such walls exist today (C1 creates public shared walls only), so this is additive in practice, but it is
+  a forward-only change to the authorization model and is flagged for explicit Founder acknowledgement. No decision is
+  requested — just awareness that the private-shared access rule is set here.
 
 ---
 *Handoff:* **Backend** — `0004`–`0007` + `supabase/tests/{60,70,80,90}` + seed/runner edits. **Frontend** — the secret
