@@ -1,13 +1,16 @@
 import { View } from "react-native";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
+import { shareMyWall } from "@/lib/share";
 import { colors, markColors } from "@/theme";
 
-/** Profile — real user identity + sign-out. Stats/edit expand in Phase 4. */
+/** Profile — real user identity, edit, share-your-Wall, and sign-out. */
 export default function ProfileScreen() {
+  const router = useRouter();
   const { profile, signOut } = useAuth();
   const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
 
@@ -56,7 +59,8 @@ export default function ProfileScreen() {
       </View>
 
       <View style={{ gap: 12 }}>
-        <Button label="Edit profile" variant="ghost" onPress={() => {}} />
+        <Button label="Share my Wall" variant="yellow" onPress={() => shareMyWall(profile?.handle)} />
+        <Button label="Edit profile" variant="ghost" onPress={() => router.push("/profile-edit")} />
         <Button label="Sign out" variant="primary" onPress={signOut} />
       </View>
     </Screen>

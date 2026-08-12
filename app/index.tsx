@@ -1,6 +1,7 @@
 import { View, ActivityIndicator } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "@/lib/auth";
+import { consumePendingLink } from "@/lib/pendingLink";
 import { Text } from "@/components/Text";
 import { colors, markColors } from "@/theme";
 
@@ -9,7 +10,11 @@ import { colors, markColors } from "@/theme";
  *   - loading            → splash spinner
  *   - signed out         → onboarding welcome
  *   - signed in, no row  → profile setup
- *   - fully set up        → Home
+ *   - fully set up        → a pending deep-link target (if any), else Home
+ *
+ * A deep link opened while signed out stashes its target (pendingLink); once the
+ * user is fully set up we consume it here so the intended Wall isn't lost across
+ * sign-in / onboarding.
  */
 export default function Index() {
   const { loading, session, needsProfile } = useAuth();
@@ -27,5 +32,8 @@ export default function Index() {
 
   if (!session) return <Redirect href="/welcome" />;
   if (needsProfile) return <Redirect href="/profile-setup" />;
+
+  const pending = consumePendingLink();
+  if (pending) return <Redirect href={pending} />;
   return <Redirect href="/home" />;
 }

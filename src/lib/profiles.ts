@@ -11,6 +11,41 @@ export async function getProfile(userId: string): Promise<Profile | null> {
   return (data as Profile) ?? null;
 }
 
+/** Look up a profile by its @handle (case-insensitive). Powers handle deep links. */
+export async function getProfileByHandle(handle: string): Promise<Profile | null> {
+  const clean = handle.trim().replace(/^@/, "");
+  if (!clean) return null;
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .ilike("handle", clean)
+    .maybeSingle();
+  return (data as Profile) ?? null;
+}
+
+/** The editable fields on a profile. `handle` is intentionally immutable here. */
+export type ProfileUpdate = {
+  display_name?: string;
+  bio?: string | null;
+  avatar_url?: string | null;
+};
+
+/**
+ * Update the signed-in user's own profile row. Relies on the existing
+ * `profiles update self` RLS policy — no schema change. Returns the fresh row.
+ * The caller is responsible for refreshing any cached auth profile afterwards.
+ */
+export async function updateProfile(userId: string, patch: ProfileUpdate): Promise<Profile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(patch)
+    .eq("id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Profile;
+}
+
 /** Is a handle free? Case-insensitive. */
 export async function isHandleAvailable(handle: string): Promise<boolean> {
   const { data } = await supabase

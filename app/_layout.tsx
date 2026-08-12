@@ -31,6 +31,8 @@ export default function RootLayout() {
           <Stack.Screen name="create" options={{ presentation: "modal" }} />
           <Stack.Screen name="people-picker" options={{ presentation: "modal" }} />
           <Stack.Screen name="write/[type]" options={{ presentation: "modal" }} />
+          <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
+          <Stack.Screen name="u/[handle]" />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>

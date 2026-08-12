@@ -6,7 +6,8 @@ type Props<T> = {
   keyFor: (item: T) => string;
   /** Rough pixel height, used to balance the two columns. */
   estimate: (item: T) => number;
-  renderItem: (item: T) => React.ReactNode;
+  /** `index` is the item's position in `data` (wall order) — used to stagger entrances. */
+  renderItem: (item: T, index: number) => React.ReactNode;
   gap?: number;
 };
 
@@ -22,21 +23,21 @@ export function Masonry<T>({
   renderItem,
   gap = spacing.masonryGap,
 }: Props<T>) {
-  const cols: T[][] = [[], []];
+  const cols: { item: T; index: number }[][] = [[], []];
   const heights = [0, 0];
 
-  for (const item of data) {
+  data.forEach((item, index) => {
     const target = heights[0] <= heights[1] ? 0 : 1;
-    cols[target].push(item);
+    cols[target].push({ item, index });
     heights[target] += estimate(item);
-  }
+  });
 
   return (
     <View style={{ flexDirection: "row", gap }}>
       {cols.map((col, i) => (
         <View key={i} style={{ flex: 1, gap: 0 }}>
-          {col.map((item) => (
-            <View key={keyFor(item)}>{renderItem(item)}</View>
+          {col.map(({ item, index }) => (
+            <View key={keyFor(item)}>{renderItem(item, index)}</View>
           ))}
         </View>
       ))}

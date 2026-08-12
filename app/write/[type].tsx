@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, TextInput, Pressable, Switch, Alert, ActivityIndicator } from "react-native";
+import { View, TextInput, Pressable, Alert, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
@@ -15,6 +15,8 @@ import { colors, markColors, radius, shadow, stickySwatches } from "@/theme";
 
 const MAX_TEXT = 500;
 const MAX_CAPTION = 200;
+/** Keep in step with upload.ts's MAX_PROFILE_IMAGE (6 MB). */
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
 const SUPPORTED: MarkType[] = ["sticky", "roast", "secret", "memory"];
 
@@ -24,6 +26,48 @@ const COPY: Record<string, { title: string; placeholder: string }> = {
   secret: { title: "Leave a Secret", placeholder: "shhh… only revealed on tap" },
   memory: { title: "Share a Memory", placeholder: "add a caption…" },
 };
+
+/** One of the two identity options ("Post as me" / "Anonymous"). */
+function IdentityChoice({
+  active,
+  disabled,
+  onPress,
+  title,
+  subtitle,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: active, disabled }}
+      accessibilityLabel={`${title}, ${subtitle}`}
+      style={{
+        flex: 1,
+        borderWidth: 2,
+        borderColor: colors.ink,
+        borderRadius: radius.card,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        backgroundColor: active ? colors.ink : colors.card,
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <Text variant="headline" style={{ fontSize: 15 }} color={active ? colors.surface : colors.ink}>
+        {title}
+      </Text>
+      <Text variant="label" color={active ? markColors.brandYellow : colors.outline} style={{ marginTop: 2 }}>
+        {subtitle}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function Writer() {
   const router = useRouter();
@@ -45,9 +89,12 @@ export default function Writer() {
   const [color, setColor] = useState<string>(stickySwatches[0]);
   const [anonymous, setAnonymous] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageMime, setImageMime] = useState<string>("image/jpeg");
   const [wallId, setWallId] = useState<string | null>(null);
   const [targetError, setTargetError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // idle → (uploading photo →) posting → idle. Drives progress + button copy.
+  const [phase, setPhase] = useState<"idle" | "uploading" | "posting">("idle");
+  const busy = phase !== "idle";
 
   useEffect(() => {
     let active = true;
@@ -74,13 +121,29 @@ export default function Writer() {
   const canSubmit =
     !!wallId && !overLimit && (isPhoto ? !!imageUri : text.trim().length > 0);
 
+  /** Validate a picked asset (type + size) before we accept it into the preview. */
+  function acceptAsset(asset: ImagePicker.ImagePickerAsset): boolean {
+    const mime = asset.mimeType ?? "image/jpeg";
+    if (!mime.startsWith("image/")) {
+      Alert.alert("Unsupported file", "Please choose a photo (JPG or PNG).");
+      return false;
+    }
+    if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+      Alert.alert("That photo is too big", "Please pick an image under 6 MB.");
+      return false;
+    }
+    setImageMime(mime);
+    setImageUri(asset.uri);
+    return true;
+  }
+
   async function pickFromLibrary() {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.8,
     });
-    if (!res.canceled) setImageUri(res.assets[0].uri);
+    if (!res.canceled) acceptAsset(res.assets[0]);
   }
 
   async function takePhoto() {
@@ -90,7 +153,7 @@ export default function Writer() {
       return;
     }
     const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
-    if (!res.canceled) setImageUri(res.assets[0].uri);
+    if (!res.canceled) acceptAsset(res.assets[0]);
   }
 
   // Live preview, rendered with the real MarkView.
@@ -123,12 +186,22 @@ export default function Writer() {
 
   async function submit() {
     if (!canSubmit || !wallId) return;
-    setBusy(true);
     try {
       let mediaUrl: string | null = null;
       if (isPhoto && imageUri) {
-        mediaUrl = await uploadImage(imageUri, `marks/${wallId}`);
+        setPhase("uploading");
+        try {
+          mediaUrl = await uploadImage(imageUri, `marks/${wallId}`, imageMime);
+        } catch (e: any) {
+          Alert.alert(
+            "Photo upload failed",
+            e?.message ?? "We couldn't upload that photo. Check your connection and try again.",
+          );
+          setPhase("idle");
+          return;
+        }
       }
+      setPhase("posting");
       const mark = await createMark({
         wallId,
         type,
@@ -140,9 +213,8 @@ export default function Writer() {
       if (router.canDismiss()) router.dismissAll();
       router.push(`/person/${recipientId}?justCreated=${mark.id}`);
     } catch (e: any) {
-      Alert.alert("Couldn't post that", e?.message ?? "Please try again.");
-    } finally {
-      setBusy(false);
+      Alert.alert("Couldn't post that", e?.message ?? "Please try again in a moment.");
+      setPhase("idle");
     }
   }
 
@@ -286,28 +358,30 @@ export default function Writer() {
         </View>
       ) : null}
 
-      {/* Anonymous toggle */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 20,
-          paddingVertical: 6,
-        }}
-      >
-        <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text variant="headline" style={{ fontSize: 16 }}>Post anonymously</Text>
-          <Text variant="body" color={colors.onSurfaceVariant} style={{ fontSize: 13 }}>
-            Your name won't show on this mark.
-          </Text>
+      {/* Identity — an explicit choice, not a buried switch. */}
+      <View style={{ marginTop: 22 }}>
+        <Text variant="label" color={colors.outline} style={{ marginBottom: 10 }}>WHO'S THIS FROM?</Text>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <IdentityChoice
+            active={!anonymous}
+            disabled={busy}
+            onPress={() => setAnonymous(false)}
+            title="Post as me"
+            subtitle={`@${profile?.handle ?? "you"}`}
+          />
+          <IdentityChoice
+            active={anonymous}
+            disabled={busy}
+            onPress={() => setAnonymous(true)}
+            title="Anonymous"
+            subtitle="Name hidden"
+          />
         </View>
-        <Switch
-          value={anonymous}
-          onValueChange={setAnonymous}
-          trackColor={{ false: colors.surfaceContainerHigh, true: markColors.neonGreen }}
-          thumbColor={colors.surface}
-        />
+        <Text variant="body" color={colors.onSurfaceVariant} style={{ fontSize: 13, marginTop: 8 }}>
+          {anonymous
+            ? "Your name and avatar won't show on this Mark."
+            : "This Mark will show your name and avatar."}
+        </Text>
       </View>
 
       {/* Live preview (text marks; photo mode previews above) */}
@@ -327,7 +401,13 @@ export default function Writer() {
           <ActivityIndicator color={markColors.brandYellow} />
         ) : (
           <Button
-            label={busy && isPhoto ? "Posting…" : "Stick it on the Wall ✦"}
+            label={
+              phase === "uploading"
+                ? "Uploading photo…"
+                : phase === "posting"
+                  ? "Posting…"
+                  : "Stick it on the Wall ✦"
+            }
             variant="primary"
             loading={busy}
             disabled={!canSubmit}
