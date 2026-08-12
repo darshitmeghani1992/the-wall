@@ -78,6 +78,14 @@ echo "── load: 0002_security_foundation.sql"
 psql_test -f "$MIG/0002_security_foundation.sql" >/dev/null
 echo "── load: 0003_storage_attachments.sql"
 psql_test -f "$MIG/0003_storage_attachments.sql" >/dev/null
+echo "── load: 0004_secret_marks.sql"
+psql_test -f "$MIG/0004_secret_marks.sql" >/dev/null
+echo "── load: 0005_wall_members.sql"
+psql_test -f "$MIG/0005_wall_members.sql" >/dev/null
+echo "── load: 0006_notification_triggers.sql"
+psql_test -f "$MIG/0006_notification_triggers.sql" >/dev/null
+echo "── load: 0007_profile_social_links.sql"
+psql_test -f "$MIG/0007_profile_social_links.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -85,11 +93,15 @@ echo ""
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
-for area in 10_friendships 20_blocking 30_anonymity 40_mark_moderation 50_storage; do
+for area in 10_friendships 20_blocking 30_anonymity 40_mark_moderation 50_storage \
+            60_secret_marks 70_wall_members 80_notifications 90_profile_links; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done
 
 echo "══════════════════════════════════════════════════════════════════════"
-echo " ✔ ALL SEC-001 ASSERTIONS PASSED (AC-S1…AC-S10 + moderator-read + storage)"
+echo " ✔ ALL ASSERTIONS PASSED"
+echo "   SEC-001 (AC-S1…AC-S10 + moderator-read + storage)"
+echo "   FP-C2  (secret isolation + F1 lifecycle, membership gating, 5"
+echo "           notification triggers, profile links)"
 echo "══════════════════════════════════════════════════════════════════════"
