@@ -78,6 +78,14 @@ values ('dddddddd-dddd-dddd-dddd-dddddddddddd',
         '44444444-4444-4444-4444-444444444444',
         'shared','Olivia''s Private Shared Wall','private','nobody', false, false);
 
+-- Second private shared wall O owns, with NO members (F-B1 attack target): used by
+-- 70 to prove an accepted member of W_PS cannot re-point their membership row's
+-- wall_id at a wall they were never invited to.
+insert into walls (id, owner_id, type, name, visibility, contribution_policy, allow_anonymous, require_approval)
+values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        '44444444-4444-4444-4444-444444444444',
+        'shared','Olivia''s Other Private Shared Wall','private','nobody', false, false);
+
 -- Membership on W_PS: B accepted (view/contribute fixture), F pending (accept /
 -- invite-notification fixture). O needs no membership row (owner via walls.owner_id).
 insert into wall_members (wall_id, user_id, role, status) values

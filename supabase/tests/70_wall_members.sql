@@ -204,6 +204,59 @@ end $$;
 ROLLBACK;
 \echo '70 (third-party accept)            : PASS  (only the invitee''s own row is updatable)'
 
+-- ── F-B1: accepted member self-grants 'owner' role (status unchanged) → DENIED ─
+-- The immutability guard must fire even when the status delta is empty (the guard
+-- reorder fix: identity/role check runs ABOVE the unchanged-status early return).
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (accepted member)
+do $$
+begin
+  begin
+    update wall_members set role = 'owner'                       -- status left unchanged
+     where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id = '22222222-2222-2222-2222-222222222222';
+  exception when others then null;   -- immutability guard raises; expected
+  end;
+  if (select role from wall_members
+        where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+          and user_id = '22222222-2222-2222-2222-222222222222') <> 'member' then
+    raise exception '70 FAIL: accepted member self-escalated to owner role (F-B1)';
+  end if;
+end $$;
+ROLLBACK;
+\echo '70 (F-B1 role self-escalation)     : PASS  (role immutable even when status unchanged)'
+
+-- ── F-B1: accepted member re-points wall_id to ANOTHER wall (status unchanged) → DENIED
+-- The core fail-open bypass: without the reorder, a status-unchanged wall_id
+-- change would early-return past the immutability check and self-grant membership
+-- on a wall the member was never invited to.
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (member of W_PS, NOT W_PS2)
+do $$
+begin
+  begin
+    update wall_members set wall_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'  -- W_PS2; status unchanged
+     where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id = '22222222-2222-2222-2222-222222222222';
+  exception when others then null;   -- immutability guard raises; expected
+  end;
+  -- The membership was NOT relocated onto W_PS2 …
+  if exists (select 1 from wall_members
+             where wall_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
+               and user_id = '22222222-2222-2222-2222-222222222222') then
+    raise exception '70 FAIL: member relocated their membership onto another wall (F-B1)';
+  end if;
+  -- … and B is NOT a member of W_PS2.
+  if is_wall_member('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+                    '22222222-2222-2222-2222-222222222222') then
+    raise exception '70 FAIL: member self-granted membership on an uninvited wall (F-B1)';
+  end if;
+end $$;
+ROLLBACK;
+\echo '70 (F-B1 wall_id self-grant)       : PASS  (wall_id immutable; no cross-wall membership)'
+
 -- ── Transition: no move back to pending (B accepted→pending) → DENIED ─────────
 BEGIN;
 set local role authenticated;

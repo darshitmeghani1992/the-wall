@@ -88,15 +88,21 @@ grant select, insert, update, delete on wall_members to authenticated;
 create or replace function wall_members_guard_transition() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  -- Identity/role are immutable — checked FIRST, ABOVE the unchanged-status early
+  -- return, so a status-unchanged UPDATE that mutates wall_id/user_id/role cannot
+  -- slip past it (fail-open bypass fix, review F-B1: an accepted member could else
+  -- `update … set wall_id=<other private shared wall>` with status unchanged and
+  -- self-grant membership on a wall they were never invited to). ANY wall_id /
+  -- user_id / role change is rejected regardless of the status delta.
+  if new.wall_id <> old.wall_id or new.user_id <> old.user_id or new.role <> old.role then
+    raise exception 'C2_MEMBER: cannot reassign or re-role a membership';
+  end if;
   if new.status is not distinct from old.status then return new; end if;
   if old.status = 'pending' and new.status = 'accepted' then
     if auth.uid() <> old.user_id then
       raise exception 'C2_MEMBER: only the invited user may accept a wall invite'; end if;
   elsif new.status = 'pending' then
     raise exception 'C2_MEMBER: cannot move a membership back to pending';
-  end if;
-  if new.wall_id <> old.wall_id or new.user_id <> old.user_id or new.role <> old.role then
-    raise exception 'C2_MEMBER: cannot reassign or re-role a membership';
   end if;
   return new;
 end $$;
