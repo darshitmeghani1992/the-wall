@@ -8,10 +8,12 @@ import { Button } from "@/components/Button";
 import { Masonry } from "@/components/Masonry";
 import { InviteCrew } from "@/components/InviteCrew";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
-import { shareMyWall } from "@/lib/share";
+import { shareMyWall, inviteFriends } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
-import { getWallMarks, subscribeToWall, type MarkWithAuthor } from "@/lib/marks";
+import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
+import { useWallReactions } from "@/hooks/useWallReactions";
 import { supabase } from "@/lib/supabase";
 import type { MarkType, Wall } from "@/lib/types";
 import { colors, markColors, radius } from "@/theme";
@@ -72,14 +74,15 @@ export default function MyWall() {
     };
   }, [session?.user?.id]);
 
-  // Live: prepend newly-left marks (flagged so they animate their drop-in).
-  useEffect(() => {
-    if (!wall) return;
-    return subscribeToWall(wall.id, (m) => {
-      dropIds.current.add(m.id);
-      setMarks((cur) => (cur.some((x) => x.id === m.id) ? cur : [m, ...cur]));
-    });
-  }, [wall?.id]);
+  // Live: newly-left marks arrive via the staggered arrival queue so a burst
+  // cascades in (drop-in each) instead of ten dropping at once.
+  useStaggeredArrivals(wall?.id, (m) => {
+    dropIds.current.add(m.id);
+    setMarks((cur) => (cur.some((x) => x.id === m.id) ? cur : [m, ...cur]));
+  });
+
+  // Reactions state for every mark on the wall (optimistic + realtime).
+  const { summaries, toggle } = useWallReactions(marks, session?.user?.id);
 
   const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const visible = useMemo(
@@ -124,8 +127,9 @@ export default function MyWall() {
           </View>
         </View>
 
-        <View style={{ alignSelf: "flex-start", marginTop: 14 }}>
+        <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
           <Button label="Share my Wall 👀" variant="yellow" onPress={() => shareMyWall(profile?.handle)} />
+          <Button label="Invite friends" variant="primary" onPress={() => inviteFriends(profile?.handle)} />
         </View>
 
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 18 }}>
@@ -186,6 +190,8 @@ export default function MyWall() {
                 shareable
                 wallHandle={profile?.handle}
                 isWallOwner
+                reactions={summaries[m.id]}
+                onToggleReaction={(emoji) => toggle(m.id, emoji)}
               />
             );
           }}

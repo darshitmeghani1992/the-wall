@@ -3,9 +3,10 @@ import { View, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
-import { colors, markColors, type EnterMode } from "@/theme";
+import { colors, markColors, radius, type EnterMode } from "@/theme";
 import { getSecretContent, type MarkWithAuthor } from "@/lib/marks";
 import { isMarkShareable, shareMark } from "@/lib/share";
+import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
 
 /** The display label for a Mark's author — anonymous Marks read "Anonymous". */
@@ -36,6 +37,116 @@ function ShareRow({ mark, wallHandle }: { mark: MarkWithAuthor; wallHandle?: str
     >
       <Text variant="label" color={colors.outline}>SHARE ↗</Text>
     </Pressable>
+  );
+}
+
+/**
+ * Subtle reactions strip: any reactions already on the Mark (emoji + count,
+ * tappable to toggle your own), plus a "＋" that opens the fixed 5-emoji picker.
+ * Deliberately small — reactions accent a Mark, they never dominate the wall.
+ * Long-pressing the Mark opens the same picker (see MarkCard `onLongPress`).
+ */
+function ReactionBar({
+  summary,
+  open,
+  onOpenChange,
+  onToggle,
+}: {
+  summary: ReactionSummary;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onToggle: (emoji: ReactionEmoji) => void;
+}) {
+  const active = REACTION_EMOJIS.filter((e) => (summary.counts[e] ?? 0) > 0);
+
+  return (
+    <View style={{ marginTop: 10, gap: 8 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+        {active.map((emoji) => {
+          const mine = summary.mine.includes(emoji);
+          return (
+            <Pressable
+              key={emoji}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mine }}
+              accessibilityLabel={`${mine ? "Remove your" : "Add"} ${emoji} reaction, ${summary.counts[emoji]} so far`}
+              onPress={() => onToggle(emoji)}
+              hitSlop={6}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 3,
+                minHeight: 26,
+                paddingHorizontal: 8,
+                borderRadius: radius.pill,
+                borderWidth: 1,
+                borderColor: mine ? colors.ink : colors.outlineVariant,
+                backgroundColor: mine ? markColors.brandYellow : colors.surfaceContainer,
+              }}
+            >
+              <Text style={{ fontSize: 12 }}>{emoji}</Text>
+              <Text variant="label" color={colors.ink}>
+                {summary.counts[emoji]}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={open ? "Close reaction picker" : "Add a reaction"}
+          onPress={() => onOpenChange(!open)}
+          hitSlop={6}
+          style={{
+            minHeight: 26,
+            minWidth: 30,
+            paddingHorizontal: 8,
+            borderRadius: radius.pill,
+            borderWidth: 1,
+            borderStyle: "dashed",
+            borderColor: colors.outlineVariant,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text variant="label" color={colors.outline}>
+            {open ? "×" : "＋"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {open ? (
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+          {REACTION_EMOJIS.map((emoji) => {
+            const mine = summary.mine.includes(emoji);
+            return (
+              <Pressable
+                key={emoji}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mine }}
+                accessibilityLabel={`React with ${emoji}`}
+                onPress={() => {
+                  onToggle(emoji);
+                  onOpenChange(false);
+                }}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: radius.card,
+                  borderWidth: mine ? 2 : 1,
+                  borderColor: mine ? colors.ink : colors.outlineVariant,
+                  backgroundColor: mine ? markColors.brandYellow : colors.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 18 }}>{emoji}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -343,6 +454,11 @@ function chromeFor(type: MarkType, color: string | null) {
  * secret recipient). It is UX gating for the Secret reveal affordance ONLY — the
  * real confidentiality boundary is server-side RLS on `mark_secrets`, not this
  * flag. Defaults to false so every other-wall render is locked by default.
+ *
+ * `reactions` + `onToggleReaction` opt a Mark into the subtle reactions strip.
+ * When wired, tapping the "＋" or long-pressing the Mark opens the picker; the
+ * whole reaction round-trip (optimistic + realtime) is owned by the parent via
+ * `useWallReactions`, not this presentational component.
  */
 export function MarkView({
   mark,
@@ -352,6 +468,8 @@ export function MarkView({
   shareable = false,
   wallHandle,
   isWallOwner = false,
+  reactions,
+  onToggleReaction,
 }: {
   mark: MarkWithAuthor;
   enter?: EnterMode;
@@ -360,9 +478,14 @@ export function MarkView({
   shareable?: boolean;
   wallHandle?: string | null;
   isWallOwner?: boolean;
+  reactions?: ReactionSummary;
+  onToggleReaction?: (emoji: ReactionEmoji) => void;
 }) {
   const chrome = chromeFor(mark.type, mark.color);
   const canShare = shareable && isMarkShareable(mark);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Reactions are opt-in and never applied to a preview (no callback wired).
+  const canReact = Boolean(onToggleReaction);
 
   let inner: React.ReactNode;
   switch (mark.type) {
@@ -401,9 +524,18 @@ export function MarkView({
       enter={enter}
       enterIndex={enterIndex}
       highlight={highlight}
+      onLongPress={canReact ? () => setPickerOpen((o) => !o) : undefined}
     >
       {inner}
       {canShare ? <ShareRow mark={mark} wallHandle={wallHandle} /> : null}
+      {canReact ? (
+        <ReactionBar
+          summary={reactions ?? { counts: {}, mine: [] }}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onToggle={onToggleReaction!}
+        />
+      ) : null}
     </MarkCard>
   );
 }

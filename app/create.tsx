@@ -18,13 +18,18 @@ const TYPES = [
 
 export default function CreateScreen() {
   const router = useRouter();
-  const { wallId, recipientId, handle } = useLocalSearchParams<{
+  const { wallId, recipientId, handle, sharedWallId, wallName } = useLocalSearchParams<{
     wallId?: string;
     recipientId?: string;
     handle?: string;
+    sharedWallId?: string;
+    wallName?: string;
   }>();
 
-  if (!wallId || !recipientId || !handle) {
+  // Two ways in: a person's Wall (needs a real recipient) or a Shared Wall.
+  const shared = Boolean(sharedWallId);
+
+  if (!shared && (!wallId || !recipientId || !handle)) {
     return (
       <Screen dockInset={false}>
         <View style={{ marginTop: 40, gap: 12 }}>
@@ -37,6 +42,13 @@ export default function CreateScreen() {
       </Screen>
     );
   }
+
+  // Query string appended to /write/[type] — either a shared-wall target or a
+  // person target.
+  const writeQuery = shared
+    ? `sharedWallId=${sharedWallId}&wallName=${encodeURIComponent(wallName ?? "")}`
+    : `wallId=${wallId}&recipientId=${recipientId}&handle=${encodeURIComponent(handle ?? "")}`;
+
   return (
     <Screen scroll dockInset={false}>
       <View
@@ -49,7 +61,9 @@ export default function CreateScreen() {
       >
         <View>
           <Text variant="display">Leave a Mark</Text>
-          <Text variant="label" color={colors.outline}>FOR @{handle}</Text>
+          <Text variant="label" color={colors.outline}>
+            {shared ? `ON ${wallName ?? "A SHARED WALL"}` : `FOR @${handle}`}
+          </Text>
         </View>
         <Pressable onPress={() => router.back()}>
           <Text variant="label" color={colors.outline}>
@@ -66,7 +80,7 @@ export default function CreateScreen() {
               background={t.bg}
               bordered={t.key === "roast"}
               fastener="none"
-              onPress={() => router.push(`/write/${t.key}?wallId=${wallId}&recipientId=${recipientId}&handle=${encodeURIComponent(handle)}`)}
+              onPress={() => router.push(`/write/${t.key}?${writeQuery}`)}
             >
               <Text
                 variant="headline"

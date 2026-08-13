@@ -42,11 +42,18 @@ export async function createMark(draft: MarkDraft): Promise<Mark> {
     .single();
   if (error) throw error;
 
+  const isAnonymous = draft.anonymous ?? false;
   track("Mark Created", {
     mark_type: draft.type,
-    is_anonymous: draft.anonymous ?? false,
+    is_anonymous: isAnonymous,
     wall_id: draft.wallId,
   });
+  // Funnel sub-events for the privacy-flavored Mark choices. These are frontend
+  // intent signals only — they do NOT assert server-side privacy (true Secret
+  // privacy is a C2 RLS dependency; anonymity IS server-enforced by the F4
+  // triggers in 0002, so "Anonymous Mark Created" is truthful).
+  if (isAnonymous) track("Anonymous Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
+  if (draft.type === "secret") track("Secret Mark Created", { wall_id: draft.wallId });
   return data as Mark;
 }
 

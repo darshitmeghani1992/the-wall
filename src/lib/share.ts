@@ -46,6 +46,58 @@ export async function shareMyWall(handle?: string | null): Promise<void> {
   track("Wall Shared", { has_handle: Boolean(handle) });
 }
 
+/**
+ * "Invite friends" to your own Wall. Same deep-link contract as `shareMyWall`
+ * (curiosity-first), but tracked as an invite for the growth funnel. Uses the
+ * IMPLEMENTED custom-scheme link only — never the deferred HTTPS form.
+ */
+export async function inviteFriends(handle?: string | null): Promise<void> {
+  const link = wallDeepLink(handle);
+  const message = handle
+    ? `Come leave a Mark on my Wall ✦ I'm @${handle} on The Wall\n${link}`
+    : "Come leave a Mark on my Wall ✦ find me on The Wall";
+  await Share.share({ message });
+  track("Invite Sent", { has_handle: Boolean(handle) });
+}
+
+/** Share someone else's Wall (from their Wall screen), by handle. */
+export async function sharePersonWall(
+  handle?: string | null,
+  displayName?: string | null,
+): Promise<void> {
+  const link = wallDeepLink(handle);
+  const name = displayName?.trim() || (handle ? `@${handle}` : "someone");
+  const message = handle
+    ? `Check out ${name}'s Wall on The Wall 👀\n${link}`
+    : `Check out ${name}'s Wall on The Wall 👀`;
+  await Share.share({ message });
+  track("Wall Shared", { has_handle: Boolean(handle), context: "person" });
+}
+
+/**
+ * Custom-scheme deep link for a Shared Wall — resolves in-app to
+ * `app/shared/[id].tsx` when installed, exactly like the handle link resolves to
+ * `app/u/[handle].tsx`. Universal/HTTPS links remain the deferred infra
+ * dependency (unverified domain).
+ */
+export function sharedWallDeepLink(wallId: string): string {
+  return `thewall://shared/${wallId}`;
+}
+
+/** Share a Shared Wall (curiosity "come see"), tracked as a Wall share. */
+export async function shareSharedWall(wallId: string, name: string): Promise<void> {
+  const link = sharedWallDeepLink(wallId);
+  await Share.share({ message: `Come see "${name}" on The Wall ✦\n${link}` });
+  track("Wall Shared", { context: "shared" });
+}
+
+/** Invite people to a Shared Wall (growth intent), tracked distinctly. */
+export async function inviteToSharedWall(wallId: string, name: string): Promise<void> {
+  const link = sharedWallDeepLink(wallId);
+  await Share.share({ message: `Join our Shared Wall "${name}" on The Wall ✦ leave your Mark\n${link}` });
+  track("Shared Wall Invite Sent", { wall_id: wallId });
+}
+
 /** Can this Mark's content be reproduced in a share sheet? Secrets never can. */
 export function isMarkShareable(mark: MarkWithAuthor): boolean {
   if (mark.type === "secret") return false; // recipient-only by intent
