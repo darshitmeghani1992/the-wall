@@ -2,6 +2,7 @@
   "expo": {
     "name": "The Wall",
     "slug": "the-wall",
+    "owner": "darsh9899",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "thewall",
