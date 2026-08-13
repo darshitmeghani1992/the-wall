@@ -30,6 +30,12 @@ export default function ProfileEdit() {
 
   const [name, setName] = useState(profile?.display_name ?? "");
   const [bio, setBio] = useState(profile?.bio ?? "");
+  // Optional social links (0007). Stored as raw trimmed strings; empty → null.
+  const [instagram, setInstagram] = useState(profile?.instagram ?? "");
+  const [tiktok, setTiktok] = useState(profile?.tiktok ?? "");
+  const [youtube, setYoutube] = useState(profile?.youtube ?? "");
+  const [x, setX] = useState(profile?.x ?? "");
+  const [website, setWebsite] = useState(profile?.website ?? "");
   // `avatarUri` holds a freshly-picked local image awaiting upload; when null we
   // keep whatever avatar the profile already has.
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -75,6 +81,11 @@ export default function ProfileEdit() {
       await updateProfile(session.user.id, {
         display_name: trimmedName,
         bio: bio.trim() || null,
+        instagram: instagram.trim() || null,
+        tiktok: tiktok.trim() || null,
+        youtube: youtube.trim() || null,
+        x: x.trim() || null,
+        website: website.trim() || null,
         ...(avatar_url ? { avatar_url } : {}),
       });
       await refreshProfile();
@@ -187,6 +198,61 @@ export default function ProfileEdit() {
           <Text variant="body" color={colors.outline} style={{ fontSize: 13 }}>
             Your handle can't be changed here.
           </Text>
+        </View>
+
+        {/* Social links — all optional, shown only when filled in. */}
+        <View style={{ gap: 12, marginTop: 4 }}>
+          <Text variant="label" color={colors.outline}>LINKS (OPTIONAL)</Text>
+          <Input
+            label="Instagram"
+            prefix="@"
+            placeholder="handle"
+            value={instagram}
+            onChangeText={setInstagram}
+            editable={!busy}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Input
+            label="TikTok"
+            prefix="@"
+            placeholder="handle"
+            value={tiktok}
+            onChangeText={setTiktok}
+            editable={!busy}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Input
+            label="YouTube"
+            prefix="@"
+            placeholder="handle"
+            value={youtube}
+            onChangeText={setYoutube}
+            editable={!busy}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Input
+            label="X"
+            prefix="@"
+            placeholder="handle"
+            value={x}
+            onChangeText={setX}
+            editable={!busy}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Input
+            label="Website"
+            placeholder="yoursite.com"
+            value={website}
+            onChangeText={setWebsite}
+            editable={!busy}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
         </View>
 
         <View style={{ marginTop: 8 }}>

@@ -133,6 +133,29 @@ export function subscribeToWall(
   };
 }
 
+/**
+ * Fetch a Secret Mark's true content from the RLS-gated `mark_secrets` side table
+ * (0004 / ADR-008). The privacy boundary is the SERVER, not this client: RLS
+ * ("mark_secrets read owner") returns a row ONLY to the wall owner and returns
+ * ZERO rows to everyone else, and the base `marks.text` is NULL for secrets — so
+ * a non-owner never receives content to render. Callers must therefore only
+ * invoke this for the wall owner (UX gating); if a non-owner somehow calls it,
+ * RLS still yields `null` (no content), never a leak.
+ *
+ * Returns the content string, or `null` when no readable row exists (not the
+ * owner, or the secret is genuinely empty/missing). Throws on a real network/API
+ * error so the UI can show an honest error state rather than a false "empty".
+ */
+export async function getSecretContent(markId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("mark_secrets")
+    .select("content")
+    .eq("mark_id", markId)
+    .maybeSingle();
+  if (error) throw error;
+  return ((data as { content: string } | null)?.content) ?? null;
+}
+
 /** Owner-only: pin/unpin a mark to the top of the wall. */
 export async function setPinned(markId: string, pinned: boolean): Promise<void> {
   await supabase.from("marks").update({ pinned }).eq("id", markId);

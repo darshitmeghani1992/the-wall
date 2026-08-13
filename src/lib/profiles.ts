@@ -28,6 +28,14 @@ export type ProfileUpdate = {
   display_name?: string;
   bio?: string | null;
   avatar_url?: string | null;
+  // Social links (0007) — pass a trimmed string, or null to clear. Format
+  // validation is deliberately light (client trim only, ADR-011); the DB stores
+  // whatever is given.
+  instagram?: string | null;
+  tiktok?: string | null;
+  youtube?: string | null;
+  x?: string | null;
+  website?: string | null;
 };
 
 /**

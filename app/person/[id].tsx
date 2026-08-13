@@ -7,6 +7,7 @@ import { Masonry } from "@/components/Masonry";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
+import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
@@ -103,6 +104,9 @@ export default function PersonWall() {
               {profile.bio}
             </Text>
           ) : null}
+          <View style={{ marginBottom: 18 }}>
+            <SocialLinks profile={profile} />
+          </View>
 
           <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginBottom: canLeaveMark ? 24 : 12 }}>
             {canLeaveMark ? (

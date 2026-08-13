@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { View, Pressable } from "react-native";
+import { View, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
-import { BlurView } from "expo-blur";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
 import { colors, markColors, radius, type EnterMode } from "@/theme";
-import type { MarkWithAuthor } from "@/lib/marks";
+import { getSecretContent, type MarkWithAuthor } from "@/lib/marks";
 import { isMarkShareable, shareMark } from "@/lib/share";
 import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
@@ -170,40 +169,108 @@ function Placeholder({ label, height = 130 }: { label: string; height?: number }
   );
 }
 
-/** Secret: covered until tapped, then the text is revealed (blur lifts). */
-function SecretMark({ mark }: { mark: MarkWithAuthor }) {
-  const [revealed, setRevealed] = useState(false);
-  return (
-    <Pressable onPress={() => setRevealed((r) => !r)}>
-      <View style={{ position: "relative" }}>
-        <Text variant="mark" color={markColors.secretOnPurple}>
-          {mark.text}
-        </Text>
-        {!revealed ? (
-          <BlurView
-            intensity={22}
-            tint="dark"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 4,
-            }}
-          >
-            <Text variant="label" color={markColors.secretOnPurple}>
-              🤫 TAP TO REVEAL
-            </Text>
-          </BlurView>
-        ) : null}
+/**
+ * Secret Mark. Privacy is SERVER-enforced, not client-blurred (ADR-008): the true
+ * content lives in the RLS-gated `mark_secrets` table and the base `marks.text` is
+ * NULL for secrets, so a non-owner never has the content on the client at all.
+ *
+ * Distinction from Anonymous: a Secret hides the *content* while the author stays
+ * visible (AuthorLine below); Anonymous hides the *author* while the content is
+ * shown. A Mark can be both (author hidden AND content hidden) — the owner reading
+ * the content still learns nothing about an anonymous author, because `mark_secrets`
+ * carries no author identity.
+ *
+ * `isWallOwner` is UX gating only — it decides whether we even offer to fetch. It
+ * is NOT the security boundary: RLS is. For a non-owner we render a static locked
+ * state and NEVER call `getSecretContent`. For the owner, a tap fetches the content
+ * with honest loading / empty / error states.
+ */
+type SecretPhase = "locked" | "loading" | "revealed" | "empty" | "error";
+
+function SecretMark({ mark, isWallOwner }: { mark: MarkWithAuthor; isWallOwner: boolean }) {
+  const [phase, setPhase] = useState<SecretPhase>("locked");
+  const [content, setContent] = useState<string | null>(null);
+
+  async function reveal() {
+    if (phase === "loading" || phase === "revealed") return;
+    setPhase("loading");
+    try {
+      const text = await getSecretContent(mark.id);
+      if (text == null || text.length === 0) {
+        setPhase("empty");
+      } else {
+        setContent(text);
+        setPhase("revealed");
+      }
+    } catch {
+      setPhase("error");
+    }
+  }
+
+  // Non-owner: a static, non-interactive locked panel. No content, no fetch.
+  if (!isWallOwner) {
+    return (
+      <View accessibilityLabel="Secret Mark. Only the wall owner can open this.">
+        <View style={secretPanel}>
+          <Text variant="label" color={markColors.secretOnPurple}>
+            🔒 ONLY YOU CAN OPEN THIS
+          </Text>
+        </View>
+        <AuthorLine mark={mark} />
       </View>
+    );
+  }
+
+  // Owner: tap to fetch and reveal, with honest loading / empty / error states.
+  const revealed = phase === "revealed";
+  const label =
+    phase === "loading"
+      ? "OPENING…"
+      : phase === "empty"
+        ? "NOTHING TO SHOW"
+        : phase === "error"
+          ? "COULDN'T OPEN — TAP TO RETRY"
+          : "🔓 TAP TO OPEN";
+
+  return (
+    <Pressable
+      onPress={reveal}
+      disabled={phase === "loading" || revealed}
+      accessibilityRole="button"
+      accessibilityLabel={
+        revealed ? "Secret Mark, opened" : "Open this Secret Mark — only you can see it"
+      }
+    >
+      {revealed ? (
+        <Text variant="mark" color={markColors.secretOnPurple}>
+          {content}
+        </Text>
+      ) : (
+        <View style={secretPanel}>
+          {phase === "loading" ? (
+            <ActivityIndicator color={markColors.secretOnPurple} />
+          ) : (
+            <Text
+              variant="label"
+              color={phase === "error" ? colors.error : markColors.secretOnPurple}
+            >
+              {label}
+            </Text>
+          )}
+        </View>
+      )}
       <AuthorLine mark={mark} />
     </Pressable>
   );
 }
+
+const secretPanel = {
+  minHeight: 56,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  borderRadius: 4,
+  paddingVertical: 12,
+};
 
 /** Poll: the question + each option as a hard-bordered bar (voting: Phase 5). */
 function PollMark({ mark }: { mark: MarkWithAuthor }) {
@@ -383,6 +450,11 @@ function chromeFor(type: MarkType, color: string | null) {
  * one). `shareable` opts a Mark into a "Share ↗" affordance — only shown on the
  * owner's own Wall for received, non-Secret Marks.
  *
+ * `isWallOwner` is passed true only when the signed-in viewer owns this wall (the
+ * secret recipient). It is UX gating for the Secret reveal affordance ONLY — the
+ * real confidentiality boundary is server-side RLS on `mark_secrets`, not this
+ * flag. Defaults to false so every other-wall render is locked by default.
+ *
  * `reactions` + `onToggleReaction` opt a Mark into the subtle reactions strip.
  * When wired, tapping the "＋" or long-pressing the Mark opens the picker; the
  * whole reaction round-trip (optimistic + realtime) is owned by the parent via
@@ -395,6 +467,7 @@ export function MarkView({
   highlight = false,
   shareable = false,
   wallHandle,
+  isWallOwner = false,
   reactions,
   onToggleReaction,
 }: {
@@ -404,6 +477,7 @@ export function MarkView({
   highlight?: boolean;
   shareable?: boolean;
   wallHandle?: string | null;
+  isWallOwner?: boolean;
   reactions?: ReactionSummary;
   onToggleReaction?: (emoji: ReactionEmoji) => void;
 }) {
@@ -416,7 +490,7 @@ export function MarkView({
   let inner: React.ReactNode;
   switch (mark.type) {
     case "secret":
-      inner = <SecretMark mark={mark} />;
+      inner = <SecretMark mark={mark} isWallOwner={isWallOwner} />;
       break;
     case "poll":
       inner = <PollMark mark={mark} />;

@@ -3,46 +3,38 @@
 > Operational state, NOT canonical governance. Canonical authority is `docs/aios/`.
 
 ## Feature
-**SEC-001 — Security Foundation** (friendship integrity, blocking, moderated anonymity, mark-moderation authorization, reproducible Storage authorization, + an executable RLS security test suite).
+**MVP Product Batch C** — reactions, notifications, arrival motion, shared walls, true secret marks, viral CTAs, profile links. Split by governance: **PR C1 (NORMAL)** + **PR C2 (HIGH_RISK_TWO_KEY)**.
 
 ## Status
-**COMPLETE + hosted-Supabase production fix applied.** Reviewer APPROVE + QA PASS on the fixed version. NOT merged, NOT deployed. **Blocked on the Founder hosted retest** (below) — the fix targets a real hosted deploy failure that can only be finally proven on the hosted project.
+- **PR #11 (C1, NORMAL):** open, awaiting independent review. Reactions, notifications read-surface, arrival motion, public shared walls, viral CTAs, analytics — existing contracts, no schema.
+- **PR #12 (C2, HIGH_RISK):** **complete through all AIOS gates at `37cfecf`** (Reviewer APPROVE + QA PASS). Secret Marks (true RLS isolation), `wall_members`, notification triggers, profile-link columns, + Founder-approved final hardening (0008 friendships fail-open fix, 0009 walls-view membership) + frontend (secret reveal UI, social links, member data layer). **NOT merged, NOT deployed.**
 
-## Role results
-- **Product:** PRD-SEC-001 — guarantees A–E → AC-S1…AC-S10. ✅
-- **Architect:** FP-SEC-001 (Rev 2) + 7 ADRs; block-vs-public-content resolved in-model (no gate). ✅
-- **Independent high-risk design review:** REQUEST-CHANGES (Rev 1: BLOCKER anon-insert FK timing + INSERT self-friend vector + service_role grant gap) → **APPROVE-DESIGN (Rev 2).** ✅
-- **Backend:** `0002` (F1–F5) + `0003` (F6) + `supabase/tests/` harness; suite green. ✅
-- **Frontend:** one-line anon hardening in `src/lib/marks.ts`. ✅
-- **Reviewer (code Two-Key):** APPROVE `4452552` (initial) → **APPROVE `cbe9725`** (after fix). ✅
-- **QA (behavioral Two-Key):** PASS `4452552` (initial) → **PASS `cbe9725`** (after fix). ✅
-- **Hosted-Supabase fix (Founder deploy finding):** `0003:19 ALTER TABLE storage.objects ENABLE RLS` → `ERROR 42501: must be owner of table objects`. Removed the ownership-gated ALTER (Supabase pre-enables RLS on `storage.objects`); RLS-enable moved into the test shim; regression guard + `relrowsecurity` assertion added. F6 guarantee unchanged. ✅
+## C2 gate history
+- Design-Two-Key: independent design review APPROVE-DESIGN (caught+fixed a secret-lifecycle leak).
+- Reviewer: caught+fixed **F-B1** (wall_members fail-open) → APPROVE `4626bb6` → re-APPROVE `37cfecf` (after final hardening).
+- QA: PASS `4626bb6` → PASS `37cfecf`. 83 RLS assertions green, twice. DB-layer Verified; hosted not run (Believed-likely).
 
-## Founder decisions (pre-approved, encoded)
-A moderated anonymity · B blocking = hard interaction boundary · C friendship transitions (no self-accept) · D one relationship per unordered pair · E server-side mark moderation. No new decision surfaced.
+## Founder decisions — RESOLVED
+- **F-1 APPROVED:** secret Marks allowed on public shared walls (owner = recipient).
+- **F-2 APPROVED:** private shared walls are member-gated.
+- **0002 friendships hardening APPROVED:** implemented as forward migration `0008` (0002 untouched).
 
-## Branch
-`claude/sec-001-security-foundation` (off latest `main`).
+## Migrations in PR #12 (source-controlled; NOT applied to hosted)
+`0004` secret_marks · `0005` wall_members · `0006` notification_triggers · `0007` profile_social_links · `0008` friendships_guard_hardening · `0009` walls_view_membership. `0001`–`0003` byte-identical to main.
 
-## Latest commit
-`cbe9725` — `fix(sec-001): hosted-Supabase storage compat — don't toggle RLS on storage.objects (F6)`
+## Open items (non-blocking / follow-ups)
+- **F-A1 (Architect flag):** `walls view` still admits an owner's friends to a private *shared* wall's **metadata** row (pre-existing `are_friends` disjunct; marks + secret content remain member/owner-gated). Architectural-fit consistency question vs `can_view_wall`; not a confidentiality breach.
+- **F-A2:** shared-wall **member UI screens** deferred — `app/shared/*` live on the C1 branch (PR #11), not present on C2. `src/lib/walls.ts` member data layer is in place (unwired here). Build the screens once C1 + C2 are both on a branch (e.g. after both merge to main).
+- Push notifications (native infra), universal/HTTPS App Links (domain/AASA/assetlinks), reaction de-dup debt.
 
-## PR
-**#8 (draft)** — https://github.com/darshitmeghani1992/the-wall/pull/8 (updated in place with the fix). **Do not merge without Founder approval + a successful hosted retest.**
+## FOUNDER GATE — before any deploy (C2 hosted apply)
+1. Apply `0004`–`0009` to hosted Supabase in ONE transaction; confirm no `42501 must be owner of table objects`.
+2. Verify hosted `service_role` grants (mark_secrets moderation read works; no side-table re-exposure).
+3. Confirm `mark_secrets` NOT in the hosted `supabase_realtime` publication (`marks` still is).
 
-## Known issues
-- Advisory/cosmetic only (non-blocking): harness `exception when others` breadth (Reviewer/QA independently SQLSTATE-pinned real causes); moderation guard admits `postgres`/`service_role` (admin, not JWT-reachable); regression guard is line-based (matches the single-line pattern that caused the incident; `relrowsecurity` assertion + hosted platform pre-enable are the real defenses). Tracked debts: DEBT-001 unused `'blocked'` enum; DEBT-002 moderator == `service_role` only.
-- A **pre-existing, differently-named `attachments` storage policy** exists on the hosted project — the Founder should review/remove it so the effective policy set matches `0003` exactly.
-
-## Manual Founder tests required (the load-bearing final gate)
-1. Apply `0002`+`0003` in ONE transaction on hosted → confirm **no `42501: must be owner of table objects`**.
-2. Confirm the `attachments` bucket is public and the four `attachments …` policies took.
-3. Review/remove any pre-existing differently-named `attachments` storage policy (its `drop policy if exists` only clears its own names).
-4. Confirm `relrowsecurity = true` on hosted `storage.objects`.
-5. Run one end-to-end anonymous-mark flow (author identity must not reach an ordinary client) + one upload flow (own-avatar allowed; cross-uid/anon rejected).
+## Branches / heads
+- C1: `claude/mvp-batch-c-normal` → PR #11.
+- C2: `claude/mvp-batch-c-secure` @ `37cfecf` → PR #12 (code) [+ this docs commit].
 
 ## Recommended next action
-Founder: run the hosted retest above; if green, approve PR #8 merge. Next cycle candidate: **Friends system (server + minimal UI)** — its security primitives (friendship integrity, blocking, eligibility) now exist and are proven.
-
----
-_Related: FP-001 (FTUE) is a separate branch `claude/the-wall-aios-product-zlc5on` / draft PR #7, awaiting your device test — independent of SEC-001._
+Founder: review PR #11; run the C2 hosted pre-deploy checklist; then decide merge order (C1 then C2, or combine). Device QA of both PRs still recommended.

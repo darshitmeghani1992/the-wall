@@ -189,6 +189,7 @@ export default function MyWall() {
                 highlight={m.id === justCreatedId}
                 shareable
                 wallHandle={profile?.handle}
+                isWallOwner
                 reactions={summaries[m.id]}
                 onToggleReaction={(emoji) => toggle(m.id, emoji)}
               />
