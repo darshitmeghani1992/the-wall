@@ -86,6 +86,10 @@ echo "── load: 0006_notification_triggers.sql"
 psql_test -f "$MIG/0006_notification_triggers.sql" >/dev/null
 echo "── load: 0007_profile_social_links.sql"
 psql_test -f "$MIG/0007_profile_social_links.sql" >/dev/null
+echo "── load: 0008_friendships_guard_hardening.sql"
+psql_test -f "$MIG/0008_friendships_guard_hardening.sql" >/dev/null
+echo "── load: 0009_walls_view_membership.sql"
+psql_test -f "$MIG/0009_walls_view_membership.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 

@@ -294,4 +294,94 @@ end $$;
 ROLLBACK;
 \echo '70 (roster read, no recursion)     : PASS  (members see co-members)'
 
-\echo '── 70_wall_members: ALL PASS (gating + invite/accept vectors + roster) ──'
+-- ╭─────────────────────────────────────────────────────────────────────────╮
+-- │ 0009 · walls-row SELECT policy ("walls view") membership disjunct          │
+-- ╰─────────────────────────────────────────────────────────────────────────╯
+-- 0005 fixed the can_view_wall() HELPER but not the base RLS SELECT policy on
+-- the walls TABLE. These assertions exercise a direct `select … from walls`
+-- under RLS (not the helper): an accepted member of a PRIVATE SHARED wall must
+-- now see the walls row; a non-member must not; public stays open; a PRIVATE
+-- PERSONAL wall stays friend-gated (member disjunct is shared-only).
+
+-- ── 0009 (a): accepted member (B) CAN SELECT the private shared walls row ─────
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (accepted member of W_PS)
+do $$
+declare n integer;
+begin
+  select count(*) into n from walls where id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  if n <> 1 then
+    raise exception '0009 FAIL: accepted member cannot SELECT the private shared walls row (got %)', n;
+  end if;
+end $$;
+ROLLBACK;
+\echo '0009 (member SELECTs walls row)    : PASS  (private shared wall visible to its member)'
+
+-- ── 0009 (b): non-member (G) CANNOT SELECT the private shared walls row ───────
+-- G is not owner, not a friend of O, not a member → fail-closed (0 rows).
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (non-member, non-friend of O)
+do $$
+declare n integer;
+begin
+  select count(*) into n from walls where id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  if n <> 0 then
+    raise exception '0009 FAIL: non-member SELECTed the private shared walls row (got %)', n;
+  end if;
+end $$;
+ROLLBACK;
+\echo '0009 (non-member SELECT denied)    : PASS  (fail-closed; 0 rows for non-member)'
+
+-- ── 0009 (c): a PUBLIC shared walls row is SELECTable by anyone (regression) ──
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (unrelated to W_O)
+do $$
+declare n integer;
+begin
+  select count(*) into n from walls where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  if n <> 1 then
+    raise exception '0009 FAIL: public shared walls row not SELECTable by unrelated user (got %)', n;
+  end if;
+end $$;
+ROLLBACK;
+\echo '0009 (public walls row open)       : PASS  (public unchanged by member disjunct)'
+
+-- ── 0009 (d): a PRIVATE PERSONAL walls row stays friend-gated ─────────────────
+-- A makes her (auto-created) personal wall private, then: a NON-friend (C) sees
+-- 0 rows (member disjunct is shared-only, so it cannot leak a personal wall),
+-- while a FRIEND (G, A↔G accepted) still sees it. Proves the personal-private
+-- path is neither loosened nor broken by 0009.
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (owner)
+update walls set visibility = 'private'
+ where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal';
+-- non-friend of A (C: no A↔C friendship) → must NOT see it
+set local "test.uid" = '33333333-3333-3333-3333-333333333333';   -- C (non-friend of A)
+do $$
+declare n integer;
+begin
+  select count(*) into n from walls
+   where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal';
+  if n <> 0 then
+    raise exception '0009 FAIL: non-friend SELECTed a private PERSONAL walls row (got %)', n;
+  end if;
+end $$;
+-- friend of A (G: A↔G accepted) → must still see it (friend-gate intact)
+set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (friend of A)
+do $$
+declare n integer;
+begin
+  select count(*) into n from walls
+   where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal';
+  if n <> 1 then
+    raise exception '0009 FAIL: friend cannot SELECT a private PERSONAL walls row (got %)', n;
+  end if;
+end $$;
+ROLLBACK;
+\echo '0009 (personal-private friend-gate): PASS  (non-friend denied; friend still sees it)'
+
+\echo '── 70_wall_members: ALL PASS (gating + invite/accept vectors + roster + 0009 walls-view) ──'

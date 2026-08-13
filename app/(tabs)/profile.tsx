@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
+import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { shareMyWall } from "@/lib/share";
 import { colors, markColors } from "@/theme";
@@ -56,6 +57,7 @@ export default function ProfileScreen() {
             {profile.bio}
           </Text>
         ) : null}
+        {profile ? <SocialLinks profile={profile} /> : null}
       </View>
 
       <View style={{ gap: 12 }}>

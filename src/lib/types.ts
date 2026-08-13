@@ -27,6 +27,13 @@ export interface Profile {
   avatar_url: string | null;
   bio: string | null;
   interests: string[] | null;
+  // Optional social links (0007). Stored as raw trimmed strings the user entered
+  // (a handle or a full URL); null when not provided. World-readable, self-write.
+  instagram: string | null;
+  tiktok: string | null;
+  youtube: string | null;
+  x: string | null;
+  website: string | null;
   created_at: string;
 }
 

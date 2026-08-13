@@ -185,6 +185,7 @@ export default function MyWall() {
                 highlight={m.id === justCreatedId}
                 shareable
                 wallHandle={profile?.handle}
+                isWallOwner
               />
             );
           }}
