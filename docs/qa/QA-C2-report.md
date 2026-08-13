@@ -124,3 +124,82 @@ All 5 trigger kinds route to the correct recipient with the correct actor, skip 
 
 ## 6. Routing
 PASS → hand back to the **Founder Gate**. No behavioral defect to route to an implementation Role. Migrations 0004–0007 are code-complete and behaviorally verified at the DB layer for 4626bb6; deployment to hosted remains a Founder Gate (schema/migration change) with the checklist above.
+
+---
+---
+
+# QA Behavioral Verification — MVP Batch C2 FINAL HARDENING (0008 + 0009)
+
+**Role:** QA (QA Charter v2.1 / QA Playbook v2.1, under AIOS Constitution v1.1)
+**Bound to commit:** `37cfecf` (branch `claude/mvp-batch-c-secure`, PR #12)
+**Reviewer status entering QA:** APPROVE (independent Reviewer, same SHA 37cfecf)
+**Test Depth Classification:** **Two-Key** (migrations + permissions + security-sensitive RLS/trigger logic) → Verified-only gate applies (Playbook §3, §4)
+**Date:** 2026-08-13
+**Environment exercised:** local PostgreSQL 16.13 + Supabase-compat shim (`00_bootstrap.sql`), migrations 0001–0009 + seed loaded into an independent DB (`qa_indep`), driven AS `anon` / `authenticated` / `service_role` under RLS via `SET LOCAL ROLE` + `test.uid` GUC. All negatives capture SQLSTATE.
+
+## VERDICT: PASS — bound to 37cfecf
+
+Zero outstanding Production-risk or Two-Key-critical findings. Every behavioral claim below is **Verified** — actually executed against the running PG16 database as the real end-user roles under RLS, result directly observed. DB-authorization-layer verdict on local PG16 (see Scope note).
+
+## 1. Regression suite — `bash supabase/tests/run_tests.sh` run TWICE
+- **Run 1: exit 0. Run 2: exit 0.** Output byte-for-byte identical between runs (deterministic; no flaky/silent re-run). Regression-guard (no ownership-gated ALTER on `storage.objects`) PASS.
+- All **83** assertion lines PASS across SEC-001 (AC-S1…AC-S10 + moderator-read + storage), C2 areas 60/70/80/90, and the new 0008/0009 assertions. Suite-reported SQLSTATEs for the new negatives: `0008 addressee-reassign rejected SQLSTATE=P0001`, `0008 requester-reassign rejected SQLSTATE=P0001`. `✔ ALL ASSERTIONS PASSED` printed both runs.
+
+## 2. Independent QA scenarios (my own, not the suite's) — end-user roles under RLS
+
+### 2a. 0008 friendships fail-open CLOSED (Two-Key-critical)
+Fixture: A↔G **accepted** (alice=1111, grace=8888); are_friends(A,C) false at start (carol=3333).
+| Scenario (acted AS) | Result | SQLSTATE |
+|---|---|---|
+| alice reassigns addressee G→C, status UNCHANGED (accepted) | **REJECTED** ("cannot reassign a friendship pair") | **P0001** |
+| alice reassigns requester A→C, status UNCHANGED | **REJECTED** (same guard) | **P0001** |
+| ground truth after both attacks (bypass RLS) | `are_friends(A,C)=false`, `are_friends(A,G)=true` (intact) | — |
+| bob (addressee) accepts pending A→B | **ALLOWED**, rows=1 | — |
+| alice no-op self-update on accepted A↔G (identity+status unchanged) | **ALLOWED**, rows=1, no error | — |
+| alice moves accepted A↔G back to pending | **REJECTED** | **P0001** |
+Pair-identity immutability now sits ABOVE the unchanged-status early return: any requester/addressee reassignment is rejected regardless of status delta; legitimate accept / no-op / backward-block behavior preserved. Fail-open path CLOSED.
+
+### 2b. 0009 walls-row SELECT membership (Two-Key-critical)
+Fixture: W_PS `dddd…` = olivia's PRIVATE SHARED wall; bob=2222 accepted member; grace=8888 non-member. Two marks seeded on W_PS (one normal, one secret).
+| Scenario (acted AS) | walls row | marks | Expected |
+|---|---|---|---|
+| MEMBER bob | **1** | 2 | member sees metadata + marks |
+| NON-MEMBER grace | **0** | **0** | fail-closed |
+| OWNER olivia | 1 | — | owner sees own row |
+| PUBLIC wall (`aaaa…`), any authed (grace) | 1 | — | public unchanged |
+| private PERSONAL wall (alice's, set private): FRIEND grace (A↔G accepted, no block) | **1** | — | friend-gated visible |
+| private PERSONAL wall: NON-FRIEND carol | **0** | — | fail-closed |
+Marks visibility consistent with metadata: member sees marks, non-member 0. (Note: personal walls auto-create as `public` by default in this schema, so the friend-gate check was run against an explicitly-private personal wall to exercise the `are_friends` disjunct cleanly.)
+
+### 2c. Secret confidentiality — core (Two-Key-critical)
+Secret mark seeded on W_PS: `content='TOP-SECRET-CONTENT'`. Ground truth (bypass RLS): base `marks.text IS NULL`; content present only in `mark_secrets`. Publication check: `supabase_realtime` contains `marks`, **NOT** `mark_secrets`.
+| Reader (acted AS) | mark_secrets content | base marks.text |
+|---|---|---|
+| NON-OWNER non-member grace (authenticated) | **0 rows** | (row not visible — non-member) |
+| **NON-OWNER MEMBER bob** (accepted member of the wall) | **0 rows** | visible, **NULL** |
+| OWNER olivia | **`TOP-SECRET-CONTENT`** | — |
+| service_role (explicit grant, not just BYPASSRLS) | **`TOP-SECRET-CONTENT`** | — |
+| anon | **DENIED SQLSTATE=42501** (no grant) | — |
+A non-owner MEMBER of the wall still reads **0** secret rows — wall membership does not grant secret content. Only the wall owner (and service_role via explicit grant) reads content; base row carries NULL; `mark_secrets` absent from realtime.
+
+## 3. No acceptance criterion weakened / no SEC-001 regression
+- Honest paths all Verified working: member view+contribute (suite 70), invitee accept (suite 70), legit friend accept + no-op (2a), private-personal friend still sees wall (2b).
+- SEC-001 regression: all AC-S1…AC-S10 + moderator-read + storage + blocking + anonymity + moderation assertions PASS, twice, deterministically (§1). No criterion loosened by 0008/0009; both are additive forward-only tightenings.
+
+## 4. Noted, NOT grounds for FAIL (per brief)
+- **F-1 / F-2** — Founder decisions, out of QA scope.
+- **F-A1** — `are_friends` admits the owner's (unblocked) friend to a private SHARED wall's **metadata** row. **Behaviorally confirmed and bounded:** owner-friend grace saw alice's private-shared walls row (1), but `mark_secrets`=0 and the base marks row was unreachable (member-gated) for her — **metadata only; marks and secret content remain gated.** Pre-existing; Architect architectural-fit flag, not a behavioral defect.
+- **F-A2** — shared-wall member UI screens deferred to the C1 branch; `walls.ts` is unwired infra. Accepted documented gap; no behavioral surface to test here.
+
+## 5. Scope & Confidence (honest labeling)
+- **Verified:** the DB authorization layer (RLS policies, triggers, CHECK constraints, grants, publication membership) on **local PG16 + Supabase-compat shim**, driven as the real end-user roles.
+- **Believed-likely (NOT run here):** the **hosted Supabase project** and the **live application**. The shim emulates the platform surface faithfully but is not the platform; the app was not exercised. **Final proof is the Founder applying 0004–0009 to the hosted project** and confirming behavior there.
+
+## 6. Founder pre-deploy checklist (Founder Gate — schema/migration change)
+1. **Apply 0004–0009 to hosted Supabase in a SINGLE transaction** (additive/idempotent; a partial apply is the main risk); confirm none hit the hosted `42501 must be owner of table objects` class.
+2. **Verify `service_role` grants / default privileges on hosted** — the `mark_secrets` moderation read path works AND no blanket grant re-exposes side tables (local shim withholds blanket service_role grants, so hosted parity must be checked explicitly).
+3. **Confirm `mark_secrets` is NOT in the hosted `supabase_realtime` publication** (and `marks` still is) so secret content is never broadcast.
+4. **Decide F-1 / F-2** (Founder product decisions — out of QA scope).
+
+## 7. Routing
+PASS → hand back to the **Founder Gate**. No behavioral defect to route to an implementation Role. Migrations 0001–0009 behaviorally verified at the DB layer for 37cfecf; hosted deployment remains a Founder Gate with the checklist above.

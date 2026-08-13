@@ -3,32 +3,38 @@
 > Operational state, NOT canonical governance. Canonical authority is `docs/aios/`.
 
 ## Feature
-**MVP Product Batch C** — retention + shared walls + secret marks + reactions + notifications + arrival + viral CTAs. Split by governance into **PR C1 (NORMAL)** and **PR C2 (HIGH_RISK_TWO_KEY)**.
+**MVP Product Batch C** — reactions, notifications, arrival motion, shared walls, true secret marks, viral CTAs, profile links. Split by governance: **PR C1 (NORMAL)** + **PR C2 (HIGH_RISK_TWO_KEY)**.
 
 ## Status
-- **PR C1 (#11, NORMAL):** delivered, open for independent review. Reactions, notifications read-surface, arrival motion, public shared walls, viral CTAs, analytics — all on existing contracts, no schema.
-- **PR C2 (#12, HIGH_RISK):** **complete through all AIOS gates** — design-Two-Key APPROVE-DESIGN, code Reviewer APPROVE (`4626bb6`), QA PASS (`4626bb6`). Secret Marks (true RLS content-isolation), `wall_members`, notification triggers, profile-link columns. **NOT merged, NOT deployed** — Founder Gate below.
+- **PR #11 (C1, NORMAL):** open, awaiting independent review. Reactions, notifications read-surface, arrival motion, public shared walls, viral CTAs, analytics — existing contracts, no schema.
+- **PR #12 (C2, HIGH_RISK):** **complete through all AIOS gates at `37cfecf`** (Reviewer APPROVE + QA PASS). Secret Marks (true RLS isolation), `wall_members`, notification triggers, profile-link columns, + Founder-approved final hardening (0008 friendships fail-open fix, 0009 walls-view membership) + frontend (secret reveal UI, social links, member data layer). **NOT merged, NOT deployed.**
 
-## Role results (C2)
-- **Architect:** FP-C2 (Rev 2) + ADR-008…011; independent design review caught a secret-lifecycle leak (F1) → fixed.
-- **Backend:** migrations `0004`–`0007` + tests `60`–`90`; suite green (62 assertions), idempotent.
-- **Reviewer:** BLOCK → found F-B1 (`wall_members` fail-open self-membership) → fixed → **APPROVE** at `4626bb6`.
-- **QA:** **PASS** at `4626bb6` (behavioral, DB-layer Verified; hosted/app not exercised — Believed-likely).
+## C2 gate history
+- Design-Two-Key: independent design review APPROVE-DESIGN (caught+fixed a secret-lifecycle leak).
+- Reviewer: caught+fixed **F-B1** (wall_members fail-open) → APPROVE `4626bb6` → re-APPROVE `37cfecf` (after final hardening).
+- QA: PASS `4626bb6` → PASS `37cfecf`. 83 RLS assertions green, twice. DB-layer Verified; hosted not run (Believed-likely).
 
-## Founder decisions / gates OPEN (before any deploy)
-1. **F-1 (product):** Secret Mark on a *public* shared wall is readable by a possibly-stranger owner — allow (recommended default, owner = recipient) or restrict to personal/friend walls.
-2. **F-2 (acknowledge):** private shared walls become **member-gated** (vs friend-gated) — forward-only authz-model change.
-3. **🔴 0002 friendships hardening (production security):** merged SEC-001 `friendships_guard_transition()` has the SAME early-return-before-immutability pattern as F-B1 → a user can unilaterally reassign an accepted friendship's other party to an arbitrary user (non-consensual friendship → private-wall access). Recommend a forward hardening migration (identical fix). Awaiting Founder authorization; NOT auto-applied to merged code.
-4. **C2 hosted deploy** (Founder Gate): apply `0004`–`0007` in one transaction; confirm `service_role` grants/default privileges; confirm `mark_secrets` absent from the hosted realtime publication; then decide F-1.
+## Founder decisions — RESOLVED
+- **F-1 APPROVED:** secret Marks allowed on public shared walls (owner = recipient).
+- **F-2 APPROVED:** private shared walls are member-gated.
+- **0002 friendships hardening APPROVED:** implemented as forward migration `0008` (0002 untouched).
 
-## Deferred / follow-ups (documented, not blockers)
-- Frontend **owner secret-read path** (render 🔒 to others; read `mark_secrets` for owner) — small client follow-on (C2 makes secrets secure regardless).
-- `"walls view"` policy lacks a membership disjunct (fail-closed; ship with private shared walls).
-- Push notifications (native infra), universal/HTTPS App Links (domain/AASA/assetlinks infra), profile-link display polish, reaction de-dup/fan-out debt.
+## Migrations in PR #12 (source-controlled; NOT applied to hosted)
+`0004` secret_marks · `0005` wall_members · `0006` notification_triggers · `0007` profile_social_links · `0008` friendships_guard_hardening · `0009` walls_view_membership. `0001`–`0003` byte-identical to main.
+
+## Open items (non-blocking / follow-ups)
+- **F-A1 (Architect flag):** `walls view` still admits an owner's friends to a private *shared* wall's **metadata** row (pre-existing `are_friends` disjunct; marks + secret content remain member/owner-gated). Architectural-fit consistency question vs `can_view_wall`; not a confidentiality breach.
+- **F-A2:** shared-wall **member UI screens** deferred — `app/shared/*` live on the C1 branch (PR #11), not present on C2. `src/lib/walls.ts` member data layer is in place (unwired here). Build the screens once C1 + C2 are both on a branch (e.g. after both merge to main).
+- Push notifications (native infra), universal/HTTPS App Links (domain/AASA/assetlinks), reaction de-dup debt.
+
+## FOUNDER GATE — before any deploy (C2 hosted apply)
+1. Apply `0004`–`0009` to hosted Supabase in ONE transaction; confirm no `42501 must be owner of table objects`.
+2. Verify hosted `service_role` grants (mark_secrets moderation read works; no side-table re-exposure).
+3. Confirm `mark_secrets` NOT in the hosted `supabase_realtime` publication (`marks` still is).
 
 ## Branches / heads
 - C1: `claude/mvp-batch-c-normal` → PR #11.
-- C2: `claude/mvp-batch-c-secure` @ `4626bb6` → PR #12.
+- C2: `claude/mvp-batch-c-secure` @ `37cfecf` → PR #12 (code) [+ this docs commit].
 
 ## Recommended next action
-Founder: review PR #11; decide F-1 / the 0002 hardening; run the C2 hosted pre-deploy checklist. Independent review of PR #11 (C1) and device QA of both remain.
+Founder: review PR #11; run the C2 hosted pre-deploy checklist; then decide merge order (C1 then C2, or combine). Device QA of both PRs still recommended.
