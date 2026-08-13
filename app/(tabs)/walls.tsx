@@ -3,9 +3,11 @@ import { View, Pressable, ActivityIndicator } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
+import { Button } from "@/components/Button";
 import { InviteCrew } from "@/components/InviteCrew";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
+import { getOwnedSharedWalls } from "@/lib/walls";
 import { supabase } from "@/lib/supabase";
 import type { Wall } from "@/lib/types";
 import { colors, markColors, radius, shadow } from "@/theme";
@@ -19,6 +21,7 @@ export default function WallsScreen() {
   const { session, profile } = useAuth();
   const [wall, setWall] = useState<Wall | null>(null);
   const [markCount, setMarkCount] = useState(0);
+  const [sharedWalls, setSharedWalls] = useState<Wall[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -26,9 +29,13 @@ export default function WallsScreen() {
       let active = true;
       (async () => {
         if (!session?.user) return;
-        const w = await getPersonalWall(session.user.id);
+        const [w, owned] = await Promise.all([
+          getPersonalWall(session.user.id),
+          getOwnedSharedWalls(session.user.id),
+        ]);
         if (!active) return;
         setWall(w);
+        setSharedWalls(owned);
         if (w) {
           const { count } = await supabase
             .from("marks")
@@ -91,42 +98,44 @@ export default function WallsScreen() {
         </>
       )}
 
-      {/* OUR STORY teaser (Shared Walls are a later version) */}
+      {/* OUR STORY — real, public Shared Walls (private/members are C2). */}
       <View style={{ marginTop: 30 }}>
         <Text variant="label" color={colors.outline}>
-          OUR STORY · V3
+          OUR STORY · SHARED WALLS
         </Text>
-        <View
-          style={{
-            marginTop: 10,
-            borderWidth: 1,
-            borderStyle: "dashed",
-            borderColor: colors.outlineVariant,
-            borderRadius: radius.card,
-            padding: 16,
-          }}
-        >
-          <Text variant="body" color={colors.onSurfaceVariant}>
-            Shared Walls for trips, families and crews are coming soon.
+
+        {sharedWalls.map((sw) => (
+          <Pressable key={sw.id} onPress={() => router.push(`/shared/${sw.id}`)} style={{ marginTop: 12 }}>
+            <View
+              style={{
+                borderWidth: 2,
+                borderColor: colors.ink,
+                borderRadius: radius.card,
+                padding: 16,
+                backgroundColor: colors.card,
+              }}
+            >
+              <Text variant="headline">{sw.name}</Text>
+              <Text variant="label" color={colors.outline} style={{ marginTop: 6 }}>
+                PUBLIC · SHARED
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+
+        {sharedWalls.length === 0 ? (
+          <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 12, marginBottom: 4 }}>
+            Start a wall your whole crew can write on — a trip, a class, a group of friends.
           </Text>
-          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-            {["Goa Trip", "Class of '26", "Family"].map((t) => (
-              <View
-                key={t}
-                style={{
-                  paddingVertical: 6,
-                  paddingHorizontal: 12,
-                  borderRadius: radius.pill,
-                  backgroundColor: colors.surfaceContainer,
-                }}
-              >
-                <Text variant="body" color={colors.outline} style={{ fontSize: 13 }}>
-                  {t}
-                </Text>
-              </View>
-            ))}
-          </View>
+        ) : null}
+
+        <View style={{ marginTop: 14 }}>
+          <Button label="Start a Shared Wall" variant="yellow" onPress={() => router.push("/shared/create")} />
         </View>
+
+        <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginTop: 12 }}>
+          Public Shared Walls only for now — private, members-only walls are coming soon.
+        </Text>
       </View>
     </Screen>
   );

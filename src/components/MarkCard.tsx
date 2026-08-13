@@ -29,6 +29,8 @@ type Props = {
   bordered?: boolean;
   fastener?: "pin" | "tape" | "none";
   onPress?: () => void;
+  /** Long-press the whole card (e.g. to open the reaction picker). */
+  onLongPress?: () => void;
   /**
    * Entrance style: "drop" for a realtime / just-posted Mark (falls in with an
    * overshoot), "settle" for the staggered wall-load rise, "none" for static.
@@ -55,6 +57,7 @@ export function MarkCard({
   bordered = false,
   fastener = "tape",
   onPress,
+  onLongPress,
   enter = "none",
   enterIndex = 0,
   highlight = false,
@@ -135,11 +138,12 @@ export function MarkCard({
     </Animated.View>
   );
 
-  if (!onPress) return <View>{content}</View>;
+  if (!onPress && !onLongPress) return <View>{content}</View>;
 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       onPressIn={() =>
         (pressed.value = withTiming(1, { duration: motionTokens.press.downDuration }))
       }

@@ -32,6 +32,9 @@ export default function RootLayout() {
           <Stack.Screen name="people-picker" options={{ presentation: "modal" }} />
           <Stack.Screen name="write/[type]" options={{ presentation: "modal" }} />
           <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
+          <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
+          <Stack.Screen name="shared/create" options={{ presentation: "modal" }} />
+          <Stack.Screen name="shared/[id]" />
           <Stack.Screen name="u/[handle]" />
         </Stack>
       </AuthProvider>
