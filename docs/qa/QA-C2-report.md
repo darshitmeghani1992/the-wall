@@ -203,3 +203,38 @@ A non-owner MEMBER of the wall still reads **0** secret rows — wall membership
 
 ## 7. Routing
 PASS → hand back to the **Founder Gate**. No behavioral defect to route to an implementation Role. Migrations 0001–0009 behaviorally verified at the DB layer for 37cfecf; hosted deployment remains a Founder Gate with the checklist above.
+
+---
+
+# QA C2 — MERGE-INTEGRATION VERIFICATION (bound to b493bb4)
+
+**Verdict: PASS** (bound to merge commit `b493bb4`). Focused merge-reconciliation QA. The security SQL layer is byte-identical to prior-approved `37cfecf`; this pass re-confirms DB behavior post-merge and traces the C1(reactions) + C2(secret) integration. No code edits, no commit.
+
+## M1. Commit & security-layer integrity
+- `git rev-parse --short HEAD` = **b493bb4** (confirmed at HEAD).
+- `git diff 37cfecf..b493bb4 -- supabase/` = **EMPTY** — the entire DB/security layer (migrations + tests) is byte-identical to the prior-approved 37cfecf. No security-relevant implementation change survived the merge.
+- Conflict-marker scan of the working tree: **none found** (no `<<<<<<<`/`=======`/`>>>>>>>`).
+
+## M2. DB behavior re-confirmed post-merge (Verified — local PG16)
+- `bash supabase/tests/run_tests.sh` → **exit 0**, "✔ ALL ASSERTIONS PASSED".
+- SEC-001 AC-S1…AC-S10 + moderator-read + storage: **all PASS**.
+- FP-C2 suites 60 (secret isolation + F1 lifecycle + anon+secret), 70 (membership gating + invite/accept + roster + 0009 walls-view), 80 (5 notification triggers + skip-self + no-leak + kind CHECK), 90 (profile links): **all PASS**.
+- 0008 friendships hardening + 0009 walls-view membership vectors: **all PASS**.
+- Because the DB layer is byte-identical to 37cfecf, QA's prior C2 security sign-off **carries** to b493bb4.
+
+## M3. Merge-integration behavioral trace (trace-verified — code-level; no device/simulator here)
+- **Secret LOCKED at every non-owner call site, zero fetch:** `SecretMark` (MarkView.tsx:190) — for `!isWallOwner` it returns a static non-interactive locked panel ("🔒 ONLY YOU CAN OPEN THIS") and **never calls `getSecretContent`** (the only `getSecretContent` call is inside `reveal()`, gated behind the owner Pressable). Confirmed at each site:
+  - `app/person/[id].tsx:137` (visitor) — MarkView **without** `isWallOwner` → default `false` → LOCKED, no fetch.
+  - `app/shared/[id].tsx:156` (public slice) — MarkView **without** `isWallOwner` → `false` → LOCKED, no fetch.
+  - `app/write/[type].tsx:307,440` (live preview) — MarkView `mark={preview}` only → `false` → LOCKED, no fetch.
+- **Owner is the sole reveal path:** `app/wall.tsx:185` passes `isWallOwner` (=true) — the only site that offers the tap-to-fetch reveal. UX gating only; RLS remains the real boundary (suite 60: non-owner reads 0 rows).
+- **C1 + C2 coexist without reactions leaking secret content:** every MarkView site passes `reactions` + `onToggleReaction` (C1) alongside the secret gating (C2). Reactions render on the mark card independently; no secret content flows through the reactions props. Reactions no-leak also proven at the DB layer (suite 80 "reaction on anon mark" → true author notified, base row stays anon; suite 60 non-owner 0 rows).
+- **Merge union clean / no duplicate or broken symbols:** `npx tsc --noEmit` → **exit 0**. C1 reaction functions live in `src/lib/reactions.ts` + `src/hooks/useWallReactions.ts`; C2 wall-membership functions live in `src/lib/walls.ts` (createSharedWall, getWall, getOwnedSharedWalls, getWallMembers, inviteToWall, acceptWallMembership, getPendingInvites) — **no duplicate exports** (uniq -d empty) and the merged tree type-checks cleanly. (Honest note: the reaction functions are in reactions.ts/useWallReactions.ts, not walls.ts itself; the merged **tree** unions both C1 and C2 surfaces cleanly.)
+
+## M4. Honest scope & Founder device-test item
+- **Verified (local PG16 + Supabase-compat shim):** the full DB authorization layer, re-run post-merge, exit 0.
+- **Trace-verified (code-level, not runnable here):** the reveal/lock gating and C1+C2 coexistence at the call sites.
+- **Founder device-test item (NOT runnable here; NOT grounds for FAIL):** the actual on-device runtime of reactions + secret-reveal coexisting on a real client/simulator against the hosted Supabase project. Plus the standing hosted-deploy checklist in §6 above.
+
+## M5. Routing
+**PASS → hand back to the Founder Gate.** No behavioral defect to route to any implementation Role. Merge b493bb4 is a clean reconciliation with byte-identical security SQL, not new security logic.
