@@ -103,5 +103,5 @@ prior batches left as content-isolation-only.
    `roast`/`award`/`poll`/`doodle`/`prediction`; Secret/Anonymous as toggles) — §21/§4.
 4. Plan Voice + Video Mark slice (recorder + protected media storage + playback + RLS).
 5. Account-deletion lifecycle (§82) and moderation/admin surface (§53).
-6. Consider wiring `supabase/tests/run_tests.sh` into CI with a Postgres service container so
-   the launch-blocking security suite runs on every PR (today CI is tsc + lint only).
+6. ✅ Wired `supabase/tests/run_tests.sh` into CI (`.github/workflows/ci.yml` `security` job,
+   postgres:16 service) so the launch-blocking suite runs on every PR — verifying on PR #17.
