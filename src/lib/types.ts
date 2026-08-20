@@ -69,6 +69,11 @@ export interface Mark {
   pinned: boolean;
   status: MarkStatus;
   created_at: string;
+  // Owner-removal accounting (migration 0012 / §33). Optional: only set on removed
+  // Marks and absent from client-built literals (e.g. the composer preview).
+  removed_by?: string | null;
+  removed_at?: string | null;
+  removal_reason?: "normal" | "safety" | "moderation" | null;
 }
 
 /**
