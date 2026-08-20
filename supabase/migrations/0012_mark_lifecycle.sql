@@ -47,11 +47,32 @@ declare
   v_privileged      boolean;
   v_is_author       boolean;
   v_content_changed boolean;
+  v_owner_removing  boolean;
   v_normal_count    integer;
 begin
   v_privileged := current_user in ('service_role','postgres');   -- protected moderation path
   v_is_owner   := exists (select 1 from walls w where w.id = new.wall_id and w.owner_id = auth.uid());
   v_is_author  := old.author_id is not null and old.author_id = auth.uid();
+  -- The one legitimate path that writes the removal-accounting columns.
+  v_owner_removing := new.status = 'removed' and old.status is distinct from 'removed'
+                      and v_is_owner and not v_privileged;
+
+  -- [immutability] A non-privileged caller may never rewrite server-owned columns
+  -- out of band. created_at is the §32 window anchor (a writable anchor would let
+  -- an author reset the clock and edit/delete forever); the removal-accounting
+  -- columns may be written ONLY by the owner-removal branch below (else a
+  -- non-owner could plant rows that poison the owner's §33 quota / forge
+  -- accountability). Preserve the old values on every other path.
+  if not v_privileged then
+    if new.created_at is distinct from old.created_at then
+      raise exception 'MARK_IMMUTABLE: created_at cannot be changed';
+    end if;
+    if not v_owner_removing then
+      new.removed_by     := old.removed_by;
+      new.removed_at     := old.removed_at;
+      new.removal_reason := old.removal_reason;
+    end if;
+  end if;
 
   -- [SEC-001 F5] moderation columns (pinned/status): owner or privileged only.
   if (new.pinned is distinct from old.pinned) or (new.status is distinct from old.status) then

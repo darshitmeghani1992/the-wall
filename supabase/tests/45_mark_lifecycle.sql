@@ -167,4 +167,51 @@ end $$;
 \echo '45 (safety removal never limited)  : PASS  (safety bypasses the quota)'
 ROLLBACK;
 
-\echo '── 45_mark_lifecycle: ALL PASS (§32 edit/delete window + §33 removal quota) ──'
+-- ── §32 anchor immutability: an author cannot reset created_at to reopen the window ──
+BEGIN;
+reset role;
+insert into marks (id, wall_id, author_id, type, text, created_at)
+values ('45000000-0000-0000-0000-000000000031','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        '11111111-1111-1111-1111-111111111111','text','stale', now() - interval '2 hours');
+set local role authenticated;
+set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author)
+do $$
+declare rejected boolean := false;
+begin
+  begin
+    update marks set created_at = now() where id = '45000000-0000-0000-0000-000000000031';
+  exception when others then rejected := (SQLERRM like '%MARK_IMMUTABLE%');
+  end;
+  if not rejected then raise exception '45 FAIL: author reset created_at (window anchor mutable)'; end if;
+  if (select created_at from marks where id = '45000000-0000-0000-0000-000000000031') > now() - interval '1 hour' then
+    raise exception '45 FAIL: created_at moved despite the guard';
+  end if;
+end $$;
+\echo '45 (created_at immutable)          : PASS  (window anchor is server-owned)'
+ROLLBACK;
+
+-- ── §33 anti-poison: a non-owner cannot plant removal-accounting columns ─────
+BEGIN;
+reset role;
+insert into marks (id, wall_id, author_id, type, text) values
+  ('45000000-0000-0000-0000-000000000041','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','text','p1'),
+  ('45000000-0000-0000-0000-000000000042','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','text','p2');
+-- A (author, NOT the wall owner) tries to plant the owner's accounting columns
+-- WITHOUT a status change (so the owner-removal branch never runs).
+set local role authenticated;
+set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
+do $$
+begin
+  update marks set removed_by = '44444444-4444-4444-4444-444444444444',
+                   removal_reason = 'normal',
+                   removed_at = now()
+    where id in ('45000000-0000-0000-0000-000000000041','45000000-0000-0000-0000-000000000042');
+  if (select count(*) from marks
+        where removed_by = '44444444-4444-4444-4444-444444444444' and removal_reason = 'normal') <> 0 then
+    raise exception '45 FAIL: non-owner planted removal-accounting columns (quota poisonable)';
+  end if;
+end $$;
+\echo '45 (accounting columns unforgeable): PASS  (non-owner cannot poison §33 quota)'
+ROLLBACK;
+
+\echo '── 45_mark_lifecycle: ALL PASS (§32 edit/delete window + anchor immutability + §33 quota + anti-poison) ──'
