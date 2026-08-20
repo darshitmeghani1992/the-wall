@@ -96,6 +96,8 @@ echo "── load: 0011_mark_model_reconciliation.sql"
 psql_test -f "$MIG/0011_mark_model_reconciliation.sql" >/dev/null
 echo "── load: 0012_mark_lifecycle.sql"
 psql_test -f "$MIG/0012_mark_lifecycle.sql" >/dev/null
+echo "── load: 0013_account_lifecycle.sql"
+psql_test -f "$MIG/0013_account_lifecycle.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -104,7 +106,8 @@ echo "════════════════════════�
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
 for area in 10_friendships 20_blocking 30_anonymity 40_mark_moderation 45_mark_lifecycle 50_storage \
-            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 90_profile_links; do
+            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 90_profile_links \
+            95_account_lifecycle; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done

@@ -32,6 +32,10 @@ export interface Profile {
   youtube: string | null;
   x: string | null;
   website: string | null;
+  // Account lifecycle (0013). 'deactivated' = recoverable (§82); world-readable so
+  // existing Marks still show their author, but discovery/interaction is gated.
+  account_status: "active" | "deactivated";
+  deactivated_at: string | null;
   created_at: string;
 }
 
