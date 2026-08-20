@@ -20,10 +20,10 @@ BEGIN;
 -- the base row into mark_secrets with a default 1-hour expires_at, opened_at NULL.
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author)
-insert into marks (id, wall_id, author_id, type, text, anonymous)
+insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
 values ('cccccccc-cccc-cccc-cccc-ccccccccc611',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','one time only', false);
+        '11111111-1111-1111-1111-111111111111','text','one time only', false, true);
 
 -- O (owner/recipient) reveals: first call wins.
 reset role;
@@ -79,10 +79,10 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous)
+insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
 values ('cccccccc-cccc-cccc-cccc-ccccccccc612',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','stale secret', false);
+        '11111111-1111-1111-1111-111111111111','text','stale secret', false, true);
 
 -- Backdate expiry into the past (as the superuser session role — no client role
 -- can UPDATE mark_secrets; this stands in for "the clock advanced past the
@@ -128,10 +128,10 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous)
+insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
 values ('cccccccc-cccc-cccc-cccc-ccccccccc613',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','not for you', false);
+        '11111111-1111-1111-1111-111111111111','text','not for you', false, true);
 
 -- B is authenticated but not the wall owner → not_authorized, no content, and the
 -- secret stays UNOPENED (a denied attempt must not consume it).

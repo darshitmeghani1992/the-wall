@@ -3,7 +3,7 @@
 --
 -- Secret = content hidden from all but the wall owner (+ service_role) and never
 -- streamed via realtime. Proves, as the acting roles:
---   • author sends `text` on a type='secret' mark → base marks.text is NULL
+--   • author sends `text` on a secret=true mark → base marks.text is NULL
 --   • a non-owner is denied by the reveal RPC (0010 revoked direct client SELECT)
 --   • the wall owner reveals the content (RPC); service_role reads it directly
 --   • mark_secrets is ABSENT from supabase_realtime; marks is present
@@ -24,10 +24,10 @@ BEGIN;
 -- explicitly sending the content in `text` to prove the SERVER moves it.
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author)
-insert into marks (id, wall_id, author_id, type, text, anonymous)
+insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc60',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','super secret', false);
+        '11111111-1111-1111-1111-111111111111','text','super secret', false, true);
 
 -- Base row: text moved off at the write boundary.
 do $$
@@ -138,7 +138,7 @@ ROLLBACK;
 -- ── F1 positive: a NON-secret mark''s text UPDATE still succeeds ──────────────
 BEGIN;
 set local role authenticated;
-set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author of M_active, a sticky)
+set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author of M_active, a non-secret text mark)
 do $$
 begin
   update marks set text = 'edited active' where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1';
@@ -153,10 +153,10 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous)
+insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc61',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','anon super secret', true);
+        '11111111-1111-1111-1111-111111111111','text','anon super secret', true, true);
 do $$
 begin
   if (select author_id from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc61') is not null then

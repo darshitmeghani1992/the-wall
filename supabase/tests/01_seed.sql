@@ -64,10 +64,10 @@ insert into blocks (blocker_id, blocked_id) values
 insert into marks (id, wall_id, author_id, type, text, anonymous, status) values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-   '11111111-1111-1111-1111-111111111111','sticky','active mark', false, 'active'),
+   '11111111-1111-1111-1111-111111111111','text','active mark', false, 'active'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-   '11111111-1111-1111-1111-111111111111','sticky','pending mark', false, 'pending');
+   '11111111-1111-1111-1111-111111111111','text','pending mark', false, 'pending');
 
 -- ── [C2] Batch-C fixtures (additive; existing fixtures above unchanged) ──────
 -- Private SHARED wall owned by O. visibility 'private' + contribution 'nobody'

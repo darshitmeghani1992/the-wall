@@ -92,6 +92,8 @@ echo "── load: 0009_walls_view_membership.sql"
 psql_test -f "$MIG/0009_walls_view_membership.sql" >/dev/null
 echo "── load: 0010_secret_reveal_lifecycle.sql"
 psql_test -f "$MIG/0010_secret_reveal_lifecycle.sql" >/dev/null
+echo "── load: 0011_mark_model_reconciliation.sql"
+psql_test -f "$MIG/0011_mark_model_reconciliation.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
