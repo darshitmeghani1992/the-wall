@@ -137,5 +137,24 @@ slice (below), which is complete through Two-Key.
 6. **Device QA:** real recording/playback for Voice/Video; on-device Secret reveal UI.
 7. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30) — frontend slice; data
    layer ready (`removeMark`/`editMarkText`/helpers).
-8. Account-deletion lifecycle (§82); moderation/admin surface (§53); Alerts-label copy audit.
-9. ✅ CI runs the security suite on every PR (postgres:16 service).
+8. **Account-deletion / deactivation lifecycle (§82)** — NEXT high-risk backend slice.
+   Design (keep RLS blast-radius small; each step guarded by the security suite):
+   - Migration `0013`: `profiles.account_status text not null default 'active'
+     check (in ('active','deactivated'))` + `deactivated_at timestamptz`; helper
+     `is_active_account(uid)`.
+   - Enforce "a deactivated account disappears" at the interaction points, NOT by hiding the
+     profile row (that would break author display on existing Marks): deny in `can_view_wall`
+     when the wall owner is deactivated; deny in `can_contribute` when actor or target owner is
+     deactivated; block new friend requests / follows to a deactivated user; exclude deactivated
+     profiles in the search query (`profiles.ts`).
+   - Reactivation-on-login within 30 days (data layer); `deactivate_account()` /
+     `reactivate_account()` RPCs. Before FINAL deletion, require Shared-Wall ownership transfer
+     or delete (§43/§82) — surface as a blocker, don't auto-transfer.
+   - If a full automated 30-day purge can't run without a scheduler, implement deactivation +
+     `deletion_scheduled_at` and mark the purge job as a hosted/pg_cron deploy task (§82).
+   - New test `95_account_lifecycle.sql`: deactivated owner's wall not viewable by others;
+     deactivated user can't contribute or be friend-requested; reactivation restores access;
+     the SEC-001/anon/secret/quota suites stay green. Two-Key.
+9. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30); moderation/admin (§53);
+   blocking/reporting UI (§51/§52); Alerts-label copy audit.
+10. ✅ CI runs the security suite on every PR (postgres:16 service).
