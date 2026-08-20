@@ -72,7 +72,7 @@ slice (below), which is complete through Two-Key.
 | Slice 2 Discover→Friend/Follow→Other Wall | **Partial** | Screens + `friendships`/`follows` libs; RLS **verified**. UI not device-verified. |
 | Slice 3 Text Mark→Reaction→Alert | **Partial** | Composer + reactions + notification triggers present; triggers **verified**. |
 | Slice 4 Photo/Voice/Video | **Implemented (device QA pending)** | Photo + **Voice (≤60s) + Video (≤30s)** in the integrated composer; `expo-av` recorder + playback; `uploadMedia` caps/MIME; reuses verified `attachments` bucket. Real recording/playback pending on a device. |
-| Slice 5 Permissions/Blocking/Reporting | **Partial** | RLS block/permission **verified**; report write path present; owner-removal quota (§33) needs verification. |
+| Slice 5 Permissions/Blocking/Reporting | **Partial** | RLS block/permission **verified**; **§32 edit window + §33 removal quota now server-enforced + verified (migration 0012)**; report write path present. Owner-removal / edit **UI** (Mark detail sheet §30) is the follow-on frontend slice. |
 | Slice 6 Shared Walls | **Partial** | `walls.ts` member data layer + `app/shared/*` screens; membership RLS **verified**. Ownership-transfer/delete UI needs verification. |
 | Slice 7 Anonymous | **Working (verified)** | anonymity side-table RLS **verified**. |
 | Slice 7 Secret | **Working (verified, DB layer)** | isolation + one-time reveal + 1h expiry **verified**; Two-Key APPROVE+PASS @ `7d36458`. On-device UI pass pending. |

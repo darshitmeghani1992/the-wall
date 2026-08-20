@@ -96,3 +96,23 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
 - **Reason:** First-party Expo module already in the managed workflow; minimal new surface.
 - **Alternatives:** expo-video/expo-audio (newer, not in SDK 51's stable set) — deferred.
 - **Reversibility:** Reversible (dependency). **Founder Gate?** No.
+
+## D-8 · 2026-08-20 · Mark-lifecycle rules are trigger/RLS-enforced, not client-trusted (migration 0012)
+- **Decision:** Enforce §32 (sender 10-min edit/delete window) and §33 (owner normal-removal
+  quota 3/30d, safety unlimited) in the DB: the `marks_guard_moderation` BEFORE-UPDATE trigger
+  rejects late author edits (`MARK_EDIT_WINDOW`) and over-quota normal removals
+  (`MARK_REMOVAL_QUOTA`) and stamps `removed_by`/`removed_at`; the DELETE RLS policy is
+  author-only within the window. The owner's 0001 hard-delete path is removed so removal can't
+  bypass the quota. Removal reason is `normal`/`safety`/`moderation`; safety/moderation are
+  never limited.
+- **Reason:** These are API-abuse vectors (§100 "sender edit after 10 min", "remove Mark quota
+  bypass") — client checks are insufficient; server time is authoritative.
+- **Alternatives:** Client-only gating (rejected — bypassable); a bypassable RPC for removal
+  (rejected — owner could UPDATE directly); an `editable_until` column (redundant with
+  created_at + a fixed window).
+- **Reversibility:** Additive/idempotent migration; pre-hosted-apply. **Founder Gate?** No
+  (fixed product rule); hosted apply remains a deploy Gate.
+- **Follow-up:** the owner Mark-removal / sender edit **UI** (a Mark detail/action sheet, §30)
+  is a separate frontend slice; the data layer (`removeMark`/`editMarkText`/helpers) is ready.
+  MVP treats a `safety` reason as owner-asserted; linking it to an actual report/block to
+  prevent gaming is a later hardening.
