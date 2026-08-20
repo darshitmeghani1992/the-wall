@@ -98,9 +98,14 @@ slice (below), which is complete through Two-Key.
   destructive-production step requiring Founder go + credentials.
 
 ## Security / High-Risk Review (Two-Key)
-- Secret lifecycle: **Key 1 Reviewer APPROVE + Key 2 QA PASS, bound to `7d36458`** — both
-  independent, both re-executed against the live DB. No BLOCKER/HIGH/MEDIUM. On draft PR #17.
-- Remaining Two-Key surface for a future on-device/staging pass: UI reveal, hosted expiry job.
+- Secret lifecycle: **Reviewer APPROVE + QA PASS @ `7d36458`** — no BLOCKER/HIGH/MEDIUM.
+- Mark-model reconciliation (`0011`) + Voice/Video: **Reviewer APPROVE + QA PASS @ `725d7ba`**
+  — both independent, both re-executed against the live DB (incl. a two-session concurrency
+  race and secret+media rejection). No Two-Key secret guarantee regressed; no new storage
+  surface. No BLOCKER/HIGH/MEDIUM. One LOW (server-side storage MIME/size limits are
+  client-only) → routed to the hosted storage-hardening task (below).
+- Remaining Two-Key surface for a future on-device/staging pass: Secret reveal UI, voice/video
+  recording+playback, hosted expiry job + bucket limits.
 
 ## Tests / Builds Run
 - `npm ci`; `npx tsc --noEmit` (0 err); `npx eslint .` (0 err / 6 warn).
