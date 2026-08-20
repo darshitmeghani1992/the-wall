@@ -90,6 +90,8 @@ echo "── load: 0008_friendships_guard_hardening.sql"
 psql_test -f "$MIG/0008_friendships_guard_hardening.sql" >/dev/null
 echo "── load: 0009_walls_view_membership.sql"
 psql_test -f "$MIG/0009_walls_view_membership.sql" >/dev/null
+echo "── load: 0010_secret_reveal_lifecycle.sql"
+psql_test -f "$MIG/0010_secret_reveal_lifecycle.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -98,7 +100,7 @@ echo "════════════════════════�
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
 for area in 10_friendships 20_blocking 30_anonymity 40_mark_moderation 50_storage \
-            60_secret_marks 70_wall_members 80_notifications 90_profile_links; do
+            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 90_profile_links; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done

@@ -133,27 +133,35 @@ export function subscribeToWall(
   };
 }
 
+/** Why a Secret reveal did not return content (server-classified; see 0010). */
+export type SecretRevealReason = "ok" | "consumed" | "expired" | "not_authorized" | "missing";
+
+/** Result of a one-time Secret reveal. `content` is present only when `ok`. */
+export type SecretRevealResult = { ok: boolean; reason: SecretRevealReason; content?: string };
+
 /**
- * Fetch a Secret Mark's true content from the RLS-gated `mark_secrets` side table
- * (0004 / ADR-008). The privacy boundary is the SERVER, not this client: RLS
- * ("mark_secrets read owner") returns a row ONLY to the wall owner and returns
- * ZERO rows to everyone else, and the base `marks.text` is NULL for secrets — so
- * a non-owner never receives content to render. Callers must therefore only
- * invoke this for the wall owner (UX gating); if a non-owner somehow calls it,
- * RLS still yields `null` (no content), never a leak.
+ * Reveal a Secret Mark's content through the one-time, server-atomic RPC
+ * `reveal_secret` (0010 / FP-SEC-002 / ADR-010). The privacy AND lifecycle
+ * boundaries are the SERVER, not this client:
+ *   • recipient-only: the RPC authorizes the caller as the wall owner; anyone
+ *     else gets `{ ok:false, reason:'not_authorized' }` and no content.
+ *   • one-time: the first reveal atomically records `opened_at`; a second reveal
+ *     returns `{ ok:false, reason:'consumed' }`. Clients cannot re-read the
+ *     content out of band — direct SELECT on `mark_secrets` is revoked (0010).
+ *   • expiry: past the 1-hour window the RPC returns `{ ok:false,
+ *     reason:'expired' }`.
  *
- * Returns the content string, or `null` when no readable row exists (not the
- * owner, or the secret is genuinely empty/missing). Throws on a real network/API
- * error so the UI can show an honest error state rather than a false "empty".
+ * The base `marks.text` is NULL for secrets, so a non-recipient never has content
+ * on the client at all. Callers should still UX-gate to the wall owner; the RPC is
+ * the real enforcement. Throws on a genuine network/API error so the UI can show an
+ * honest error state rather than a false "empty".
  */
-export async function getSecretContent(markId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("mark_secrets")
-    .select("content")
-    .eq("mark_id", markId)
-    .maybeSingle();
+export async function revealSecret(markId: string): Promise<SecretRevealResult> {
+  const { data, error } = await supabase.rpc("reveal_secret", { p_mark_id: markId });
   if (error) throw error;
-  return ((data as { content: string } | null)?.content) ?? null;
+  const result = (data ?? { ok: false, reason: "missing" }) as SecretRevealResult;
+  if (result.ok) track("Secret Mark Opened", { mark_id: markId }); // no content in the event
+  return result;
 }
 
 /** Owner-only: pin/unpin a mark to the top of the wall. */

@@ -4,8 +4,8 @@
 -- Secret = content hidden from all but the wall owner (+ service_role) and never
 -- streamed via realtime. Proves, as the acting roles:
 --   • author sends `text` on a type='secret' mark → base marks.text is NULL
---   • a non-owner authenticated reader gets 0 rows from mark_secrets (RLS)
---   • the wall owner reads the content; service_role reads the content
+--   • a non-owner is denied by the reveal RPC (0010 revoked direct client SELECT)
+--   • the wall owner reveals the content (RPC); service_role reads it directly
 --   • mark_secrets is ABSENT from supabase_realtime; marks is present
 --   • an anonymous+secret mark hides BOTH author and content on the base row
 --     while the owner reads content WITHOUT learning the author
@@ -38,30 +38,35 @@ begin
 end $$;
 \echo '60 (base marks.text NULL)          : PASS  (content moved off base row)'
 
--- Non-owner authenticated reader (B): 0 rows from the side table (RLS).
+-- Non-owner authenticated reader (B): the reveal RPC denies (0010 revoked the
+-- direct client SELECT, so the ONLY read path is reveal_secret, which is
+-- recipient-gated → not_authorized, never content).
 reset role;
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (not the owner)
 do $$
+declare r jsonb;
 begin
-  if (select count(*) from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') <> 0 then
-    raise exception '60 FAIL: non-owner read secret content from mark_secrets';
+  r := reveal_secret('cccccccc-cccc-cccc-cccc-cccccccccc60');
+  if (r->>'reason') <> 'not_authorized' or r ? 'content' then
+    raise exception '60 FAIL: non-owner reveal_secret leaked content or was authorized: %', r;
   end if;
 end $$;
-\echo '60 (non-owner 0 rows)              : PASS  (RLS hides content from non-owner)'
+\echo '60 (non-owner denied)              : PASS  (reveal_secret gates non-owner; no content)'
 
--- Wall owner (O): reads the content.
+-- Wall owner (O): reveals the content via the one-time RPC.
 reset role;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (wall owner)
 do $$
+declare r jsonb;
 begin
-  if (select content from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc60')
-     is distinct from 'super secret' then
-    raise exception '60 FAIL: wall owner could not read the secret content';
+  r := reveal_secret('cccccccc-cccc-cccc-cccc-cccccccccc60');
+  if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'super secret' then
+    raise exception '60 FAIL: wall owner could not reveal the secret content: %', r;
   end if;
 end $$;
-\echo '60 (owner reads content)           : PASS  (recipient sees the secret)'
+\echo '60 (owner reveals content)         : PASS  (recipient reveals the secret)'
 
 -- service_role (moderation path): reads the content via explicit grant.
 reset role;
@@ -161,15 +166,16 @@ begin
     raise exception '60 FAIL: anon+secret base row leaks text';
   end if;
 end $$;
--- Owner reads content WITHOUT learning the author (mark_secrets has no author col).
+-- Owner reveals content WITHOUT learning the author (mark_secrets has no author col).
 reset role;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner)
 do $$
+declare r jsonb;
 begin
-  if (select content from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc61')
-     is distinct from 'anon super secret' then
-    raise exception '60 FAIL: owner could not read anon+secret content';
+  r := reveal_secret('cccccccc-cccc-cccc-cccc-cccccccccc61');
+  if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'anon super secret' then
+    raise exception '60 FAIL: owner could not reveal anon+secret content: %', r;
   end if;
 end $$;
 ROLLBACK;

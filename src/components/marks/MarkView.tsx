@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
 import { colors, markColors, radius, type EnterMode } from "@/theme";
-import { getSecretContent, type MarkWithAuthor } from "@/lib/marks";
+import { revealSecret, type MarkWithAuthor } from "@/lib/marks";
 import { isMarkShareable, shareMark } from "@/lib/share";
 import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
@@ -180,27 +180,39 @@ function Placeholder({ label, height = 130 }: { label: string; height?: number }
  * the content still learns nothing about an anonymous author, because `mark_secrets`
  * carries no author identity.
  *
- * `isWallOwner` is UX gating only — it decides whether we even offer to fetch. It
- * is NOT the security boundary: RLS is. For a non-owner we render a static locked
- * state and NEVER call `getSecretContent`. For the owner, a tap fetches the content
- * with honest loading / empty / error states.
+ * `isWallOwner` is UX gating only — it decides whether we even offer to open. It
+ * is NOT the security boundary: the `reveal_secret` RPC is (0010 / ADR-010). For a
+ * non-owner we render a static locked state and NEVER call the RPC. For the owner,
+ * a tap performs the ONE-TIME reveal with honest loading / consumed / expired /
+ * error states. Opening is a one-way door: after a successful reveal the content is
+ * shown for this session only; a later attempt returns `consumed` (§27.3), and past
+ * the 1-hour window it returns `expired` (§27.4 / §111).
  */
-type SecretPhase = "locked" | "loading" | "revealed" | "empty" | "error";
+type SecretPhase = "locked" | "loading" | "revealed" | "consumed" | "expired" | "empty" | "error";
 
 function SecretMark({ mark, isWallOwner }: { mark: MarkWithAuthor; isWallOwner: boolean }) {
   const [phase, setPhase] = useState<SecretPhase>("locked");
   const [content, setContent] = useState<string | null>(null);
 
   async function reveal() {
-    if (phase === "loading" || phase === "revealed") return;
+    // Terminal states never re-fetch; only "locked" (or a retryable "error") opens.
+    if (phase === "loading" || phase === "revealed" || phase === "consumed" || phase === "expired") return;
     setPhase("loading");
     try {
-      const text = await getSecretContent(mark.id);
-      if (text == null || text.length === 0) {
+      const res = await revealSecret(mark.id);
+      if (res.ok && res.content && res.content.length > 0) {
+        setContent(res.content);
+        setPhase("revealed");
+      } else if (res.reason === "consumed") {
+        setPhase("consumed");
+      } else if (res.reason === "expired") {
+        setPhase("expired");
+      } else if (res.reason === "ok" || res.reason === "missing") {
+        // Authorized but nothing to show (genuinely empty / already-cleaned-up).
         setPhase("empty");
       } else {
-        setContent(text);
-        setPhase("revealed");
+        // not_authorized should not happen behind the owner gate — treat as error.
+        setPhase("error");
       }
     } catch {
       setPhase("error");
@@ -221,25 +233,36 @@ function SecretMark({ mark, isWallOwner }: { mark: MarkWithAuthor; isWallOwner: 
     );
   }
 
-  // Owner: tap to fetch and reveal, with honest loading / empty / error states.
+  // Owner: tap to open ONCE, with honest loading / consumed / expired / error states.
   const revealed = phase === "revealed";
+  const terminal = revealed || phase === "consumed" || phase === "expired";
   const label =
     phase === "loading"
       ? "OPENING…"
-      : phase === "empty"
-        ? "NOTHING TO SHOW"
-        : phase === "error"
-          ? "COULDN'T OPEN — TAP TO RETRY"
-          : "🔓 TAP TO OPEN";
+      : phase === "consumed"
+        ? "🔒 ALREADY OPENED"
+        : phase === "expired"
+          ? "🔒 THIS SECRET EXPIRED"
+          : phase === "empty"
+            ? "NOTHING TO SHOW"
+            : phase === "error"
+              ? "COULDN'T OPEN — TAP TO RETRY"
+              : "🔓 TAP TO OPEN ONCE";
+  const a11y =
+    revealed
+      ? "Secret Mark, opened"
+      : phase === "consumed"
+        ? "Secret Mark, already opened — it can only be opened once"
+        : phase === "expired"
+          ? "Secret Mark, expired"
+          : "Open this Secret Mark once — only you can see it";
 
   return (
     <Pressable
       onPress={reveal}
-      disabled={phase === "loading" || revealed}
+      disabled={phase === "loading" || terminal}
       accessibilityRole="button"
-      accessibilityLabel={
-        revealed ? "Secret Mark, opened" : "Open this Secret Mark — only you can see it"
-      }
+      accessibilityLabel={a11y}
     >
       {revealed ? (
         <Text variant="mark" color={markColors.secretOnPurple}>
