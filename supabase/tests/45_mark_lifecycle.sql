@@ -100,6 +100,30 @@ end $$;
 \echo '45 (owner cannot hard-delete)      : PASS  (owner removes via quota, not DELETE)'
 ROLLBACK;
 
+-- ── Authenticity: the wall owner cannot rewrite another author's content ─────
+-- Owners moderate (remove/hide/pin) but never edit what someone else left (§3.1).
+BEGIN;
+reset role;
+insert into marks (id, wall_id, author_id, type, text)
+values ('45000000-0000-0000-0000-000000000051','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        '11111111-1111-1111-1111-111111111111','text','A said this');
+set local role authenticated;
+set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (wall owner, NOT author)
+do $$
+declare rejected boolean := false;
+begin
+  begin
+    update marks set text = 'OWNER rewrote this' where id = '45000000-0000-0000-0000-000000000051';
+  exception when others then rejected := (SQLERRM like '%MARK_CONTENT_AUTHOR_ONLY%');
+  end;
+  if not rejected then raise exception '45 FAIL: owner rewrote another author''s content'; end if;
+  if (select text from marks where id = '45000000-0000-0000-0000-000000000051') <> 'A said this' then
+    raise exception '45 FAIL: author content changed by the owner';
+  end if;
+end $$;
+\echo '45 (owner cannot edit content)     : PASS  (MARK_CONTENT_AUTHOR_ONLY; authenticity)'
+ROLLBACK;
+
 -- ── §33 owner removal quota (3 normal / 30 days; safety unlimited) ───────────
 BEGIN;
 reset role;

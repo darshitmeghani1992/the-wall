@@ -117,6 +117,8 @@ end $$;
 \echo '60 (F1 author UPDATE rejected)     : PASS  (check_violation; base text stays NULL)'
 
 -- F1 lifecycle (owner): the wall owner cannot re-populate the secret's base text.
+-- (Now blocked even earlier by the authenticity guard MARK_CONTENT_AUTHOR_ONLY —
+-- an owner may never rewrite another author's content — before the secret CHECK.)
 reset role;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (wall owner)
@@ -125,14 +127,14 @@ declare rejected boolean := false;
 begin
   begin
     update marks set text = 'leak' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60';
-  exception when check_violation then rejected := true;   -- marks_secret_text_null
+  exception when others then rejected := true;   -- MARK_CONTENT_AUTHOR_ONLY or check_violation
   end;
   if not rejected then raise exception '60 FAIL: owner UPDATE of secret text was not rejected'; end if;
   if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
     raise exception '60 FAIL: secret base text non-NULL after owner UPDATE attempt';
   end if;
 end $$;
-\echo '60 (F1 owner UPDATE rejected)      : PASS  (check_violation; base text stays NULL)'
+\echo '60 (F1 owner UPDATE rejected)      : PASS  (owner cannot rewrite content; base text stays NULL)'
 ROLLBACK;
 
 -- ── F1 positive: a NON-secret mark''s text UPDATE still succeeds ──────────────

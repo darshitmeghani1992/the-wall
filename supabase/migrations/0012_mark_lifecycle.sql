@@ -88,14 +88,21 @@ begin
     end if;
   end if;
 
-  -- [§32] sender edit window — an author editing CONTENT (not the owner/privileged
-  -- moderation path) may only do so within 10 minutes of creation.
+  -- [§32 + authenticity] a Mark's content and privacy modes belong to its AUTHOR.
+  -- Owners (and anyone else) may MODERATE — remove/hide/pin — but must never
+  -- rewrite what someone else left on the Wall (§3.1 "Personal Walls are authored
+  -- by other people"; §30; §33 authenticity). The author themself may edit only
+  -- within the 10-minute window (§32). The privileged moderation path is exempt.
   v_content_changed := (new.text is distinct from old.text)
                     or (new.color is distinct from old.color)
                     or (new.media_url is distinct from old.media_url)
-                    or (new.payload is distinct from old.payload);
-  if v_content_changed and v_is_author and not (v_is_owner or v_privileged) then
-    if now() >= old.created_at + interval '10 minutes' then
+                    or (new.payload is distinct from old.payload)
+                    or (new.anonymous is distinct from old.anonymous)
+                    or (new.secret is distinct from old.secret);
+  if v_content_changed and not v_privileged then
+    if not v_is_author then
+      raise exception 'MARK_CONTENT_AUTHOR_ONLY: only the author may edit a mark''s content';
+    elsif now() >= old.created_at + interval '10 minutes' then
       raise exception 'MARK_EDIT_WINDOW: the 10-minute edit window has closed';
     end if;
   end if;
