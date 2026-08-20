@@ -104,6 +104,13 @@ slice (below), which is complete through Two-Key.
   race and secret+media rejection). No Two-Key secret guarantee regressed; no new storage
   surface. No BLOCKER/HIGH/MEDIUM. One LOW (server-side storage MIME/size limits are
   client-only) → routed to the hosted storage-hardening task (below).
+- Mark-lifecycle §32/§33 (`0012`): **Reviewer APPROVE + QA PASS @ `e291269`.** Independent
+  review caught **3** real authorization bypasses (created_at window-anchor reset; non-owner
+  quota-poisoning of removal-accounting columns; owner rewriting another author's content) —
+  all fixed in the trigger and regression-tested. Final head clean; no open findings.
+  - _Informational (pre-existing, deploy task):_ `service_role` has no table grants on `marks`
+    in the migration schema — the moderation-write path relies on hosted-Supabase default
+    grants / `postgres`; verify on hosted apply.
 - Remaining Two-Key surface for a future on-device/staging pass: Secret reveal UI, voice/video
   recording+playback, hosted expiry job + bucket limits.
 
@@ -122,9 +129,13 @@ slice (below), which is complete through Two-Key.
 2. ✅ Slice A (Mark model + integrated composer) + ✅ Slice B (Voice + Video) — committed.
 3. **Two-Key on the A+B range** (migration `0011` is the high-risk part): independent
    Reviewer + QA bound to the head commit. — **in progress.**
-4. **Founder Gate (when ready to deploy):** apply migrations `0004`–`0011` to hosted Supabase
+4. ✅ Slice C (Mark-lifecycle §32/§33 enforcement, migration `0012`) — Two-Key @ `e291269`.
+5. **Founder Gate (when ready to deploy):** apply migrations `0004`–`0012` to hosted Supabase
    in one transaction; schedule `expire_secret_marks()` via `pg_cron`; set the `attachments`
-   bucket `file_size_limit`/`allowed_mime_types`. (Needs Founder go + credentials.)
-5. **Device QA:** real recording/playback for Voice/Video; on-device Secret reveal UI.
-6. Account-deletion lifecycle (§82); moderation/admin surface (§53); Alerts-label copy audit.
-7. ✅ CI runs the security suite on every PR (postgres:16 service).
+   bucket `file_size_limit`/`allowed_mime_types`; verify `service_role` moderation grants on
+   `marks`. (Needs Founder go + credentials.)
+6. **Device QA:** real recording/playback for Voice/Video; on-device Secret reveal UI.
+7. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30) — frontend slice; data
+   layer ready (`removeMark`/`editMarkText`/helpers).
+8. Account-deletion lifecycle (§82); moderation/admin surface (§53); Alerts-label copy audit.
+9. ✅ CI runs the security suite on every PR (postgres:16 service).
