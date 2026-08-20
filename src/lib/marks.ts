@@ -9,6 +9,9 @@ export type MarkDraft = {
   text?: string | null;
   color?: string | null;
   anonymous?: boolean;
+  /** Secret MODE (orthogonal to type). The server extracts content into the
+   * RLS-gated side table and nulls the base text (migration 0004/0011). */
+  secret?: boolean;
   mediaUrl?: string | null;
   payload?: MarkPayload | null;
 };
@@ -34,6 +37,9 @@ export async function createMark(draft: MarkDraft): Promise<Mark> {
       text: draft.text ?? null,
       color: draft.color ?? null,
       anonymous: draft.anonymous ?? false,
+      // Secret is server-enforced: the BEFORE-INSERT trigger moves `text` into the
+      // RLS-gated mark_secrets side table and nulls it here when secret is true.
+      secret: draft.secret ?? false,
       media_url: draft.mediaUrl ?? null,
       payload: draft.payload ?? null,
       rotation,
@@ -53,7 +59,7 @@ export async function createMark(draft: MarkDraft): Promise<Mark> {
   // privacy is a C2 RLS dependency; anonymity IS server-enforced by the F4
   // triggers in 0002, so "Anonymous Mark Created" is truthful).
   if (isAnonymous) track("Anonymous Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
-  if (draft.type === "secret") track("Secret Mark Created", { wall_id: draft.wallId });
+  if (draft.secret) track("Secret Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
   return data as Mark;
 }
 

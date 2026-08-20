@@ -4,16 +4,14 @@ export type WallType = "personal" | "shared";
 export type Visibility = "public" | "private" | "invite_only";
 export type ContributionPolicy = "everyone" | "friends" | "selected" | "nobody";
 
-export type MarkType =
-  | "sticky"
-  | "roast"
-  | "secret"
-  | "memory"
-  | "photo"
-  | "award"
-  | "poll"
-  | "doodle"
-  | "prediction";
+/**
+ * Canonical Mark content types (Master Spec §22–§25). Secret and Anonymous are
+ * orthogonal MODES (booleans on the Mark), never content types — any content type
+ * may be Secret and/or Anonymous. The prototype's sticky/roast/award/poll/doodle/
+ * prediction types are retired (§4 excludes games/doodles); the DB enum keeps the
+ * legacy values (Postgres can't drop them) but the app only ever uses these four.
+ */
+export type MarkType = "text" | "photo" | "voice" | "video";
 
 /** Lifecycle for moderation: pending marks await approval when a wall requires it. */
 export type MarkStatus = "active" | "pending" | "hidden" | "removed";
@@ -62,6 +60,9 @@ export interface Mark {
   text: string | null;
   color: string | null;
   anonymous: boolean;
+  /** Secret MODE: content lives in the RLS-gated `mark_secrets` side table and
+   * base `text` is NULL; viewers see a locked shell (Master Spec §27). */
+  secret: boolean;
   media_url: string | null;
   payload: MarkPayload | null;
   rotation: number; // persisted tilt in degrees
@@ -70,13 +71,12 @@ export interface Mark {
   created_at: string;
 }
 
-/** Type-specific extras stored on `marks.payload`. */
-export type MarkPayload =
-  | { kind: "poll"; question: string; options: string[] }
-  | { kind: "award"; award: string }
-  | { kind: "prediction"; unlock_at: string }
-  | { kind: "doodle"; width: number; height: number }
-  | Record<string, unknown>;
+/**
+ * Optional content-type-specific metadata stored on `marks.payload` (jsonb).
+ * Media Marks use it for things like voice/video duration and photo ordering;
+ * kept as an open bag so new metadata never needs a schema change.
+ */
+export type MarkPayload = Record<string, unknown>;
 
 export interface MarkReaction {
   mark_id: string;
