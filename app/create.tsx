@@ -11,31 +11,35 @@ import { getPersonalWall } from "@/lib/profiles";
 import { getWall } from "@/lib/walls";
 import { createMark, type MarkWithAuthor } from "@/lib/marks";
 import { track } from "@/lib/analytics";
-import { uploadImage } from "@/lib/upload";
+import { uploadMedia, MEDIA_LIMITS } from "@/lib/upload";
+import { useVoiceRecorder, formatDuration, MAX_VOICE_MS, MAX_VIDEO_MS } from "@/lib/recording";
+import type { MarkType } from "@/lib/types";
 import { colors, markColors, radius, shadow, stickySwatches } from "@/theme";
 
 /**
  * The single integrated Mark composer (Master Spec §21). Opens ready for text and
- * offers inline media; Secret and Anonymous are MODES (toggles), never a "pick a
- * type" step. A Mark always targets someone else's Personal Wall (recipient) or a
- * Shared Wall the user belongs to — never the user's own Personal Wall.
+ * offers inline media — Photo, Voice, Video — with Secret and Anonymous as MODES
+ * (toggles), never a "pick a type" step. A Mark always targets someone else's
+ * Personal Wall (recipient) or a Shared Wall the user belongs to.
  *
- * Content type is derived from what's attached: `photo` when an image is present,
- * otherwise `text`. Voice/Video attachments arrive in the media slice; their
- * buttons are intentionally absent until they actually record.
- *
- * Secret is text-only for now: a Secret's protected payload is the text (moved to
- * the RLS-gated side table server-side). Protecting media for Secret Marks needs
- * signed/protected storage (media slice), so we disable Secret while a photo is
- * attached rather than leak the image via the base row.
+ * Content type is derived from what's attached (text / photo / voice / video).
+ * Secret is text-only for now: its protected payload is the text (moved to the
+ * RLS-gated side table server-side); protecting media needs signed storage (a
+ * later slice), so attaching media clears Secret rather than leak the file.
  */
 const MAX_TEXT = 500;
-/** Keep in step with upload.ts's MAX_PROFILE_IMAGE (6 MB). */
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
-type PhotoDraft = { uri: string; mime: string };
+type MediaKind = "photo" | "voice" | "video";
+type MediaDraft = { kind: MediaKind; uri: string; mime: string; durationMs?: number };
 
-/** One identity/mode choice card ("Post as me" / "Anonymous", or the Secret one). */
+const KIND_TO_TYPE: Record<MediaKind, MarkType> = { photo: "photo", voice: "voice", video: "video" };
+const KIND_TO_UPLOAD: Record<MediaKind, keyof typeof MEDIA_LIMITS> = {
+  photo: "image",
+  voice: "audio",
+  video: "video",
+};
+
+/** One identity/mode choice card ("Post as me" / "Anonymous"). */
 function Choice({
   active,
   disabled,
@@ -77,6 +81,31 @@ function Choice({
   );
 }
 
+/** A compact attachment button in the composer's media row. */
+function AttachButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        flex: 1,
+        minHeight: 44,
+        borderWidth: 1.5,
+        borderColor: colors.ink,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 8,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Text variant="label" color={colors.ink}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function Composer() {
   const router = useRouter();
   const { wallId: targetWallId, recipientId, handle, sharedWallId, wallName } =
@@ -96,14 +125,14 @@ export default function Composer() {
   const [color, setColor] = useState<string>(stickySwatches[0]);
   const [anonymous, setAnonymous] = useState(false);
   const [secret, setSecret] = useState(false);
-  const [photo, setPhoto] = useState<PhotoDraft | null>(null);
+  const [media, setMedia] = useState<MediaDraft | null>(null);
   const [wallId, setWallId] = useState<string | null>(null);
-  // Recipient's wall setting; when false the server rejects anonymous marks.
   const [allowAnonymous, setAllowAnonymous] = useState(true);
   const [targetError, setTargetError] = useState<string | null>(null);
-  // idle → (uploading photo →) posting → idle. Drives progress + button copy.
   const [phase, setPhase] = useState<"idle" | "uploading" | "posting">("idle");
   const busy = phase !== "idle";
+  const recorder = useVoiceRecorder();
+  const recording = recorder.phase === "recording";
 
   // Resolve + validate the target wall (RLS still enforces contribution on insert).
   useEffect(() => {
@@ -144,60 +173,93 @@ export default function Composer() {
   }, [currentUserId, recipientId, targetWallId, sharedMode, sharedWallId]);
 
   const overLimit = text.length > MAX_TEXT;
-  const hasContent = text.trim().length > 0 || !!photo;
-  const canSubmit = !!wallId && !overLimit && hasContent && !(secret && !!photo);
-  const markType = photo ? ("photo" as const) : ("text" as const);
+  const hasContent = text.trim().length > 0 || !!media;
+  const canSubmit = !!wallId && !overLimit && hasContent && !recording && !(secret && !!media);
+  const markType: MarkType = media ? KIND_TO_TYPE[media.kind] : "text";
 
-  /** Validate a picked asset (type + size) before accepting it into the preview. */
-  function acceptAsset(asset: ImagePicker.ImagePickerAsset): void {
-    const mime = asset.mimeType ?? "image/jpeg";
-    if (!mime.startsWith("image/")) {
-      Alert.alert("Unsupported file", "Please choose a photo (JPG or PNG).");
-      return;
-    }
-    if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
-      Alert.alert("That photo is too big", "Please pick an image under 6 MB.");
-      return;
-    }
-    setPhoto({ uri: asset.uri, mime });
-    // A photo can't be Secret yet (protected media is a later slice) — clear it so
-    // we never post a "secret" mark whose image would sit unprotected on the row.
+  /** Attach media, clearing Secret (media secrecy is a later slice). */
+  function attach(draft: MediaDraft) {
+    setMedia(draft);
     setSecret(false);
   }
 
-  async function pickFromLibrary() {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!res.canceled) acceptAsset(res.assets[0]);
-  }
-
-  async function takePhoto() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert("Camera off", "Enable camera access in Settings to add a photo.");
+  async function pickPhoto(fromCamera: boolean) {
+    if (fromCamera) {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Camera off", "Enable camera access in Settings to add a photo.");
+        return;
+      }
+    }
+    const res = fromCamera
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
+    if (res.canceled) return;
+    const asset = res.assets[0];
+    const mime = asset.mimeType ?? "image/jpeg";
+    if (asset.fileSize && asset.fileSize > MEDIA_LIMITS.image) {
+      Alert.alert("That photo is too big", "Please pick an image under 6 MB.");
       return;
     }
-    const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
-    if (!res.canceled) acceptAsset(res.assets[0]);
+    attach({ kind: "photo", uri: asset.uri, mime });
+  }
+
+  async function pickVideo(fromCamera: boolean) {
+    if (fromCamera) {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Camera off", "Enable camera access in Settings to record a video.");
+        return;
+      }
+    }
+    const opts = {
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      videoMaxDuration: Math.round(MAX_VIDEO_MS / 1000), // 30s cap at capture time
+      quality: 0.8 as const,
+    };
+    const res = fromCamera
+      ? await ImagePicker.launchCameraAsync(opts)
+      : await ImagePicker.launchImageLibraryAsync(opts);
+    if (res.canceled) return;
+    const asset = res.assets[0];
+    const durationMs = typeof asset.duration === "number" ? asset.duration : undefined;
+    // Guard picked-from-library clips that exceed the cap (videoMaxDuration only
+    // bounds capture, not library selection).
+    if (durationMs && durationMs > MAX_VIDEO_MS + 1500) {
+      Alert.alert("Video too long", "Video Marks are up to 30 seconds. Please trim it and try again.");
+      return;
+    }
+    attach({ kind: "video", uri: asset.uri, mime: asset.mimeType ?? "video/mp4", durationMs });
+  }
+
+  async function toggleVoice() {
+    if (recording) {
+      const clip = await recorder.stop();
+      if (clip) attach({ kind: "voice", uri: clip.uri, mime: clip.mime, durationMs: clip.durationMs });
+      return;
+    }
+    await recorder.start();
+  }
+
+  async function removeMedia() {
+    if (media?.kind === "voice") await recorder.reset();
+    setMedia(null);
   }
 
   // Live preview via the real MarkView. Secret is previewed as visible content
-  // (the sender composes it) with a badge below, not as the locked shell.
+  // (the sender composes it), not the locked shell.
   const preview = useMemo<MarkWithAuthor>(
     () => ({
       id: "preview",
       wall_id: wallId ?? "",
       author_id: currentUserId ?? null,
       type: markType,
-      text: text.trim() || (photo ? "" : "your Mark…"),
+      text: text.trim() || (media ? "" : "your Mark…"),
       color: markType === "text" ? color : null,
       anonymous,
       secret: false,
-      media_url: photo?.uri ?? null,
-      payload: null,
+      media_url: media?.uri ?? null,
+      payload: media?.durationMs ? { durationMs: media.durationMs } : null,
       rotation: 0,
       pinned: false,
       status: "active",
@@ -211,17 +273,24 @@ export default function Composer() {
             handle: profile?.handle ?? "you",
           },
     }),
-    [markType, text, color, anonymous, photo, wallId, currentUserId, profile],
+    [markType, text, color, anonymous, media, wallId, currentUserId, profile],
   );
 
   function confirmDiscard() {
-    if (!hasContent) {
+    if (!hasContent && !recording) {
       router.back();
       return;
     }
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: () => router.back() },
+      {
+        text: "Discard",
+        style: "destructive",
+        onPress: async () => {
+          if (recording) await recorder.reset();
+          router.back();
+        },
+      },
     ]);
   }
 
@@ -229,15 +298,12 @@ export default function Composer() {
     if (!canSubmit || !wallId) return;
     try {
       let mediaUrl: string | null = null;
-      if (photo) {
+      if (media) {
         setPhase("uploading");
         try {
-          mediaUrl = await uploadImage(photo.uri, `marks/${wallId}`, photo.mime);
+          mediaUrl = await uploadMedia(media.uri, `marks/${wallId}`, media.mime, KIND_TO_UPLOAD[media.kind]);
         } catch (e: any) {
-          Alert.alert(
-            "Photo upload failed",
-            e?.message ?? "We couldn't upload that photo. Check your connection and try again.",
-          );
+          Alert.alert("Upload failed", e?.message ?? "We couldn't upload that. Check your connection and try again.");
           setPhase("idle");
           return;
         }
@@ -251,6 +317,7 @@ export default function Composer() {
         anonymous,
         secret,
         mediaUrl,
+        payload: media?.durationMs ? { durationMs: media.durationMs } : null,
       });
       if (sharedMode) track("Shared Wall Mark Created", { wall_id: wallId, mark_type: markType });
       if (router.canDismiss()) router.dismissAll();
@@ -276,6 +343,8 @@ export default function Composer() {
       </Screen>
     );
   }
+
+  const canToggleSecret = !media && !busy;
 
   return (
     <Screen dockInset={false}>
@@ -304,15 +373,17 @@ export default function Composer() {
         </Pressable>
       </View>
 
-      {/* Attached photo preview (with a way to change/remove it) */}
-      {photo ? (
+      {/* Attached media preview (with change/remove) */}
+      {media ? (
         <View style={{ marginBottom: 14 }}>
           <MarkView mark={preview} />
           <View style={{ flexDirection: "row", justifyContent: "center", gap: 18, marginTop: 4 }}>
-            <Pressable onPress={pickFromLibrary} hitSlop={8}>
-              <Text variant="label" color={colors.outline}>CHANGE</Text>
-            </Pressable>
-            <Pressable onPress={() => setPhoto(null)} hitSlop={8}>
+            {media.kind === "photo" ? (
+              <Pressable onPress={() => pickPhoto(false)} hitSlop={8}>
+                <Text variant="label" color={colors.outline}>CHANGE</Text>
+              </Pressable>
+            ) : null}
+            <Pressable onPress={removeMedia} hitSlop={8}>
               <Text variant="label" color={colors.error}>REMOVE</Text>
             </Pressable>
           </View>
@@ -328,7 +399,7 @@ export default function Composer() {
             borderColor: colors.ink,
             borderRadius: radius.card,
             padding: 14,
-            minHeight: photo ? 70 : 140,
+            minHeight: media ? 70 : 140,
           },
           shadow.mark,
         ]}
@@ -336,17 +407,17 @@ export default function Composer() {
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder={photo ? "add a caption…" : "leave a little note…"}
+          placeholder={media ? "add a caption…" : "leave a little note…"}
           placeholderTextColor={colors.outline}
           multiline
           maxLength={MAX_TEXT + 1}
-          autoFocus={!photo}
+          autoFocus={!media}
           style={{
             fontFamily: "Bricolage-Bold",
-            fontSize: photo ? 17 : 20,
+            fontSize: media ? 17 : 20,
             lineHeight: 26,
             color: colors.ink,
-            minHeight: photo ? 44 : 110,
+            minHeight: media ? 44 : 110,
             textAlignVertical: "top",
           }}
         />
@@ -359,15 +430,39 @@ export default function Composer() {
         {text.length}/{MAX_TEXT}
       </Text>
 
-      {/* Inline media attachments (Photos now; Voice/Video arrive in the media slice) */}
-      {!photo ? (
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
-          <View style={{ flex: 1 }}>
-            <Button label="＋ Photo" variant="ghost" onPress={pickFromLibrary} />
+      {/* Inline media attachments / recorder */}
+      {recording ? (
+        <View
+          style={{
+            marginTop: 14,
+            borderWidth: 2,
+            borderColor: colors.ink,
+            borderRadius: radius.card,
+            padding: 16,
+            alignItems: "center",
+            gap: 12,
+            backgroundColor: markColors.skyBlue,
+          }}
+        >
+          <Text variant="display" style={{ fontSize: 26 }}>{formatDuration(recorder.elapsedMs)}</Text>
+          <Text variant="label" color={colors.outline}>RECORDING · UP TO {Math.round(MAX_VOICE_MS / 1000)}s</Text>
+          <Button label="Stop ■" variant="primary" onPress={toggleVoice} />
+        </View>
+      ) : !media ? (
+        <View style={{ gap: 10, marginTop: 14 }}>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <AttachButton label="＋ Photo" onPress={() => pickPhoto(false)} disabled={busy} />
+            <AttachButton label="Camera" onPress={() => pickPhoto(true)} disabled={busy} />
           </View>
-          <View style={{ flex: 1 }}>
-            <Button label="Camera" variant="ghost" onPress={takePhoto} />
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <AttachButton label="🎙 Voice" onPress={toggleVoice} disabled={busy} />
+            <AttachButton label="🎬 Video" onPress={() => pickVideo(true)} disabled={busy} />
           </View>
+          {recorder.denied ? (
+            <Text variant="label" color={colors.error}>
+              Microphone access is off — enable it in Settings to record a voice Mark.
+            </Text>
+          ) : null}
         </View>
       ) : null}
 
@@ -424,9 +519,9 @@ export default function Composer() {
       <View style={{ marginTop: 16 }}>
         <Pressable
           onPress={() => setSecret((s) => !s)}
-          disabled={busy || !!photo}
+          disabled={!canToggleSecret}
           accessibilityRole="switch"
-          accessibilityState={{ checked: secret, disabled: busy || !!photo }}
+          accessibilityState={{ checked: secret, disabled: !canToggleSecret }}
           accessibilityLabel="Secret Mark — only the recipient can open it, once, within an hour"
           style={{
             flexDirection: "row",
@@ -437,7 +532,7 @@ export default function Composer() {
             borderRadius: radius.card,
             padding: 14,
             backgroundColor: secret ? markColors.secretPurple : colors.card,
-            opacity: busy || !!photo ? 0.6 : 1,
+            opacity: canToggleSecret ? 1 : 0.6,
           }}
         >
           <Text style={{ fontSize: 20 }}>{secret ? "🔒" : "🔓"}</Text>
@@ -446,8 +541,8 @@ export default function Composer() {
               Secret Mark
             </Text>
             <Text variant="label" color={secret ? markColors.secretOnPurple : colors.outline} style={{ marginTop: 2 }}>
-              {photo
-                ? "Not available with a photo yet"
+              {media
+                ? "Text-only for now"
                 : secret
                   ? "Only they can open it — once, within an hour"
                   : "Hide the content until they open it"}
@@ -456,8 +551,8 @@ export default function Composer() {
         </Pressable>
       </View>
 
-      {/* Live preview (text Marks; photo mode previews above) */}
-      {!photo ? (
+      {/* Live preview (text Marks; media previews above) */}
+      {!media && !recording ? (
         <>
           <Text variant="label" color={colors.outline} style={{ marginTop: 20, marginBottom: 12 }}>PREVIEW</Text>
           <View style={{ alignItems: "center" }}>
@@ -480,7 +575,7 @@ export default function Composer() {
           <Button
             label={
               phase === "uploading"
-                ? "Uploading photo…"
+                ? "Uploading…"
                 : phase === "posting"
                   ? "Posting…"
                   : secret

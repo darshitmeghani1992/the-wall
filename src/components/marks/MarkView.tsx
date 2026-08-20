@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
+import { Audio, Video, ResizeMode } from "expo-av";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
 import { colors, markColors, radius, type EnterMode } from "@/theme";
 import { revealSecret, type MarkWithAuthor } from "@/lib/marks";
 import { isMarkShareable, shareMark } from "@/lib/share";
+import { formatDuration } from "@/lib/recording";
 import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
+
+/** Voice/Video Marks stash their clip length (ms) on payload for the UI. */
+function markDurationMs(mark: MarkWithAuthor): number | null {
+  const d = (mark.payload as { durationMs?: unknown } | null)?.durationMs;
+  return typeof d === "number" && d > 0 ? d : null;
+}
 
 /** The display label for a Mark's author — anonymous Marks read "Anonymous". */
 function authorName(mark: MarkWithAuthor): string {
@@ -320,6 +328,124 @@ function PhotoMark({ mark }: { mark: MarkWithAuthor }) {
   );
 }
 
+/**
+ * Voice Mark: a compact play/pause control + duration. Loads the clip lazily on
+ * first play and unloads it on unmount so we never leak an audio player. Device
+ * playback is verified on a physical device (final QA pending).
+ */
+function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const durationMs = markDurationMs(mark);
+
+  useEffect(() => {
+    return () => {
+      void soundRef.current?.unloadAsync();
+      soundRef.current = null;
+    };
+  }, []);
+
+  async function toggle() {
+    if (!mark.media_url) return;
+    try {
+      if (!soundRef.current) {
+        setLoading(true);
+        const { sound } = await Audio.Sound.createAsync({ uri: mark.media_url });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlaying(false);
+            void sound.setPositionAsync(0);
+          }
+        });
+        setLoading(false);
+      }
+      if (playing) {
+        await soundRef.current.pauseAsync();
+        setPlaying(false);
+      } else {
+        await soundRef.current.playAsync();
+        setPlaying(true);
+      }
+    } catch {
+      setLoading(false);
+      setPlaying(false);
+    }
+  }
+
+  return (
+    <View>
+      <Pressable
+        onPress={toggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${playing ? "Pause" : "Play"} voice Mark${durationMs ? `, ${formatDuration(durationMs)}` : ""}`}
+        style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 }}
+      >
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.ink,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.surface} />
+          ) : (
+            <Text style={{ fontSize: 18, color: colors.surface }}>{playing ? "❙❙" : "▶"}</Text>
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text variant="label" color={colors.ink}>VOICE MARK</Text>
+          <Text variant="label" color={colors.outline}>
+            {durationMs ? formatDuration(durationMs) : "tap to play"}
+          </Text>
+        </View>
+      </Pressable>
+      {mark.text ? (
+        <Text variant="mark" style={{ fontSize: 16, marginTop: 8 }}>
+          {mark.text}
+        </Text>
+      ) : null}
+      <AuthorLine mark={mark} />
+    </View>
+  );
+}
+
+/** Video Mark: the clip with native controls + an optional caption below. */
+function VideoMark({ mark }: { mark: MarkWithAuthor }) {
+  const durationMs = markDurationMs(mark);
+  return (
+    <View>
+      {mark.media_url ? (
+        <Video
+          source={{ uri: mark.media_url }}
+          style={{ width: "100%", height: 180, borderRadius: 2, backgroundColor: "#000" }}
+          useNativeControls
+          resizeMode={ResizeMode.CONTAIN}
+          isLooping={false}
+        />
+      ) : (
+        <Placeholder label="VIDEO" height={180} />
+      )}
+      {durationMs ? (
+        <Text variant="label" color={colors.outline} style={{ marginTop: 6 }}>
+          {formatDuration(durationMs)}
+        </Text>
+      ) : null}
+      {mark.text ? (
+        <Text variant="mark" style={{ fontSize: 16, marginTop: 8 }}>
+          {mark.text}
+        </Text>
+      ) : null}
+      <AuthorLine mark={mark} />
+    </View>
+  );
+}
+
 /** Text Mark: plain text on a tactile colored card (color chosen in the composer). */
 function TextMark({ mark }: { mark: MarkWithAuthor }) {
   return (
@@ -343,6 +469,10 @@ function chromeFor(mark: MarkWithAuthor) {
   }
   switch (mark.type) {
     case "photo":
+      return { bg: colors.card, bordered: false, fastener: "pin" as const };
+    case "voice":
+      return { bg: markColors.skyBlue, bordered: false, fastener: "tape" as const };
+    case "video":
       return { bg: colors.card, bordered: false, fastener: "pin" as const };
     case "text":
     default:
@@ -405,6 +535,12 @@ export function MarkView({
     switch (mark.type) {
       case "photo":
         inner = <PhotoMark mark={mark} />;
+        break;
+      case "voice":
+        inner = <VoiceMark mark={mark} />;
+        break;
+      case "video":
+        inner = <VideoMark mark={mark} />;
         break;
       case "text":
       default:
