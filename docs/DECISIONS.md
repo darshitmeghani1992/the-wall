@@ -64,3 +64,35 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
   large frontend refactor separately from a security migration keeps each diff auditable.
 - **Reversibility:** Reversible (product/UI).
 - **Founder Gate?** No (engineering sequencing, §89). Visual result later merits Founder QA.
+
+## D-5 · 2026-08-20 · Secret is an orthogonal mode; canonical Mark types are text/photo/voice/video (migration 0011)
+- **Decision:** Retire the prototype Mark *types* (sticky/roast/award/poll/doodle/prediction)
+  from the app; the canonical content types are text/photo/voice/video, and Secret (like
+  Anonymous) is a boolean MODE that can apply to any of them. Migration 0011 adds the enum
+  values + `marks.secret` and repoints the extract trigger, F1 CHECK, and expiry cleanup from
+  `type='secret'` to the flag. Legacy enum values remain (Postgres can't drop them) but are
+  unused.
+- **Reason:** Master Spec §21 (single integrated composer, no type-picker), §27 ("any
+  supported Mark may be Secret"), §4 (games/doodles excluded). The flag is safe on the
+  realtime row — content still lives only in `mark_secrets`.
+- **Alternatives:** Rebuild the enum (destructive column swap — rejected); keep `secret` as a
+  type (breaks orthogonality with photo/voice/video — rejected).
+- **Reversibility:** Additive/idempotent migration; pre-hosted-apply. **Founder Gate?** No
+  (product behavior already fixed by the Master Spec); hosted apply remains a deploy Gate.
+
+## D-6 · 2026-08-20 · Voice/Video reuse the existing `attachments` bucket (no new storage surface)
+- **Decision:** Voice + Video media use the already-verified public, path-scoped `attachments`
+  bucket (ADR-006/0003) under `marks/<wallId>/…`, exactly like photos — no new bucket, policy,
+  or migration. Client enforces per-kind byte caps + a MIME allowlist; server-side bucket
+  limits (`file_size_limit`/`allowed_mime_types`) are a hosted-config hardening task.
+- **Reason:** Reuse the verified protection model rather than open a new storage security
+  surface; Secret media (which would need signed URLs) does not exist yet (Secret is text-only).
+- **Reversibility:** Fully reversible (client + config). **Founder Gate?** No.
+
+## D-7 · 2026-08-20 · expo-av for voice recording + audio/video playback
+- **Decision:** Use `expo-av` (~14.0.7, SDK 51) for mic recording and audio/video playback;
+  video capture via `expo-image-picker` with a 30s cap. Mic permission requested on first
+  record only (never during onboarding — §24).
+- **Reason:** First-party Expo module already in the managed workflow; minimal new surface.
+- **Alternatives:** expo-video/expo-audio (newer, not in SDK 51's stable set) — deferred.
+- **Reversibility:** Reversible (dependency). **Founder Gate?** No.

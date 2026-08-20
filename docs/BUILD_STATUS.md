@@ -7,9 +7,26 @@
 _Last updated: 2026-08-20 · branch `claude/kickoff-execution-chx2mh` (= `origin/main` at session start)._
 
 ## Current Slice
-**Slice 7 — Anonymous + Secret (high-risk).** Completing the Secret Mark lifecycle:
-one-time atomic reveal + 1-hour expiry (Master Spec §27.3 / §27.4 / §68), which the
-prior batches left as content-isolation-only.
+**Slice 3/4 reconciliation + media (Founder-directed).** Reconciled the Mark model to
+the Master Spec's integrated composer (Secret/Anonymous as modes; canonical content
+types) and added Voice + Video Marks. Preceded by the Secret one-time-reveal + expiry
+slice (below), which is complete through Two-Key.
+
+### Slice A — Mark model + integrated composer ✅ (committed)
+- Migration `0011`: `mark_type` gains text/voice/video; `marks.secret` boolean; the three
+  `type='secret'` couplings (extract trigger, F1 CHECK, expiry cleanup) repointed to the
+  flag. Full suite green. **High-risk (secret storage) → Two-Key pending on this range.**
+- Frontend: single integrated composer (`app/create.tsx`) — text + photo + Anonymous +
+  Secret toggles; removed the type-picker and `app/write/[type].tsx`; MarkView pruned of
+  the excluded prototype types (roast/award/poll/doodle/prediction). Resolves the §21/§4
+  reconciliation debt.
+
+### Slice B — Voice + Video Marks ✅ (committed)
+- `expo-av` recorder (≤60s voice) + ImagePicker video capture (≤30s); `uploadMedia` with
+  per-kind caps + MIME allowlist; MarkView voice/video renderers; app.json mic permission.
+- Reuses the verified public `attachments` bucket (path-scoped, ADR-006/0003) — **no new
+  storage policy/migration, no new security surface.**
+- **Device QA pending:** real mic/camera recording + on-device playback (no device here).
 
 ## Verified This Session (real Postgres 16, local cluster)
 - **Baseline build health (Slice 0):** `npm ci` clean; `tsc --noEmit` → 0 errors;
@@ -54,21 +71,22 @@ prior batches left as content-isolation-only.
 | Slice 1 Auth→Onboarding→My Wall | **Partial** | Screens + libs present; Email-OTP/OAuth wired. On-device flow **not** verified (no device/hosted). |
 | Slice 2 Discover→Friend/Follow→Other Wall | **Partial** | Screens + `friendships`/`follows` libs; RLS **verified**. UI not device-verified. |
 | Slice 3 Text Mark→Reaction→Alert | **Partial** | Composer + reactions + notification triggers present; triggers **verified**. |
-| Slice 4 Photo/Voice/Video | **Partial/Missing** | Photo Mark implemented (upload to `attachments`). **Voice + Video MISSING** — no `expo-av`/audio recorder, no audio/video storage policy, no playback. |
+| Slice 4 Photo/Voice/Video | **Implemented (device QA pending)** | Photo + **Voice (≤60s) + Video (≤30s)** in the integrated composer; `expo-av` recorder + playback; `uploadMedia` caps/MIME; reuses verified `attachments` bucket. Real recording/playback pending on a device. |
 | Slice 5 Permissions/Blocking/Reporting | **Partial** | RLS block/permission **verified**; report write path present; owner-removal quota (§33) needs verification. |
 | Slice 6 Shared Walls | **Partial** | `walls.ts` member data layer + `app/shared/*` screens; membership RLS **verified**. Ownership-transfer/delete UI needs verification. |
 | Slice 7 Anonymous | **Working (verified)** | anonymity side-table RLS **verified**. |
 | Slice 7 Secret | **Working (verified, DB layer)** | isolation + one-time reveal + 1h expiry **verified**; Two-Key APPROVE+PASS @ `7d36458`. On-device UI pass pending. |
 | Slice 8 Deep links/Sharing/Account deletion/Moderation | **Partial** | pending-link + share libs present; account-deletion lifecycle (§82) not implemented. |
 
-## Reconciliation Debt (Master Spec vs current code) — tracked, not yet actioned
-- **Mark type model conflicts §21/§4.** Current composer is a *type picker*
-  (`app/create.tsx`) with obsolete/excluded types (`roast`, `award`, `poll`, `doodle`,
-  `prediction`) and treats `secret` as a *type*. Spec requires a **single integrated
-  composer** (text + inline Photos/Video/Voice) with **Anonymous** and **Secret** as
-  *toggles/modes*, no type-picker, no games/doodles/polls. See DECISIONS D-2. This is the
-  next major frontend reconciliation after the Secret lifecycle lands.
-- **Alerts vs Notifications label** (§6 default **Alerts**) — audit copy for consistency.
+## Reconciliation Debt (Master Spec vs current code)
+- ✅ **Mark type model (§21/§4) — RESOLVED (Slice A).** Single integrated composer; Secret/
+  Anonymous are modes; canonical content types text/photo/voice/video; excluded prototype
+  types retired from the app surface.
+- **Alerts vs Notifications label** (§6 default **Alerts**) — audit copy for consistency (open).
+- **Protected media for Secret Marks** — Secret is text-only today; secret media needs
+  signed/protected storage (a later slice). Composer clears Secret when media is attached.
+- **Server-side media limits** — client enforces caps/MIME (§108); the `attachments` bucket's
+  `file_size_limit` / `allowed_mime_types` are a hosted-config hardening task.
 
 ## Blocked
 - **On-device / hosted verification** blocked without a device build + a hosted Supabase
@@ -95,13 +113,13 @@ prior batches left as content-isolation-only.
   is provided and callable; scheduling is a deploy task.
 
 ## Next Actions
-1. ✅ Secret one-time reveal + expiry — Two-Key APPROVE+PASS @ `7d36458`, draft PR #17.
-2. **Founder Gate (when ready to deploy):** apply migrations `0004`–`0010` to hosted
-   Supabase in one transaction; schedule `expire_secret_marks()` via `pg_cron`; on-device
-   pass of the Secret reveal UI. (Needs Founder go + credentials.)
-3. Reconcile Mark composer to the integrated single-composer model (remove excluded types
-   `roast`/`award`/`poll`/`doodle`/`prediction`; Secret/Anonymous as toggles) — §21/§4.
-4. Plan Voice + Video Mark slice (recorder + protected media storage + playback + RLS).
-5. Account-deletion lifecycle (§82) and moderation/admin surface (§53).
-6. ✅ Wired `supabase/tests/run_tests.sh` into CI (`.github/workflows/ci.yml` `security` job,
-   postgres:16 service) so the launch-blocking suite runs on every PR — verifying on PR #17.
+1. ✅ Secret one-time reveal + expiry — Two-Key APPROVE+PASS @ `7d36458`.
+2. ✅ Slice A (Mark model + integrated composer) + ✅ Slice B (Voice + Video) — committed.
+3. **Two-Key on the A+B range** (migration `0011` is the high-risk part): independent
+   Reviewer + QA bound to the head commit. — **in progress.**
+4. **Founder Gate (when ready to deploy):** apply migrations `0004`–`0011` to hosted Supabase
+   in one transaction; schedule `expire_secret_marks()` via `pg_cron`; set the `attachments`
+   bucket `file_size_limit`/`allowed_mime_types`. (Needs Founder go + credentials.)
+5. **Device QA:** real recording/playback for Voice/Video; on-device Secret reveal UI.
+6. Account-deletion lifecycle (§82); moderation/admin surface (§53); Alerts-label copy audit.
+7. ✅ CI runs the security suite on every PR (postgres:16 service).
