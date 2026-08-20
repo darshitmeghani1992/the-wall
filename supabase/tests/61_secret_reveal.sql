@@ -176,4 +176,26 @@ end $$;
 \echo '61 (no side-table row → missing)   : PASS  (classification distinguishes missing)'
 ROLLBACK;
 
-\echo '── 61_secret_reveal: ALL PASS (one-time reveal + expiry + recipient-gating) ──'
+-- ── Server rejects a Secret Mark carrying media (secret is text-only today) ───
+-- Mirrors the airtight client gate with a DB CHECK so a hand-crafted insert can't
+-- leak a secret's media_url on the published base row.
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
+do $$
+declare rejected boolean := false;
+begin
+  begin
+    insert into marks (id, wall_id, author_id, type, anonymous, secret, media_url)
+    values ('cccccccc-cccc-cccc-cccc-ccccccccc614',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '11111111-1111-1111-1111-111111111111','photo', false, true,
+            'https://example.test/secret.jpg');
+  exception when check_violation then rejected := true;   -- marks_secret_media_null
+  end;
+  if not rejected then raise exception '61 FAIL: secret+media insert was not rejected'; end if;
+end $$;
+\echo '61 (secret+media rejected)         : PASS  (secret is text-only; no media leak)'
+ROLLBACK;
+
+\echo '── 61_secret_reveal: ALL PASS (one-time reveal + expiry + recipient-gating + media guard) ──'

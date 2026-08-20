@@ -34,6 +34,14 @@ alter type mark_type add value if not exists 'video';
 -- ── Secret as an orthogonal boolean mode ─────────────────────────────────────
 alter table marks add column if not exists secret boolean not null default false;
 
+-- Backfill: any legacy type='secret' rows become secret=true so the flag is the
+-- single source of truth regardless of deploy history. Under the old model the
+-- 0004 extract trigger already moved their content to mark_secrets and nulled the
+-- base text, so this satisfies the repointed CHECK below. (No such rows exist in
+-- any real environment — 0004–0011 are pre-hosted-apply — this just makes the
+-- migration correct independent of deploy state.)
+update marks set secret = true where type = 'secret' and not secret;
+
 -- ── Repoint the write boundary: extract on secret=true, not type='secret' ────
 -- (Identical body to 0004 except the guard; still SECURITY DEFINER so it can
 -- write the client-revoked side table, still nulls the base text so REST + the
@@ -58,6 +66,17 @@ alter table marks drop constraint if exists marks_secret_text_null;
 do $$ begin
   alter table marks add constraint marks_secret_text_null
     check (secret = false or text is null);
+exception when duplicate_object then null; end $$;
+
+-- ── Secret is text-only today: mirror the text guarantee for media server-side ──
+-- The composer already refuses to attach media to a Secret (four client layers),
+-- but defense-in-depth belongs at the DB: a Secret's media_url would otherwise ride
+-- unprotected on the realtime-published base row. Reject secret+media at the write
+-- boundary. (Protected/secret media — signed URLs — is a later slice that will
+-- revisit this constraint.)
+do $$ begin
+  alter table marks add constraint marks_secret_media_null
+    check (secret = false or media_url is null);
 exception when duplicate_object then null; end $$;
 
 -- ── Repoint the expiry cleanup from type='secret' to secret=true ─────────────
