@@ -58,7 +58,6 @@ as $$
 declare
   v_content text;
   v_opened  timestamptz;
-  v_found   boolean;
 begin
   -- 1. Authorize: only the wall owner (the recipient) may reveal. Return before
   --    touching the row so a non-recipient learns nothing about its state.
@@ -84,10 +83,11 @@ begin
   end if;
 
   -- 3. Classify the failure WITHOUT leaking content. (No row → missing; already
-  --    opened → consumed; otherwise → expired.)
-  select opened_at, true into v_opened, v_found
+  --    opened → consumed; otherwise → expired.) FOUND reflects the SELECT below,
+  --    so a genuinely absent side-table row is reported as 'missing', not 'expired'.
+  select opened_at into v_opened
     from mark_secrets where mark_id = p_mark_id;
-  if not v_found then
+  if not found then
     return jsonb_build_object('ok', false, 'reason', 'missing');
   elsif v_opened is not null then
     return jsonb_build_object('ok', false, 'reason', 'consumed');

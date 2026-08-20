@@ -158,4 +158,22 @@ end $$;
 \echo '61 (non-recipient → not_authorized): PASS  (denied; secret stays unopened)'
 ROLLBACK;
 
+-- ── No side-table row → 'missing' (not misreported as 'expired') ─────────────
+-- M_active (seed) is a NON-secret mark on O's wall: the owner gate passes but the
+-- consuming UPDATE hits zero rows and the classify SELECT finds no mark_secrets
+-- row → 'missing'. Guards the classification against the uninitialized-flag bug.
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owns W_O)
+do $$
+declare r jsonb;
+begin
+  r := reveal_secret('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1');
+  if (r->>'ok') <> 'false' or (r->>'reason') <> 'missing' or r ? 'content' then
+    raise exception '61 FAIL: absent side-table row not reported as missing: %', r;
+  end if;
+end $$;
+\echo '61 (no side-table row → missing)   : PASS  (classification distinguishes missing)'
+ROLLBACK;
+
 \echo '── 61_secret_reveal: ALL PASS (one-time reveal + expiry + recipient-gating) ──'
