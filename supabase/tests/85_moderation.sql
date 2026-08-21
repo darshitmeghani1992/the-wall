@@ -71,6 +71,27 @@ end $$;
 \echo '85 (report read scope)             : PASS  (reporter sees own; stranger does not)'
 ROLLBACK;
 
+-- ── A client cannot self-promote to admin (privilege-escalation guard) ───────
+BEGIN;
+set local role authenticated;
+set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (ordinary user)
+-- B tries to grant themselves admin via the profiles-update-self policy.
+update profiles set is_admin = true where id = '22222222-2222-2222-2222-222222222222';
+-- And tries to flip their own account_status directly (must also be inert now).
+update profiles set account_status = 'suspended' where id = '22222222-2222-2222-2222-222222222222';
+reset role;
+do $$
+begin
+  if (select is_admin from profiles where id = '22222222-2222-2222-2222-222222222222') then
+    raise exception '85 FAIL: a user self-promoted to admin';
+  end if;
+  if (select account_status from profiles where id = '22222222-2222-2222-2222-222222222222') <> 'active' then
+    raise exception '85 FAIL: a user changed account_status via a direct update (bypassing the RPCs)';
+  end if;
+end $$;
+\echo '85 (no self-promote to admin)      : PASS  (is_admin + status client-immutable)'
+ROLLBACK;
+
 -- ── Admin gating: non-admin cannot moderate; admin can, and it is logged ─────
 BEGIN;
 -- Make D an admin.

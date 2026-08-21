@@ -40,6 +40,31 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from profiles p where p.id = uid and p.is_admin);
 $$;
 
+-- ── Privilege guard: is_admin (and the lifecycle columns) are NEVER client-set ─
+-- The 0001 `profiles update self` policy lets a user update their OWN row's
+-- columns — which would include `is_admin`, i.e. self-promotion to admin. This
+-- BEFORE-UPDATE trigger forces `is_admin`, `account_status`, and `deactivated_at`
+-- back to their old values for any NON-privileged caller (current_user not
+-- service_role/postgres). The lifecycle RPCs (deactivate/reactivate/admin_*) run
+-- SECURITY DEFINER as the table owner, so current_user is 'postgres' there and the
+-- guard lets them through — the ONLY paths that may change these columns. This
+-- also closes the earlier note that a direct self-update skipped deactivated_at
+-- stamping: status now changes solely via the stamping RPCs.
+create or replace function profiles_guard_privileged()
+returns trigger language plpgsql security invoker set search_path = public as $$
+begin
+  if current_user not in ('service_role','postgres') then
+    new.is_admin       := old.is_admin;
+    new.account_status := old.account_status;
+    new.deactivated_at := old.deactivated_at;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists profiles_guard_privileged on profiles;
+create trigger profiles_guard_privileged before update on profiles
+  for each row execute function profiles_guard_privileged();
+
 -- Reporter reads their own reports; admins read all. (service_role still reads
 -- via BYPASSRLS.) Insert-self policy from 0001 is unchanged.
 drop policy if exists "reports read own or admin" on reports;
