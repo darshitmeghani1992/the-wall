@@ -111,6 +111,13 @@ slice (below), which is complete through Two-Key.
   - _Informational (pre-existing, deploy task):_ `service_role` has no table grants on `marks`
     in the migration schema — the moderation-write path relies on hosted-Supabase default
     grants / `postgres`; verify on hosted apply.
+- Approved Writers §15/§50 (`0015`): **committed @ `41d7253` — Two-Key PENDING.** Independent
+  Reviewer + QA are **blocked on the account session limit (resets 04:50 UTC)**; the reviewer
+  agent terminated mid-review. Do NOT treat as verified. Author (non-independent) checks only:
+  full suite green (107 assertions incl. new `55_approved_writers`), `tsc`/`eslint` clean, and a
+  body-diff confirming `can_contribute` gained ONLY the `'selected'` branch vs 0013 and
+  `can_view_wall` is untouched (approval is write-only). **Next action: re-run Reviewer + QA
+  bound to `41d7253` once the limit resets.**
 - Followers §17/§66 (`0014`): **Reviewer APPROVE + QA PASS @ `ddec951`.** One-way follow of a
   public Personal Wall; self-only; block/active-gated both ways; block tears down follow rows;
   grants no write; no SEC-001/etc regression. **Zero findings.** Edge-list world-readable = D-10.
@@ -167,10 +174,8 @@ slice (below), which is complete through Two-Key.
      deactivated user can't contribute or be friend-requested; reactivation restores access;
      the SEC-001/anon/secret/quota suites stay green. Two-Key.
 9. ✅ Followers §17/§66 (`0014`) — Two-Key @ `ddec951`.
-10. **Approved Writers (§15/§50)** — NEXT backend candidate: `contribution_policy='selected'` is
-    an enum value but `can_contribute` doesn't handle it (so 'selected' currently = owner-only,
-    a gap). Add an `approved_writers` table + gate `can_contribute` on it; private-visibility
-    still wins (§50). DB-verifiable, Two-Key.
+10. **Approved Writers (§15/§50)** — implemented @ `41d7253`; **Two-Key PENDING** (re-run
+    Reviewer + QA bound to `41d7253` once the account session limit resets at 04:50 UTC).
 11. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30); moderation/admin (§53);
     blocking/reporting UI (§51/§52); Discover-card Follow + profile counts; Alerts-label copy.
 12. ✅ CI runs the security suite on every PR (postgres:16 service).
