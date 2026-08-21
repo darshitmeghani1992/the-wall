@@ -34,8 +34,10 @@ export interface Profile {
   website: string | null;
   // Account lifecycle (0013). 'deactivated' = recoverable (§82); world-readable so
   // existing Marks still show their author, but discovery/interaction is gated.
-  account_status: "active" | "deactivated";
+  account_status: "active" | "deactivated" | "suspended";
   deactivated_at: string | null;
+  /** Protected moderation capability (§53). Never settable by the client. */
+  is_admin: boolean;
   created_at: string;
 }
 

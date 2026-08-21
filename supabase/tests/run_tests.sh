@@ -104,6 +104,8 @@ echo "── load: 0015_approved_writers.sql"
 psql_test -f "$MIG/0015_approved_writers.sql" >/dev/null
 echo "── load: 0016_reactions_single.sql"
 psql_test -f "$MIG/0016_reactions_single.sql" >/dev/null
+echo "── load: 0017_moderation.sql"
+psql_test -f "$MIG/0017_moderation.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -112,7 +114,7 @@ echo "════════════════════════�
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
 for area in 10_friendships 15_follows 20_blocking 25_reactions 30_anonymity 40_mark_moderation 45_mark_lifecycle 55_approved_writers 50_storage \
-            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 90_profile_links \
+            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 85_moderation 90_profile_links \
             95_account_lifecycle; do
   psql_test -f "$HERE/$area.sql"
   echo ""
