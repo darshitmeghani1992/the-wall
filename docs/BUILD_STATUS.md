@@ -70,7 +70,7 @@ slice (below), which is complete through Two-Key.
 | Slice 0 Foundation | **Working (verified)** | deps/tsc/lint green; theme tokens, nav shell, Supabase client present. |
 | Slice 1 Auth→Onboarding→My Wall | **Partial** | Screens + libs present; Email-OTP/OAuth wired. On-device flow **not** verified (no device/hosted). |
 | Slice 2 Discover→Friend/Follow→Other Wall | **Partial** | Friends + **Followers (§17/§66) implemented + Two-Key @ `ddec951`** (follows table/RLS, block/active-gated, no write grant; Follow button on person wall). Discover-card Follow + profile counts are follow-on UI. RLS **verified**. |
-| Slice 3 Text Mark→Reaction→Alert | **Partial** | Composer + reactions + notification triggers present; triggers **verified**. |
+| Slice 3 Text Mark→Reaction→Alert | **Mostly done** | Integrated composer; **reactions one-per-user §31 done + Two-Key (`0016`)**; notification triggers **verified**. On-device UI pass pending. |
 | Slice 4 Photo/Voice/Video | **Implemented (device QA pending)** | Photo + **Voice (≤60s) + Video (≤30s)** in the integrated composer; `expo-av` recorder + playback; `uploadMedia` caps/MIME; reuses verified `attachments` bucket. Real recording/playback pending on a device. |
 | Slice 5 Permissions/Blocking/Reporting | **Mostly done** | RLS block/permission **verified**; §32 edit window + §33 removal quota server-enforced + verified (`0012`); **Approved Writers §50 done + Two-Key (`0015`)**; report write path present. Owner-removal/edit **UI** (§30), moderation/admin (§53), blocking/reporting UI are frontend follow-ons. |
 | Slice 6 Shared Walls | **Partial** | `walls.ts` member data layer + `app/shared/*` screens; membership RLS **verified**. Ownership-transfer/delete UI needs verification. |
@@ -116,6 +116,10 @@ slice (below), which is complete through Two-Key.
   body preserved with only the `'selected'` branch added; §50 private-visibility-wins enforced;
   approval is write-only (no view grant); owner-only management; block/active override intact.
   No SEC-001/etc regression. **Zero findings.**
+- Reactions one-per-user §31 (`0016`): **Reviewer APPROVE + QA PASS @ `85da09f`.** PK repointed
+  to (mark_id,user_id) (fixes the emoji-stacking "de-dup debt"); self-only UPDATE policy; client
+  single-active reaction; emoji set aligned to §31. A reaction *change* fires no duplicate
+  notification. No regression. **Zero findings.**
 - Followers §17/§66 (`0014`): **Reviewer APPROVE + QA PASS @ `ddec951`.** One-way follow of a
   public Personal Wall; self-only; block/active-gated both ways; block tears down follow rows;
   grants no write; no SEC-001/etc regression. **Zero findings.** Edge-list world-readable = D-10.
@@ -173,6 +177,10 @@ slice (below), which is complete through Two-Key.
      the SEC-001/anon/secret/quota suites stay green. Two-Key.
 9. ✅ Followers §17/§66 (`0014`) — Two-Key @ `ddec951`.
 10. ✅ Approved Writers (§15/§50, `0015`) — Two-Key @ `41d7253`.
+10b. ✅ Reactions one-per-user (§31, `0016`) — Two-Key @ `85da09f`.
+10c. **Reporting completeness (§52)** + **moderation/admin (§53)** — remaining backend
+     candidates: reports table is minimal (mark-only target, free-text reason, no status);
+     no `moderation_actions` table or admin role. DB-verifiable, Two-Key.
 11. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30); moderation/admin (§53);
     blocking/reporting UI (§51/§52); Discover-card Follow + profile counts; Alerts-label copy.
 12. ✅ CI runs the security suite on every PR (postgres:16 service).
