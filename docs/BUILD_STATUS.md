@@ -76,7 +76,7 @@ slice (below), which is complete through Two-Key.
 | Slice 6 Shared Walls | **Partial** | `walls.ts` member data layer + `app/shared/*` screens; membership RLS **verified**. Ownership-transfer/delete UI needs verification. |
 | Slice 7 Anonymous | **Working (verified)** | anonymity side-table RLS **verified**. |
 | Slice 7 Secret | **Working (verified, DB layer)** | isolation + one-time reveal + 1h expiry **verified**; Two-Key APPROVE+PASS @ `7d36458`. On-device UI pass pending. |
-| Slice 8 Deep links/Sharing/Account deletion/Moderation | **Partial** | pending-link + share libs present; account-deletion lifecycle (§82) not implemented. |
+| Slice 8 Deep links/Sharing/Account deletion/Moderation | **Partial** | pending-link + share libs present; **account deactivation (§82) backend done + Two-Key @ `3b58be7`** (Settings UI + hosted purge job pending); moderation/admin (§53) still thin. |
 
 ## Reconciliation Debt (Master Spec vs current code)
 - ✅ **Mark type model (§21/§4) — RESOLVED (Slice A).** Single integrated composer; Secret/
@@ -111,6 +111,14 @@ slice (below), which is complete through Two-Key.
   - _Informational (pre-existing, deploy task):_ `service_role` has no table grants on `marks`
     in the migration schema — the moderation-write path relies on hosted-Supabase default
     grants / `postgres`; verify on hosted apply.
+- Account deactivation §82 (`0013`): **Reviewer APPROVE + QA PASS @ `3b58be7`.** Re-gates the
+  two SECURITY DEFINER chokepoints + friendships-insert on `is_active_account`; deactivate/
+  reactivate RPCs are self-only. No SEC-001/secret/anon/quota regression; shared walls not
+  over-gated. No BLOCKER/HIGH/MEDIUM. Two LOW/informational (fail-closed, non-blocking):
+  (a) `walls.owner_id`→`auth.users` means a profile-less owner's wall is hidden (fail-closed);
+  (b) the `profiles update self` policy lets a user self-set `account_status` directly,
+  skipping `deactivated_at` stamping (self-only; recoverable) — optional future hardening: a
+  BEFORE-UPDATE trigger to keep `deactivated_at` in sync with `account_status`.
 - Remaining Two-Key surface for a future on-device/staging pass: Secret reveal UI, voice/video
   recording+playback, hosted expiry job + bucket limits.
 

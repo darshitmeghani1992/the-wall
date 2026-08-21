@@ -116,3 +116,21 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
   is a separate frontend slice; the data layer (`removeMark`/`editMarkText`/helpers) is ready.
   MVP treats a `safety` reason as owner-asserted; linking it to an actual report/block to
   prevent gaming is a later hardening.
+
+## D-9 · 2026-08-21 · Account deactivation gates the two RLS chokepoints, not the profile row (migration 0013)
+- **Decision:** Implement §82 deactivation by adding `profiles.account_status`/`deactivated_at`
+  + `is_active_account(uid)` and gating the existing `can_view_wall`/`can_contribute` SECURITY
+  DEFINER functions and the friendships-insert policy — NOT by hiding the profile row. A
+  deactivated account's PERSONAL wall becomes non-viewable/non-contributable, the account can't
+  contribute anywhere or be friend-requested, and it's excluded from people search. SHARED
+  walls it owns stay accessible to members (gate is personal-wall-only). Self-service
+  `deactivate_account()`/`reactivate_account()` RPCs (self-only) stamp `deactivated_at`.
+- **Reason:** Hiding the profile row would break author display on existing Marks. Gating the two
+  chokepoints (already the tested centre of visibility/contribution) keeps blast-radius minimal
+  and the SEC-001 suite as the regression guard. Shared walls aren't gated on owner-active
+  because deactivation is reversible and members must keep access; Shared-Wall ownership is
+  handled at FINAL deletion (§43/§82).
+- **Alternatives:** RLS on `profiles` SELECT to hide deactivated rows (breaks Mark authorship —
+  rejected); a dedicated `deactivations` table (more surface, no benefit — rejected).
+- **Reversibility:** Additive/idempotent migration; pre-hosted-apply. **Founder Gate?** No for
+  code; the hosted 30-day purge job (hard delete + ownership transfer) is a deploy Gate.
