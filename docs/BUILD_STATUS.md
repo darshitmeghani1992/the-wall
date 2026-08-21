@@ -72,7 +72,7 @@ slice (below), which is complete through Two-Key.
 | Slice 2 Discover→Friend/Follow→Other Wall | **Partial** | Friends + **Followers (§17/§66) implemented + Two-Key @ `ddec951`** (follows table/RLS, block/active-gated, no write grant; Follow button on person wall). Discover-card Follow + profile counts are follow-on UI. RLS **verified**. |
 | Slice 3 Text Mark→Reaction→Alert | **Partial** | Composer + reactions + notification triggers present; triggers **verified**. |
 | Slice 4 Photo/Voice/Video | **Implemented (device QA pending)** | Photo + **Voice (≤60s) + Video (≤30s)** in the integrated composer; `expo-av` recorder + playback; `uploadMedia` caps/MIME; reuses verified `attachments` bucket. Real recording/playback pending on a device. |
-| Slice 5 Permissions/Blocking/Reporting | **Partial** | RLS block/permission **verified**; **§32 edit window + §33 removal quota now server-enforced + verified (migration 0012)**; report write path present. Owner-removal / edit **UI** (Mark detail sheet §30) is the follow-on frontend slice. |
+| Slice 5 Permissions/Blocking/Reporting | **Mostly done** | RLS block/permission **verified**; §32 edit window + §33 removal quota server-enforced + verified (`0012`); **Approved Writers §50 done + Two-Key (`0015`)**; report write path present. Owner-removal/edit **UI** (§30), moderation/admin (§53), blocking/reporting UI are frontend follow-ons. |
 | Slice 6 Shared Walls | **Partial** | `walls.ts` member data layer + `app/shared/*` screens; membership RLS **verified**. Ownership-transfer/delete UI needs verification. |
 | Slice 7 Anonymous | **Working (verified)** | anonymity side-table RLS **verified**. |
 | Slice 7 Secret | **Working (verified, DB layer)** | isolation + one-time reveal + 1h expiry **verified**; Two-Key APPROVE+PASS @ `7d36458`. On-device UI pass pending. |
@@ -111,13 +111,11 @@ slice (below), which is complete through Two-Key.
   - _Informational (pre-existing, deploy task):_ `service_role` has no table grants on `marks`
     in the migration schema — the moderation-write path relies on hosted-Supabase default
     grants / `postgres`; verify on hosted apply.
-- Approved Writers §15/§50 (`0015`): **committed @ `41d7253` — Two-Key PENDING.** Independent
-  Reviewer + QA are **blocked on the account session limit (resets 04:50 UTC)**; the reviewer
-  agent terminated mid-review. Do NOT treat as verified. Author (non-independent) checks only:
-  full suite green (107 assertions incl. new `55_approved_writers`), `tsc`/`eslint` clean, and a
-  body-diff confirming `can_contribute` gained ONLY the `'selected'` branch vs 0013 and
-  `can_view_wall` is untouched (approval is write-only). **Next action: re-run Reviewer + QA
-  bound to `41d7253` once the limit resets.**
+- Approved Writers §15/§50 (`0015`): **Reviewer APPROVE + QA PASS @ `41d7253`** (Two-Key
+  interrupted by the account session limit, then re-run cleanly after reset). `can_contribute`
+  body preserved with only the `'selected'` branch added; §50 private-visibility-wins enforced;
+  approval is write-only (no view grant); owner-only management; block/active override intact.
+  No SEC-001/etc regression. **Zero findings.**
 - Followers §17/§66 (`0014`): **Reviewer APPROVE + QA PASS @ `ddec951`.** One-way follow of a
   public Personal Wall; self-only; block/active-gated both ways; block tears down follow rows;
   grants no write; no SEC-001/etc regression. **Zero findings.** Edge-list world-readable = D-10.
@@ -174,8 +172,7 @@ slice (below), which is complete through Two-Key.
      deactivated user can't contribute or be friend-requested; reactivation restores access;
      the SEC-001/anon/secret/quota suites stay green. Two-Key.
 9. ✅ Followers §17/§66 (`0014`) — Two-Key @ `ddec951`.
-10. **Approved Writers (§15/§50)** — implemented @ `41d7253`; **Two-Key PENDING** (re-run
-    Reviewer + QA bound to `41d7253` once the account session limit resets at 04:50 UTC).
+10. ✅ Approved Writers (§15/§50, `0015`) — Two-Key @ `41d7253`.
 11. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30); moderation/admin (§53);
     blocking/reporting UI (§51/§52); Discover-card Follow + profile counts; Alerts-label copy.
 12. ✅ CI runs the security suite on every PR (postgres:16 service).
