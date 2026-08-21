@@ -134,3 +134,18 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
   rejected); a dedicated `deactivations` table (more surface, no benefit — rejected).
 - **Reversibility:** Additive/idempotent migration; pre-hosted-apply. **Founder Gate?** No for
   code; the hosted 30-day purge job (hard delete + ownership transfer) is a deploy Gate.
+
+## D-10 · 2026-08-21 · Follow edges are world-readable (public), not just aggregate counts (migration 0014)
+- **Decision:** The `follows` table's SELECT policy is `using(true)` — the full follow
+  edge-list (who follows whom) is world-readable, not only the aggregate follower/following
+  counts §106 declares public. `getFollowCounts`/`isFollowing` read it directly.
+- **Reason:** Following is defined (§3.3/§17) as a one-way relationship to keep up with a
+  **public** Personal Wall — an inherently public act, matching the standard public-social
+  model and the repo's existing world-readable `profiles`. Blocked-pair edges never persist
+  (the `blocks_remove_follows` trigger tears them down), so no blocked relationship leaks.
+- **Alternatives:** Count-only-public via a SECURITY DEFINER `get_follow_counts(uid)` RPC plus a
+  SELECT policy narrowed to the viewer's own edges — deferred; adopt if Product later wants the
+  follow graph private. (Reviewer flagged this as a Product scope-flag, not a security defect.)
+- **Reversibility:** Reversible (swap the SELECT policy + add the RPC). **Founder Gate?** No —
+  the spec is silent on edge visibility and no §81 privacy promise (private wall/anon/secret/
+  private membership) is weakened; edges are for public walls only.
