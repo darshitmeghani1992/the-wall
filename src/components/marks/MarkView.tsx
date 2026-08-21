@@ -71,7 +71,7 @@ function ReactionBar({
     <View style={{ marginTop: 10, gap: 8 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
         {active.map((emoji) => {
-          const mine = summary.mine.includes(emoji);
+          const mine = summary.mine === emoji;
           return (
             <Pressable
               key={emoji}
@@ -126,7 +126,7 @@ function ReactionBar({
       {open ? (
         <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
           {REACTION_EMOJIS.map((emoji) => {
-            const mine = summary.mine.includes(emoji);
+            const mine = summary.mine === emoji;
             return (
               <Pressable
                 key={emoji}
@@ -563,7 +563,7 @@ export function MarkView({
       {canShare ? <ShareRow mark={mark} wallHandle={wallHandle} /> : null}
       {canReact ? (
         <ReactionBar
-          summary={reactions ?? { counts: {}, mine: [] }}
+          summary={reactions ?? { counts: {}, mine: null }}
           open={pickerOpen}
           onOpenChange={setPickerOpen}
           onToggle={onToggleReaction!}
