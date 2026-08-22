@@ -6,11 +6,19 @@
 
 _Last updated: 2026-08-20 · branch `claude/kickoff-execution-chx2mh` (= `origin/main` at session start)._
 
-## Current Slice
-**Slice 3/4 reconciliation + media (Founder-directed).** Reconciled the Mark model to
-the Master Spec's integrated composer (Secret/Anonymous as modes; canonical content
-types) and added Voice + Video Marks. Preceded by the Secret one-time-reveal + expiry
-slice (below), which is complete through Two-Key.
+## Current Status — DB-verifiable MVP backend COMPLETE (all Two-Key verified)
+Nine vertical slices delivered this session, each through independent AIOS Two-Key
+(separate Reviewer + separate QA, both re-executing against a real Postgres 16),
+migrations `0010`–`0017`, on draft PR #17. The security suite is now **117 assertions**
+and runs in CI on every PR. Review caught and closed **real authorization bypasses**
+(incl. a self-promote-to-admin BLOCKER in Slice H). Remaining work is **frontend UI**
+(needs a device to QA) and the **hosted deploy** (Founder Gate) — see Next Actions.
+
+Slices (all Reviewer APPROVE + QA PASS): Secret one-time reveal+expiry `7d36458` ·
+Mark-model+composer+Voice/Video `725d7ba` · Mark-lifecycle §32/§33 `e291269` ·
+Account deactivation §82 `3b58be7` · Followers §17/§66 `ddec951` · Approved Writers
+§15/§50 `41d7253` · Reactions one-per-user §31 `85da09f` · Moderation/Admin §53 +
+Reporting §52 `ea88d7b`.
 
 ### Slice A — Mark model + integrated composer ✅ (committed)
 - Migration `0011`: `mark_type` gains text/voice/video; `marks.secret` boolean; the three
