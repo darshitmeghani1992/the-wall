@@ -24,3 +24,39 @@ jobs:
 
       - name: Lint
         run: npx eslint .
+
+  security:
+    name: DB security suite (SEC-001 + FP-C2)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The suite is pure psql/bash; the runner needs a psql client to reach the
+      # postgres service. run_tests.sh resets a throwaway DB and exits nonzero on
+      # the first failed assertion (RLS/anonymity/secret/membership are launch
+      # blockers — Master Spec §72/§100).
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run security suite
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          ADMIN_DB: postgres
+        run: bash supabase/tests/run_tests.sh

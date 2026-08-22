@@ -19,7 +19,7 @@ set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
 insert into marks (id, wall_id, author_id, type, text, anonymous)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc06',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','anonymous secret', true);
+        '11111111-1111-1111-1111-111111111111','text','anonymous secret', true);
 
 -- Base row: author_id nulled at the write boundary.
 do $$

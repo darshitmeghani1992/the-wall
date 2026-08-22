@@ -100,7 +100,7 @@ export async function inviteToSharedWall(wallId: string, name: string): Promise<
 
 /** Can this Mark's content be reproduced in a share sheet? Secrets never can. */
 export function isMarkShareable(mark: MarkWithAuthor): boolean {
-  if (mark.type === "secret") return false; // recipient-only by intent
+  if (mark.secret) return false; // recipient-only by intent
   return Boolean(mark.text?.trim()) || Boolean(mark.media_url);
 }
 

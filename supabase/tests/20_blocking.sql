@@ -14,7 +14,7 @@ begin
   begin
     insert into marks (wall_id, author_id, type, text)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            '33333333-3333-3333-3333-333333333333','sticky','sneaky');
+            '33333333-3333-3333-3333-333333333333','text','sneaky');
   exception when others then denied := true;  -- can_contribute() false → RLS WITH CHECK fails
   end;
   if not denied then raise exception 'AC-S4 FAIL: blocked user contributed a mark'; end if;

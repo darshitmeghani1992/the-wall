@@ -22,9 +22,8 @@ type Filter = { key: string; label: string; match: (t: MarkType) => boolean };
 
 const FILTERS: Filter[] = [
   { key: "all", label: "All", match: () => true },
-  { key: "roasts", label: "Roasts", match: (t) => t === "roast" },
-  { key: "photos", label: "Photos", match: (t) => t === "photo" || t === "memory" },
-  { key: "awards", label: "Awards", match: (t) => t === "award" },
+  { key: "text", label: "Notes", match: (t) => t === "text" },
+  { key: "photos", label: "Photos", match: (t) => t === "photo" },
 ];
 
 /**

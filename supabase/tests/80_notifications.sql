@@ -27,7 +27,7 @@ set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
 insert into marks (id, wall_id, author_id, type, text)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc80',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','sticky','hi olivia');
+        '11111111-1111-1111-1111-111111111111','text','hi olivia');
 reset role;
 do $$
 begin
@@ -52,7 +52,7 @@ set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (friend of
 insert into marks (id, wall_id, author_id, type, text)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc81',
         (select id from walls where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal'),
-        '88888888-8888-8888-8888-888888888888','sticky','hi alice');
+        '88888888-8888-8888-8888-888888888888','text','hi alice');
 reset role;
 do $$
 begin
@@ -74,7 +74,7 @@ set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner pos
 insert into marks (id, wall_id, author_id, type, text)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc82',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '44444444-4444-4444-4444-444444444444','sticky','my own wall');
+        '44444444-4444-4444-4444-444444444444','text','my own wall');
 reset role;
 do $$
 begin
@@ -92,7 +92,7 @@ set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G posts ANON
 insert into marks (id, wall_id, author_id, type, text, anonymous)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc83',
         (select id from walls where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal'),
-        '88888888-8888-8888-8888-888888888888','sticky','anon hi', true);
+        '88888888-8888-8888-8888-888888888888','text','anon hi', true);
 reset role;
 do $$
 begin
@@ -155,7 +155,7 @@ set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A posts anon
 insert into marks (id, wall_id, author_id, type, text, anonymous)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc84',
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','sticky','anon mark', true);
+        '11111111-1111-1111-1111-111111111111','text','anon mark', true);
 reset role;
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G reacts

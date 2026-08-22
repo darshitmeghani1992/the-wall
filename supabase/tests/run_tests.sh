@@ -90,6 +90,22 @@ echo "── load: 0008_friendships_guard_hardening.sql"
 psql_test -f "$MIG/0008_friendships_guard_hardening.sql" >/dev/null
 echo "── load: 0009_walls_view_membership.sql"
 psql_test -f "$MIG/0009_walls_view_membership.sql" >/dev/null
+echo "── load: 0010_secret_reveal_lifecycle.sql"
+psql_test -f "$MIG/0010_secret_reveal_lifecycle.sql" >/dev/null
+echo "── load: 0011_mark_model_reconciliation.sql"
+psql_test -f "$MIG/0011_mark_model_reconciliation.sql" >/dev/null
+echo "── load: 0012_mark_lifecycle.sql"
+psql_test -f "$MIG/0012_mark_lifecycle.sql" >/dev/null
+echo "── load: 0013_account_lifecycle.sql"
+psql_test -f "$MIG/0013_account_lifecycle.sql" >/dev/null
+echo "── load: 0014_follows.sql"
+psql_test -f "$MIG/0014_follows.sql" >/dev/null
+echo "── load: 0015_approved_writers.sql"
+psql_test -f "$MIG/0015_approved_writers.sql" >/dev/null
+echo "── load: 0016_reactions_single.sql"
+psql_test -f "$MIG/0016_reactions_single.sql" >/dev/null
+echo "── load: 0017_moderation.sql"
+psql_test -f "$MIG/0017_moderation.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -97,8 +113,9 @@ echo ""
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
-for area in 10_friendships 20_blocking 30_anonymity 40_mark_moderation 50_storage \
-            60_secret_marks 70_wall_members 80_notifications 90_profile_links; do
+for area in 10_friendships 15_follows 20_blocking 25_reactions 30_anonymity 40_mark_moderation 45_mark_lifecycle 55_approved_writers 50_storage \
+            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 85_moderation 90_profile_links \
+            95_account_lifecycle; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done

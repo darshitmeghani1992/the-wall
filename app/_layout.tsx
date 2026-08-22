@@ -6,8 +6,8 @@ import { colors } from "@/theme";
 
 /**
  * Root navigator. The (tabs) group holds the persistent bottom-dock experience;
- * (onboarding) is the signed-out / first-run flow; everything else (Create,
- * Writer, Game, Notifications, Settings, Friend Wall) is pushed on top.
+ * (onboarding) is the signed-out / first-run flow; everything else (the Composer,
+ * People Picker, Notifications, Profile edit, Friend/Shared Wall) is pushed on top.
  *
  * Everything is wrapped in <AuthProvider> so any screen can read auth/profile
  * state and `app/index.tsx` can route the user to the right place.
@@ -30,7 +30,6 @@ export default function RootLayout() {
           <Stack.Screen name="(onboarding)" />
           <Stack.Screen name="create" options={{ presentation: "modal" }} />
           <Stack.Screen name="people-picker" options={{ presentation: "modal" }} />
-          <Stack.Screen name="write/[type]" options={{ presentation: "modal" }} />
           <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
           <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
           <Stack.Screen name="shared/create" options={{ presentation: "modal" }} />

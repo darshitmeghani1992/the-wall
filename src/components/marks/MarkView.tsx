@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
+import { Audio, Video, ResizeMode } from "expo-av";
 import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
 import { colors, markColors, radius, type EnterMode } from "@/theme";
-import { getSecretContent, type MarkWithAuthor } from "@/lib/marks";
+import { revealSecret, type MarkWithAuthor } from "@/lib/marks";
 import { isMarkShareable, shareMark } from "@/lib/share";
+import { formatDuration } from "@/lib/recording";
 import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
+
+/** Voice/Video Marks stash their clip length (ms) on payload for the UI. */
+function markDurationMs(mark: MarkWithAuthor): number | null {
+  const d = (mark.payload as { durationMs?: unknown } | null)?.durationMs;
+  return typeof d === "number" && d > 0 ? d : null;
+}
 
 /** The display label for a Mark's author — anonymous Marks read "Anonymous". */
 function authorName(mark: MarkWithAuthor): string {
@@ -63,7 +71,7 @@ function ReactionBar({
     <View style={{ marginTop: 10, gap: 8 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
         {active.map((emoji) => {
-          const mine = summary.mine.includes(emoji);
+          const mine = summary.mine === emoji;
           return (
             <Pressable
               key={emoji}
@@ -118,7 +126,7 @@ function ReactionBar({
       {open ? (
         <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
           {REACTION_EMOJIS.map((emoji) => {
-            const mine = summary.mine.includes(emoji);
+            const mine = summary.mine === emoji;
             return (
               <Pressable
                 key={emoji}
@@ -150,7 +158,7 @@ function ReactionBar({
   );
 }
 
-/** A dashed/striped stand-in for photos & doodles before an image loads. */
+/** A quiet stand-in for media before it loads (photo/voice/video). */
 function Placeholder({ label, height = 130 }: { label: string; height?: number }) {
   return (
     <View
@@ -180,27 +188,39 @@ function Placeholder({ label, height = 130 }: { label: string; height?: number }
  * the content still learns nothing about an anonymous author, because `mark_secrets`
  * carries no author identity.
  *
- * `isWallOwner` is UX gating only — it decides whether we even offer to fetch. It
- * is NOT the security boundary: RLS is. For a non-owner we render a static locked
- * state and NEVER call `getSecretContent`. For the owner, a tap fetches the content
- * with honest loading / empty / error states.
+ * `isWallOwner` is UX gating only — it decides whether we even offer to open. It
+ * is NOT the security boundary: the `reveal_secret` RPC is (0010 / ADR-010). For a
+ * non-owner we render a static locked state and NEVER call the RPC. For the owner,
+ * a tap performs the ONE-TIME reveal with honest loading / consumed / expired /
+ * error states. Opening is a one-way door: after a successful reveal the content is
+ * shown for this session only; a later attempt returns `consumed` (§27.3), and past
+ * the 1-hour window it returns `expired` (§27.4 / §111).
  */
-type SecretPhase = "locked" | "loading" | "revealed" | "empty" | "error";
+type SecretPhase = "locked" | "loading" | "revealed" | "consumed" | "expired" | "empty" | "error";
 
 function SecretMark({ mark, isWallOwner }: { mark: MarkWithAuthor; isWallOwner: boolean }) {
   const [phase, setPhase] = useState<SecretPhase>("locked");
   const [content, setContent] = useState<string | null>(null);
 
   async function reveal() {
-    if (phase === "loading" || phase === "revealed") return;
+    // Terminal states never re-fetch; only "locked" (or a retryable "error") opens.
+    if (phase === "loading" || phase === "revealed" || phase === "consumed" || phase === "expired") return;
     setPhase("loading");
     try {
-      const text = await getSecretContent(mark.id);
-      if (text == null || text.length === 0) {
+      const res = await revealSecret(mark.id);
+      if (res.ok && res.content && res.content.length > 0) {
+        setContent(res.content);
+        setPhase("revealed");
+      } else if (res.reason === "consumed") {
+        setPhase("consumed");
+      } else if (res.reason === "expired") {
+        setPhase("expired");
+      } else if (res.reason === "ok" || res.reason === "missing") {
+        // Authorized but nothing to show (genuinely empty / already-cleaned-up).
         setPhase("empty");
       } else {
-        setContent(text);
-        setPhase("revealed");
+        // not_authorized should not happen behind the owner gate — treat as error.
+        setPhase("error");
       }
     } catch {
       setPhase("error");
@@ -221,25 +241,36 @@ function SecretMark({ mark, isWallOwner }: { mark: MarkWithAuthor; isWallOwner: 
     );
   }
 
-  // Owner: tap to fetch and reveal, with honest loading / empty / error states.
+  // Owner: tap to open ONCE, with honest loading / consumed / expired / error states.
   const revealed = phase === "revealed";
+  const terminal = revealed || phase === "consumed" || phase === "expired";
   const label =
     phase === "loading"
       ? "OPENING…"
-      : phase === "empty"
-        ? "NOTHING TO SHOW"
-        : phase === "error"
-          ? "COULDN'T OPEN — TAP TO RETRY"
-          : "🔓 TAP TO OPEN";
+      : phase === "consumed"
+        ? "🔒 ALREADY OPENED"
+        : phase === "expired"
+          ? "🔒 THIS SECRET EXPIRED"
+          : phase === "empty"
+            ? "NOTHING TO SHOW"
+            : phase === "error"
+              ? "COULDN'T OPEN — TAP TO RETRY"
+              : "🔓 TAP TO OPEN ONCE";
+  const a11y =
+    revealed
+      ? "Secret Mark, opened"
+      : phase === "consumed"
+        ? "Secret Mark, already opened — it can only be opened once"
+        : phase === "expired"
+          ? "Secret Mark, expired"
+          : "Open this Secret Mark once — only you can see it";
 
   return (
     <Pressable
       onPress={reveal}
-      disabled={phase === "loading" || revealed}
+      disabled={phase === "loading" || terminal}
       accessibilityRole="button"
-      accessibilityLabel={
-        revealed ? "Secret Mark, opened" : "Open this Secret Mark — only you can see it"
-      }
+      accessibilityLabel={a11y}
     >
       {revealed ? (
         <Text variant="mark" color={markColors.secretOnPurple}>
@@ -272,63 +303,7 @@ const secretPanel = {
   paddingVertical: 12,
 };
 
-/** Poll: the question + each option as a hard-bordered bar (voting: Phase 5). */
-function PollMark({ mark }: { mark: MarkWithAuthor }) {
-  const payload = mark.payload as { question?: string; options?: string[] } | null;
-  const options = payload?.options ?? [];
-  return (
-    <View>
-      <Text variant="headline" style={{ marginBottom: 10 }}>
-        {payload?.question ?? mark.text}
-      </Text>
-      {options.map((opt, i) => (
-        <View
-          key={i}
-          style={{
-            borderWidth: 2,
-            borderColor: colors.ink,
-            borderRadius: 4,
-            paddingVertical: 8,
-            paddingHorizontal: 10,
-            marginBottom: 8,
-          }}
-        >
-          <Text variant="body" style={{ fontWeight: "600" }}>
-            {opt}
-          </Text>
-        </View>
-      ))}
-      <AuthorLine mark={mark} />
-    </View>
-  );
-}
-
-/** Prediction: locked (with unlock date) until its time passes, then revealed. */
-function PredictionMark({ mark }: { mark: MarkWithAuthor }) {
-  const payload = mark.payload as { unlock_at?: string } | null;
-  const unlockAt = payload?.unlock_at ? new Date(payload.unlock_at) : null;
-  const locked = unlockAt ? unlockAt.getTime() > Date.now() : false;
-
-  return (
-    <View>
-      <Text variant="label" color={colors.outline}>
-        {locked ? "🔒 PREDICTION" : "🔮 PREDICTION"}
-      </Text>
-      {locked ? (
-        <Text variant="mark" color={colors.onSurfaceVariant} style={{ marginTop: 8 }}>
-          Unlocks {unlockAt?.toLocaleDateString()}
-        </Text>
-      ) : (
-        <Text variant="mark" style={{ marginTop: 8 }}>
-          {mark.text}
-        </Text>
-      )}
-      <AuthorLine mark={mark} />
-    </View>
-  );
-}
-
-/** Photo / Memory: a polaroid frame with the image and a caption below. */
+/** Photo Mark: a polaroid frame with the image and an optional caption below. */
 function PhotoMark({ mark }: { mark: MarkWithAuthor }) {
   return (
     <View>
@@ -353,63 +328,129 @@ function PhotoMark({ mark }: { mark: MarkWithAuthor }) {
   );
 }
 
-/** Award: dark card, gold badge, the award title + note. */
-function AwardMark({ mark }: { mark: MarkWithAuthor }) {
-  const payload = mark.payload as { award?: string } | null;
-  return (
-    <View style={{ alignItems: "center" }}>
-      <View
-        style={{
-          width: 52,
-          height: 52,
-          borderRadius: 26,
-          backgroundColor: markColors.awardGoldFrom,
-          borderWidth: 2,
-          borderColor: "#6b6400",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 10,
-        }}
-      >
-        <Text style={{ fontSize: 24 }}>🏆</Text>
-      </View>
-      <Text variant="headline" color="#f2f1ec" style={{ textAlign: "center" }}>
-        {payload?.award ?? mark.text ?? "Award"}
-      </Text>
-      <Text variant="label" color="#c8c6c5" style={{ marginTop: 8 }}>
-        — {authorName(mark)}
-      </Text>
-    </View>
-  );
-}
+/**
+ * Voice Mark: a compact play/pause control + duration. Loads the clip lazily on
+ * first play and unloads it on unmount so we never leak an audio player. Device
+ * playback is verified on a physical device (final QA pending).
+ */
+function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const durationMs = markDurationMs(mark);
 
-/** Doodle: the drawing image on a paper card. */
-function DoodleMark({ mark }: { mark: MarkWithAuthor }) {
+  useEffect(() => {
+    return () => {
+      void soundRef.current?.unloadAsync();
+      soundRef.current = null;
+    };
+  }, []);
+
+  async function toggle() {
+    if (!mark.media_url) return;
+    try {
+      if (!soundRef.current) {
+        setLoading(true);
+        const { sound } = await Audio.Sound.createAsync({ uri: mark.media_url });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlaying(false);
+            void sound.setPositionAsync(0);
+          }
+        });
+        setLoading(false);
+      }
+      if (playing) {
+        await soundRef.current.pauseAsync();
+        setPlaying(false);
+      } else {
+        await soundRef.current.playAsync();
+        setPlaying(true);
+      }
+    } catch {
+      setLoading(false);
+      setPlaying(false);
+    }
+  }
+
   return (
     <View>
-      {mark.media_url ? (
-        <Image
-          source={{ uri: mark.media_url }}
-          style={{ width: "100%", height: 150, borderRadius: 2 }}
-          contentFit="contain"
-        />
-      ) : (
-        <Placeholder label="DOODLE" height={150} />
-      )}
+      <Pressable
+        onPress={toggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${playing ? "Pause" : "Play"} voice Mark${durationMs ? `, ${formatDuration(durationMs)}` : ""}`}
+        style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 }}
+      >
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.ink,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.surface} />
+          ) : (
+            <Text style={{ fontSize: 18, color: colors.surface }}>{playing ? "❙❙" : "▶"}</Text>
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text variant="label" color={colors.ink}>VOICE MARK</Text>
+          <Text variant="label" color={colors.outline}>
+            {durationMs ? formatDuration(durationMs) : "tap to play"}
+          </Text>
+        </View>
+      </Pressable>
+      {mark.text ? (
+        <Text variant="mark" style={{ fontSize: 16, marginTop: 8 }}>
+          {mark.text}
+        </Text>
+      ) : null}
       <AuthorLine mark={mark} />
     </View>
   );
 }
 
-/** Sticky / Roast: plain text mark; roast is larger and always ink-bordered. */
-function TextMark({ mark, roast }: { mark: MarkWithAuthor; roast?: boolean }) {
+/** Video Mark: the clip with native controls + an optional caption below. */
+function VideoMark({ mark }: { mark: MarkWithAuthor }) {
+  const durationMs = markDurationMs(mark);
   return (
     <View>
-      <Text
-        variant="mark"
-        color={roast ? "#3a1400" : colors.ink}
-        style={roast ? { fontSize: 22, fontWeight: "700" } : undefined}
-      >
+      {mark.media_url ? (
+        <Video
+          source={{ uri: mark.media_url }}
+          style={{ width: "100%", height: 180, borderRadius: 2, backgroundColor: "#000" }}
+          useNativeControls
+          resizeMode={ResizeMode.CONTAIN}
+          isLooping={false}
+        />
+      ) : (
+        <Placeholder label="VIDEO" height={180} />
+      )}
+      {durationMs ? (
+        <Text variant="label" color={colors.outline} style={{ marginTop: 6 }}>
+          {formatDuration(durationMs)}
+        </Text>
+      ) : null}
+      {mark.text ? (
+        <Text variant="mark" style={{ fontSize: 16, marginTop: 8 }}>
+          {mark.text}
+        </Text>
+      ) : null}
+      <AuthorLine mark={mark} />
+    </View>
+  );
+}
+
+/** Text Mark: plain text on a tactile colored card (color chosen in the composer). */
+function TextMark({ mark }: { mark: MarkWithAuthor }) {
+  return (
+    <View>
+      <Text variant="mark" color={colors.ink}>
         {mark.text}
       </Text>
       <AuthorLine mark={mark} />
@@ -417,27 +458,25 @@ function TextMark({ mark, roast }: { mark: MarkWithAuthor; roast?: boolean }) {
   );
 }
 
-/** Background + border + fastener chrome per mark type. */
-function chromeFor(type: MarkType, color: string | null) {
-  switch (type) {
-    case "roast":
-      return { bg: markColors.roastOrange, bordered: true, fastener: "tape" as const };
-    case "secret":
-      return { bg: markColors.secretPurple, bordered: false, fastener: "tape" as const };
-    case "memory":
+/**
+ * Background + border + fastener chrome for a Mark. Secret Marks always wear the
+ * purple locked treatment regardless of content type; otherwise chrome is by
+ * content type (text cards carry the composer color; photos sit on a plain card).
+ */
+function chromeFor(mark: MarkWithAuthor) {
+  if (mark.secret) {
+    return { bg: markColors.secretPurple, bordered: false, fastener: "tape" as const };
+  }
+  switch (mark.type) {
     case "photo":
       return { bg: colors.card, bordered: false, fastener: "pin" as const };
-    case "award":
-      return { bg: "#232221", bordered: false, fastener: "pin" as const };
-    case "poll":
-      return { bg: markColors.memoryCream, bordered: false, fastener: "pin" as const };
-    case "prediction":
+    case "voice":
       return { bg: markColors.skyBlue, bordered: false, fastener: "tape" as const };
-    case "doodle":
-      return { bg: colors.card, bordered: false, fastener: "tape" as const };
-    case "sticky":
+    case "video":
+      return { bg: colors.card, bordered: false, fastener: "pin" as const };
+    case "text":
     default:
-      return { bg: color ?? markColors.stickyYellow, bordered: false, fastener: "tape" as const };
+      return { bg: mark.color ?? markColors.stickyYellow, bordered: false, fastener: "tape" as const };
   }
 }
 
@@ -481,38 +520,32 @@ export function MarkView({
   reactions?: ReactionSummary;
   onToggleReaction?: (emoji: ReactionEmoji) => void;
 }) {
-  const chrome = chromeFor(mark.type, mark.color);
+  const chrome = chromeFor(mark);
   const canShare = shareable && isMarkShareable(mark);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Reactions are opt-in and never applied to a preview (no callback wired).
   const canReact = Boolean(onToggleReaction);
 
+  // Secret is a MODE, not a content type: a Secret Mark of any content type shows
+  // the locked shell / one-time reveal, never the underlying text or media.
   let inner: React.ReactNode;
-  switch (mark.type) {
-    case "secret":
-      inner = <SecretMark mark={mark} isWallOwner={isWallOwner} />;
-      break;
-    case "poll":
-      inner = <PollMark mark={mark} />;
-      break;
-    case "prediction":
-      inner = <PredictionMark mark={mark} />;
-      break;
-    case "photo":
-    case "memory":
-      inner = <PhotoMark mark={mark} />;
-      break;
-    case "award":
-      inner = <AwardMark mark={mark} />;
-      break;
-    case "doodle":
-      inner = <DoodleMark mark={mark} />;
-      break;
-    case "roast":
-      inner = <TextMark mark={mark} roast />;
-      break;
-    default:
-      inner = <TextMark mark={mark} />;
+  if (mark.secret) {
+    inner = <SecretMark mark={mark} isWallOwner={isWallOwner} />;
+  } else {
+    switch (mark.type) {
+      case "photo":
+        inner = <PhotoMark mark={mark} />;
+        break;
+      case "voice":
+        inner = <VoiceMark mark={mark} />;
+        break;
+      case "video":
+        inner = <VideoMark mark={mark} />;
+        break;
+      case "text":
+      default:
+        inner = <TextMark mark={mark} />;
+    }
   }
 
   return (
@@ -530,7 +563,7 @@ export function MarkView({
       {canShare ? <ShareRow mark={mark} wallHandle={wallHandle} /> : null}
       {canReact ? (
         <ReactionBar
-          summary={reactions ?? { counts: {}, mine: [] }}
+          summary={reactions ?? { counts: {}, mine: null }}
           open={pickerOpen}
           onOpenChange={setPickerOpen}
           onToggle={onToggleReaction!}
@@ -542,16 +575,13 @@ export function MarkView({
 
 /** Rough per-type height so the 2-column masonry can balance itself. */
 export function estimateMarkHeight(mark: MarkWithAuthor): number {
+  // Secret shells are a fixed compact height (content is hidden until revealed).
+  if (mark.secret) return 120;
   const base: Record<MarkType, number> = {
-    sticky: 110,
-    roast: 130,
-    secret: 120,
-    memory: 220,
+    text: 110,
     photo: 220,
-    award: 150,
-    poll: 170,
-    doodle: 200,
-    prediction: 120,
+    voice: 120,
+    video: 220,
   };
   const textBump = Math.min(80, Math.floor((mark.text?.length ?? 0) / 24) * 20);
   return (base[mark.type] ?? 120) + textBump;
