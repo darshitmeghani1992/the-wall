@@ -149,3 +149,23 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
 - **Reversibility:** Reversible (swap the SELECT policy + add the RPC). **Founder Gate?** No —
   the spec is silent on edge visibility and no §81 privacy promise (private wall/anon/secret/
   private membership) is weakened; edges are for public walls only.
+
+## D-11 · 2026-08-22 · Admin capability via is_admin flag + DEFINER RPCs; privileged columns are client-immutable (migration 0017)
+- **Decision:** Implement §52/§53 with a `profiles.is_admin` flag, an `is_admin()` helper, a
+  `moderation_actions` audit table (admin-only read; client-unwritable), account `'suspended'`
+  status, and three `SECURITY DEFINER` admin RPCs (`admin_remove_mark`/`admin_suspend_account`/
+  `admin_resolve_report`) each gated on `is_admin(auth.uid())`. A BEFORE-UPDATE trigger
+  `profiles_guard_privileged` reverts `is_admin`/`account_status`/`deactivated_at` for any
+  non-privileged caller, so those columns change ONLY through the DEFINER RPCs — never via the
+  0001 `profiles update self` policy.
+- **Reason:** Independent review found the `profiles update self` policy would otherwise let any
+  client `set is_admin=true` and self-promote to admin (privilege-escalation BLOCKER, caught at
+  `4c7a71a`). Gating the columns at the write boundary (trigger) is the minimal, robust fix and
+  also makes `is_admin` un-settable by clients (§53 "admin never reachable by ordinary users").
+  In-app admins are NOT `service_role`, so they still cannot read `anonymous_mark_authors` —
+  anonymity stays service_role-only (§53).
+- **Alternatives:** Column-privilege GRANTs (Postgres column-level privileges don't compose with
+  the existing row policy cleanly — rejected); a separate admins table (more surface — rejected).
+- **Reversibility:** Additive/idempotent migration; pre-hosted-apply. `is_admin` is bootstrapped
+  only by a backend/SQL actor (postgres/service_role). **Founder Gate?** No for code; hosted
+  apply remains a deploy Gate.
