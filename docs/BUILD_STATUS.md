@@ -116,6 +116,19 @@ slice (below), which is complete through Two-Key.
   body preserved with only the `'selected'` branch added; §50 private-visibility-wins enforced;
   approval is write-only (no view grant); owner-only management; block/active override intact.
   No SEC-001/etc regression. **Zero findings.**
+- Moderation/Admin §53 + Reporting §52 (`0017`): **committed @ `ea88d7b` — Two-Key PENDING.**
+  Independent Reviewer/QA are **blocked on the account session limit (resets 11:10 UTC)** — the
+  reviewer terminated mid-review of the pre-fix `4c7a71a`. Do NOT treat as verified.
+  - **Escalation caught + fixed:** the reviewer's probe #1 (and my own analysis) found that the
+    0001 `profiles update self` policy would let a client `set is_admin=true` (self-promote).
+    Fixed in `ea88d7b` with a BEFORE-UPDATE `profiles_guard_privileged` trigger that reverts
+    is_admin/account_status/deactivated_at for non-privileged callers (lifecycle/admin RPCs run
+    SECURITY DEFINER, so they remain the only writers). Author checks: full suite green (117
+    assertions incl. `85 (no self-promote to admin)`), and a standalone probe as an
+    **authenticated** client confirms `update … set is_admin=true` leaves is_admin=false.
+    **CI green on `ea88d7b`.** But this is author verification only.
+  - **Next action: re-run Reviewer (bind `ea88d7b`, review the guard delta + full §52/§53
+    surface) + QA once the limit resets (11:10 UTC).**
 - Reactions one-per-user §31 (`0016`): **Reviewer APPROVE + QA PASS @ `85da09f`.** PK repointed
   to (mark_id,user_id) (fixes the emoji-stacking "de-dup debt"); self-only UPDATE policy; client
   single-active reaction; emoji set aligned to §31. A reaction *change* fires no duplicate
@@ -178,9 +191,8 @@ slice (below), which is complete through Two-Key.
 9. ✅ Followers §17/§66 (`0014`) — Two-Key @ `ddec951`.
 10. ✅ Approved Writers (§15/§50, `0015`) — Two-Key @ `41d7253`.
 10b. ✅ Reactions one-per-user (§31, `0016`) — Two-Key @ `85da09f`.
-10c. **Reporting completeness (§52)** + **moderation/admin (§53)** — remaining backend
-     candidates: reports table is minimal (mark-only target, free-text reason, no status);
-     no `moderation_actions` table or admin role. DB-verifiable, Two-Key.
+10c. Reporting §52 + Moderation/admin §53 (`0017`) — implemented @ `ea88d7b`; **Two-Key
+     PENDING** (re-run Reviewer + QA bound to `ea88d7b` once the session limit resets 11:10 UTC).
 11. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30); moderation/admin (§53);
     blocking/reporting UI (§51/§52); Discover-card Follow + profile counts; Alerts-label copy.
 12. ✅ CI runs the security suite on every PR (postgres:16 service).
