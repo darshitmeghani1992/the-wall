@@ -77,19 +77,54 @@ begin
   select id into o_wall from walls where owner_id = '44444444-4444-4444-4444-444444444444' and type = 'personal';
   begin
     insert into approved_writers (wall_id, user_id) values (o_wall, '33333333-3333-3333-3333-333333333333');  -- C (blocked)
-  exception when others then rejected := true;
+  exception when insufficient_privilege then rejected := true;
   end;
   if not rejected then raise exception '55 FAIL: owner approved a blocked user'; end if;
+  if exists(select 1 from approved_writers where wall_id=o_wall
+            and user_id='33333333-3333-3333-3333-333333333333') then
+    raise exception '55 FAIL: blocked approval row persisted';
+  end if;
+end $$;
 
-  -- Approve G, confirm write, then remove approval → write revoked.
-  insert into approved_writers (wall_id, user_id) values (o_wall, '88888888-8888-8888-8888-888888888888');
-  if not can_contribute(o_wall, '88888888-8888-8888-8888-888888888888') then
-    raise exception '55 FAIL: approved writer cannot write';
+-- Approve G, then verify capability and an actual Mark as G (not as O asking
+-- the protected arbitrary-actor helper about another user).
+insert into approved_writers (wall_id, user_id)
+  select id, '88888888-8888-8888-8888-888888888888' from walls
+   where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+set local "test.uid" = '88888888-8888-8888-8888-888888888888'; -- G
+do $$ declare o_wall uuid; begin
+  select id into o_wall from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+  if not current_user_can_contribute(o_wall) then
+    raise exception '55 FAIL: approved writer capability is false';
   end if;
-  delete from approved_writers where wall_id = o_wall and user_id = '88888888-8888-8888-8888-888888888888';
-  if can_contribute(o_wall, '88888888-8888-8888-8888-888888888888') then
-    raise exception '55 FAIL: removed writer can still write';
+end $$;
+insert into marks (id,wall_id,author_id,type,text)
+  select '55000000-0000-0000-0000-000000000001',id,auth.uid(),'text','approved writer control'
+    from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+
+-- O removes exactly G's approval.
+set local "test.uid" = '44444444-4444-4444-4444-444444444444'; -- O
+do $$ declare o_wall uuid; removed_count integer; begin
+  select id into o_wall from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+  delete from approved_writers where wall_id=o_wall
+    and user_id='88888888-8888-8888-8888-888888888888';
+  get diagnostics removed_count = row_count;
+  if removed_count <> 1 then raise exception '55 FAIL: owner did not remove exactly one approval'; end if;
+end $$;
+
+-- G's auth-bound capability and real write are both revoked.
+set local "test.uid" = '88888888-8888-8888-8888-888888888888'; -- G
+do $$ declare o_wall uuid; rejected boolean:=false; begin
+  select id into o_wall from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+  if current_user_can_contribute(o_wall) then
+    raise exception '55 FAIL: removed writer capability remains true';
   end if;
+  begin
+    insert into marks (id,wall_id,author_id,type,text)
+      values ('55000000-0000-0000-0000-000000000002',o_wall,auth.uid(),'text','revoked writer attack');
+  exception when insufficient_privilege then rejected:=true;
+  end;
+  if not rejected then raise exception '55 FAIL: removed writer created a Mark'; end if;
 end $$;
 \echo '55 (owner-only + block + revoke)   : PASS  (only owner manages; no block; revocable)'
 ROLLBACK;
