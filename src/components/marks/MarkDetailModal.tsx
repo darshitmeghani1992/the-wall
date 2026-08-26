@@ -100,6 +100,7 @@ export function MarkDetailModal({
   }, [isOwner, panel]);
 
   if (!mark || mark.secret) return null;
+  const markId = mark.id;
 
   function go(next: Panel) {
     setError(null);
@@ -142,24 +143,24 @@ export function MarkDetailModal({
       return;
     }
     await run(async () => {
-      await editMarkText(mark.id, next);
-      onMarkUpdated(mark.id, next);
+      await editMarkText(markId, next);
+      onMarkUpdated(markId, next);
       setPanel("detail");
     });
   }
 
   async function confirmDelete() {
     await run(async () => {
-      await deleteMark(mark.id);
-      onMarkRemoved(mark.id);
+      await deleteMark(markId);
+      onMarkRemoved(markId);
       onClose();
     });
   }
 
   async function confirmRemoval() {
     await run(async () => {
-      await removeMark(mark.id, "normal");
-      onMarkRemoved(mark.id);
+      await removeMark(markId, "normal");
+      onMarkRemoved(markId);
       onClose();
     });
   }
@@ -173,7 +174,7 @@ export function MarkDetailModal({
     setError(null);
     try {
       if (!reportSubmitted) {
-        await createReport({ markId: mark.id, reason, details });
+        await createReport({ markId, reason, details });
         setReportSubmitted(true);
       }
       if (!isOwner) {
@@ -181,8 +182,8 @@ export function MarkDetailModal({
         return;
       }
       try {
-        await removeMark(mark.id, "safety");
-        onMarkRemoved(mark.id);
+        await removeMark(markId, "safety");
+        onMarkRemoved(markId);
         onClose();
       } catch {
         setError("Your report was submitted, but the Mark couldn't be removed. Try removing it again from your Wall.");
