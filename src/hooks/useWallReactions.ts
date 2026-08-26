@@ -9,7 +9,7 @@ import {
 } from "@/lib/reactions";
 import type { MarkWithAuthor } from "@/lib/marks";
 
-const EMPTY: ReactionSummary = { counts: {}, mine: [] };
+const EMPTY: ReactionSummary = { counts: {}, mine: null };
 
 /**
  * Owns reaction state for a list of Marks: loads summaries as Marks appear,
@@ -79,18 +79,23 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
   const toggle = useCallback(
     (markId: string, emoji: ReactionEmoji) => {
       const current = summariesRef.current[markId] ?? EMPTY;
-      const wasOn = current.mine.includes(emoji);
+      const prev = current.mine; // the user's single active reaction, or null
+      const wasOn = prev === emoji;
 
-      // Optimistic update.
-      const mine = wasOn ? current.mine.filter((e) => e !== emoji) : [...current.mine, emoji];
-      const nextCount = (current.counts[emoji] ?? 0) + (wasOn ? -1 : 1);
+      // Optimistic single-reaction update: tapping the active emoji removes it;
+      // tapping another switches (decrement the old emoji, increment the new).
       const counts = { ...current.counts };
-      if (nextCount > 0) counts[emoji] = nextCount;
-      else delete counts[emoji];
+      if (prev) {
+        const c = (counts[prev] ?? 0) - 1;
+        if (c > 0) counts[prev] = c;
+        else delete counts[prev];
+      }
+      const mine = wasOn ? null : emoji;
+      if (mine) counts[emoji] = (counts[emoji] ?? 0) + 1;
       setSummaries((cur) => ({ ...cur, [markId]: { counts, mine } }));
 
       // Persist; on failure, roll back to the server's truth for this Mark.
-      toggleReaction(markId, emoji, wasOn).catch(() => {
+      toggleReaction(markId, emoji, prev).catch(() => {
         void refresh(markId);
       });
     },

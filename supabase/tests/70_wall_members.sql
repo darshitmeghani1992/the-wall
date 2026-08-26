@@ -6,7 +6,7 @@
 -- W_O (aaaa…) = O's PUBLIC shared wall, contribution 'everyone' (control).
 --
 -- Proves: accepted member can view+contribute a private shared wall; a non-member
--- cannot; the owner can; a public shared wall stays open for an unrelated user;
+-- cannot; the owner can; a public shared wall is viewable but not writable by a non-member;
 -- the invite/accept vectors hold (non-owner cannot invite; insert-as-accepted /
 -- insert-as-owner escalation rejected; F3 personal-wall invite rejected; only the
 -- invitee accepts; no move back to pending); and the roster SELECT does not recurse.
@@ -19,12 +19,10 @@ set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (accepted member)
 do $$
 begin
-  if not can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                       '22222222-2222-2222-2222-222222222222') then
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: accepted member cannot VIEW the private shared wall';
   end if;
-  if not can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                        '22222222-2222-2222-2222-222222222222') then
+  if not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: accepted member cannot CONTRIBUTE to the private shared wall';
   end if;
 end $$;
@@ -37,12 +35,10 @@ set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (non-member)
 do $$
 begin
-  if can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                   '88888888-8888-8888-8888-888888888888') then
+  if current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: non-member can VIEW the private shared wall';
   end if;
-  if can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                    '88888888-8888-8888-8888-888888888888') then
+  if current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: non-member can CONTRIBUTE to the private shared wall';
   end if;
 end $$;
@@ -55,12 +51,10 @@ set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner, no member row)
 do $$
 begin
-  if not can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                       '44444444-4444-4444-4444-444444444444') then
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: owner cannot VIEW their own private shared wall';
   end if;
-  if not can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                        '44444444-4444-4444-4444-444444444444') then
+  if not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: owner cannot CONTRIBUTE to their own private shared wall';
   end if;
 end $$;
@@ -73,17 +67,15 @@ set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (unrelated to W_O)
 do $$
 begin
-  if not can_view_wall('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-                       '88888888-8888-8888-8888-888888888888') then
+  if not current_user_can_view_wall('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') then
     raise exception '70 FAIL: public shared wall not viewable by unrelated user (regression)';
   end if;
-  if not can_contribute('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-                        '88888888-8888-8888-8888-888888888888') then
-    raise exception '70 FAIL: public shared wall (everyone) not contributable (regression)';
+  if current_user_can_contribute('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') then
+    raise exception '70 FAIL: public Shared-Wall non-member could contribute';
   end if;
 end $$;
 ROLLBACK;
-\echo '70 (public wall unchanged)         : PASS  (member-gating did not affect public)'
+\echo '70 (public view/member write)      : PASS  (public view; non-member write denied)'
 
 -- ── Invite vector: a NON-owner (B) cannot create a membership → DENIED ───────
 BEGIN;
@@ -235,14 +227,31 @@ BEGIN;
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (member of W_PS, NOT W_PS2)
 do $$
+declare rejected boolean := false; v_message text := '';
 begin
   begin
     update wall_members set wall_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'  -- W_PS2; status unchanged
      where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
        and user_id = '22222222-2222-2222-2222-222222222222';
-  exception when others then null;   -- immutability guard raises; expected
+  exception when raise_exception then
+    rejected := true;
+    get stacked diagnostics v_message = message_text;
   end;
-  -- The membership was NOT relocated onto W_PS2 …
+  if not rejected or v_message <> 'C2_MEMBER: cannot reassign or re-role a membership' then
+    raise exception '70 FAIL: wall relocation did not hit the identity guard precisely: %', v_message;
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  -- Trusted postcondition: the original accepted membership remains intact …
+  if not exists (select 1 from wall_members
+                 where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+                   and user_id = '22222222-2222-2222-2222-222222222222'
+                   and role = 'member' and status = 'accepted') then
+    raise exception '70 FAIL: original membership changed during relocation attack (F-B1)';
+  end if;
+  -- … and no membership was fabricated on W_PS2.
   if exists (select 1 from wall_members
              where wall_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
                and user_id = '22222222-2222-2222-2222-222222222222') then
@@ -278,7 +287,7 @@ end $$;
 ROLLBACK;
 \echo '70 (no backward transition)        : PASS  (accepted cannot revert to pending)'
 
--- ── Roster SELECT does not recurse (is_wall_member is SECURITY DEFINER) ───────
+-- ── Roster SELECT does not recurse and does not leak pending invites ──────────
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (accepted member)
@@ -287,12 +296,45 @@ declare n integer;
 begin
   select count(*) into n from wall_members
    where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';   -- completes → no recursion
-  if n < 2 then
-    raise exception '70 FAIL: member could not read the co-member roster (got %)', n;
+  if n <> 1 or not exists (
+    select 1 from wall_members
+     where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id=auth.uid() and status='accepted'
+  ) then
+    raise exception '70 FAIL: accepted member roster boundary incorrect (got %)', n;
+  end if;
+  if exists (
+    select 1 from wall_members
+     where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id='77777777-7777-7777-7777-777777777777'
+  ) then
+    raise exception '70 FAIL: pending invite leaked to accepted member';
+  end if;
+end $$;
+
+set local "test.uid" = '77777777-7777-7777-7777-777777777777';   -- F (pending invitee)
+do $$ declare n integer; begin
+  select count(*) into n from wall_members
+   where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd';
+  if n <> 1 or not exists (
+    select 1 from wall_members
+     where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id=auth.uid() and status='pending'
+  ) then
+    raise exception '70 FAIL: pending invitee could not read only their own invite (got %)', n;
+  end if;
+end $$;
+
+set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner)
+do $$ declare n integer; begin
+  select count(*) into n from wall_members
+   where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd';
+  if n <> 2 then
+    raise exception '70 FAIL: owner could not read accepted + pending roster (got %)', n;
   end if;
 end $$;
 ROLLBACK;
-\echo '70 (roster read, no recursion)     : PASS  (members see co-members)'
+\echo '70 (roster read, no recursion)     : PASS  (accepted/pending/owner visibility is scoped)'
 
 -- ╭─────────────────────────────────────────────────────────────────────────╮
 -- │ 0009 · walls-row SELECT policy ("walls view") membership disjunct          │

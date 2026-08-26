@@ -7,9 +7,11 @@ import { Masonry } from "@/components/Masonry";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
+import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
+import { isFollowing, followUser, unfollowUser } from "@/lib/follows";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
 import { useWallReactions } from "@/hooks/useWallReactions";
@@ -27,8 +29,11 @@ export default function PersonWall() {
   const [wall, setWall] = useState<Wall | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
   const [relationship, setRelationship] = useState<RelationshipState>("none");
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   // Marks that should drop-in (the one I just left, plus any realtime arrivals).
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
@@ -42,15 +47,17 @@ export default function PersonWall() {
       }
       setLoading(true);
       try {
-        const [person, personalWall, state] = await Promise.all([
+        const [person, personalWall, state, followState] = await Promise.all([
           getProfile(id),
           getPersonalWall(id),
           getRelationship(session.user.id, id),
+          isFollowing(session.user.id, id),
         ]);
         if (!active) return;
         setProfile(person);
         setWall(personalWall);
         setRelationship(state);
+        setFollowing(followState);
         if (personalWall) setMarks(await getWallMarks(personalWall.id));
       } catch (cause: any) {
         if (active) setError(cause?.message ?? "Couldn't open this Wall.");
@@ -73,6 +80,23 @@ export default function PersonWall() {
     () => relationship === "friends" && Boolean(wall) && wall?.contribution_policy !== "nobody",
     [relationship, wall],
   );
+
+  // Follow/unfollow (public Personal Walls only, §17). Optimistic, reverts on
+  // failure — the server rejects follows of private/blocked/deactivated targets.
+  async function toggleFollow() {
+    if (!profile || followBusy) return;
+    const prev = following;
+    setFollowBusy(true);
+    setFollowing(!prev);
+    try {
+      if (prev) await unfollowUser(profile.id);
+      else await followUser(profile.id);
+    } catch {
+      setFollowing(prev);
+    } finally {
+      setFollowBusy(false);
+    }
+  }
 
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
 
@@ -121,6 +145,14 @@ export default function PersonWall() {
               variant="primary"
               onPress={() => sharePersonWall(profile.handle, profile.display_name)}
             />
+            {wall.visibility === "public" ? (
+              <Button
+                label={following ? "Following ✓" : "Follow"}
+                variant={following ? "ghost" : "primary"}
+                loading={followBusy}
+                onPress={toggleFollow}
+              />
+            ) : null}
           </View>
           {!canLeaveMark ? (
             <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>
@@ -141,6 +173,7 @@ export default function PersonWall() {
                   highlight={mark.id === justCreatedId}
                   reactions={summaries[mark.id]}
                   onToggleReaction={(emoji) => toggle(mark.id, emoji)}
+                  onOpenDetail={() => setSelectedMark(mark)}
                 />
               )}
             />
@@ -150,6 +183,20 @@ export default function PersonWall() {
               <Text variant="body" color={colors.outline} style={{ marginTop: 6 }}>Their Wall is waiting for its first story.</Text>
             </View>
           )}
+          <MarkDetailModal
+            mark={selectedMark}
+            viewerId={session?.user.id}
+            wallOwnerId={wall.owner_id}
+            wallHandle={profile.handle}
+            reactions={selectedMark ? summaries[selectedMark.id] : undefined}
+            onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined}
+            onClose={() => setSelectedMark(null)}
+            onMarkUpdated={(markId, text) => {
+              setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item));
+              setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
+            }}
+            onMarkRemoved={(markId) => setMarks((current) => current.filter((item) => item.id !== markId))}
+          />
         </>
       )}
     </Screen>
