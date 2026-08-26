@@ -177,11 +177,29 @@ end $$;
 ROLLBACK;
 
 -- ── Server rejects a Secret Mark carrying media (secret is text-only today) ───
--- Mirrors the airtight client gate with a DB CHECK so a hand-crafted insert can't
--- leak a secret's media_url on the published base row.
+-- Prove both layers: the authenticated compatibility boundary rejects all media,
+-- while the underlying CHECK still prevents secret media for privileged writers.
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
+do $$
+declare rejected boolean := false; v_message text := '';
+begin
+  begin
+    insert into marks (id, wall_id, author_id, type, anonymous, secret, media_url)
+    values ('cccccccc-cccc-cccc-cccc-ccccccccc614',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '11111111-1111-1111-1111-111111111111','photo', false, true,
+            'https://example.test/secret.jpg');
+  exception when insufficient_privilege then
+    rejected := true;
+    get stacked diagnostics v_message = message_text;
+  end;
+  if not rejected or v_message <> 'MARK_MEDIA_UNAVAILABLE' then
+    raise exception '61 FAIL: app media boundary did not reject secret+media precisely: %', v_message;
+  end if;
+end $$;
+reset role;
 do $$
 declare rejected boolean := false;
 begin
@@ -193,7 +211,10 @@ begin
             'https://example.test/secret.jpg');
   exception when check_violation then rejected := true;   -- marks_secret_media_null
   end;
-  if not rejected then raise exception '61 FAIL: secret+media insert was not rejected'; end if;
+  if not rejected then raise exception '61 FAIL: privileged secret+media bypassed DB CHECK'; end if;
+  if exists(select 1 from marks where id='cccccccc-cccc-cccc-cccc-ccccccccc614') then
+    raise exception '61 FAIL: rejected secret+media row persisted';
+  end if;
 end $$;
 \echo '61 (secret+media rejected)         : PASS  (secret is text-only; no media leak)'
 ROLLBACK;
