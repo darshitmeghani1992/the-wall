@@ -287,7 +287,7 @@ end $$;
 ROLLBACK;
 \echo '70 (no backward transition)        : PASS  (accepted cannot revert to pending)'
 
--- ── Roster SELECT does not recurse (is_wall_member is SECURITY DEFINER) ───────
+-- ── Roster SELECT does not recurse and does not leak pending invites ──────────
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (accepted member)
@@ -296,12 +296,45 @@ declare n integer;
 begin
   select count(*) into n from wall_members
    where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';   -- completes → no recursion
-  if n < 2 then
-    raise exception '70 FAIL: member could not read the co-member roster (got %)', n;
+  if n <> 1 or not exists (
+    select 1 from wall_members
+     where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id=auth.uid() and status='accepted'
+  ) then
+    raise exception '70 FAIL: accepted member roster boundary incorrect (got %)', n;
+  end if;
+  if exists (
+    select 1 from wall_members
+     where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id='77777777-7777-7777-7777-777777777777'
+  ) then
+    raise exception '70 FAIL: pending invite leaked to accepted member';
+  end if;
+end $$;
+
+set local "test.uid" = '77777777-7777-7777-7777-777777777777';   -- F (pending invitee)
+do $$ declare n integer; begin
+  select count(*) into n from wall_members
+   where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd';
+  if n <> 1 or not exists (
+    select 1 from wall_members
+     where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+       and user_id=auth.uid() and status='pending'
+  ) then
+    raise exception '70 FAIL: pending invitee could not read only their own invite (got %)', n;
+  end if;
+end $$;
+
+set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner)
+do $$ declare n integer; begin
+  select count(*) into n from wall_members
+   where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd';
+  if n <> 2 then
+    raise exception '70 FAIL: owner could not read accepted + pending roster (got %)', n;
   end if;
 end $$;
 ROLLBACK;
-\echo '70 (roster read, no recursion)     : PASS  (members see co-members)'
+\echo '70 (roster read, no recursion)     : PASS  (accepted/pending/owner visibility is scoped)'
 
 -- ╭─────────────────────────────────────────────────────────────────────────╮
 -- │ 0009 · walls-row SELECT policy ("walls view") membership disjunct          │
