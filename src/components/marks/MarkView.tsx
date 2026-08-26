@@ -311,11 +311,11 @@ function PhotoMark({ mark }: { mark: MarkWithAuthor }) {
         {mark.media_url ? (
           <Image
             source={{ uri: mark.media_url }}
-            style={{ width: "100%", height: 150, borderRadius: 1 }}
-            contentFit="cover"
+            style={{ width: "100%", height: 180, borderRadius: 1, backgroundColor: colors.surfaceContainerHigh }}
+            contentFit="contain"
           />
         ) : (
-          <Placeholder label="PHOTO" height={150} />
+          <Placeholder label="PHOTO" height={180} />
         )}
       </View>
       {mark.text ? (
@@ -465,18 +465,18 @@ function TextMark({ mark }: { mark: MarkWithAuthor }) {
  */
 function chromeFor(mark: MarkWithAuthor) {
   if (mark.secret) {
-    return { bg: markColors.secretPurple, bordered: false, fastener: "tape" as const };
+    return { bg: markColors.secretPurple, bordered: false, fastener: "pin" as const };
   }
   switch (mark.type) {
     case "photo":
       return { bg: colors.card, bordered: false, fastener: "pin" as const };
     case "voice":
-      return { bg: markColors.skyBlue, bordered: false, fastener: "tape" as const };
+      return { bg: markColors.skyBlue, bordered: false, fastener: "pin" as const };
     case "video":
       return { bg: colors.card, bordered: false, fastener: "pin" as const };
     case "text":
     default:
-      return { bg: mark.color ?? markColors.stickyYellow, bordered: false, fastener: "tape" as const };
+      return { bg: mark.color ?? markColors.stickyYellow, bordered: false, fastener: "pin" as const };
   }
 }
 
@@ -509,6 +509,7 @@ export function MarkView({
   isWallOwner = false,
   reactions,
   onToggleReaction,
+  onOpenDetail,
 }: {
   mark: MarkWithAuthor;
   enter?: EnterMode;
@@ -519,6 +520,7 @@ export function MarkView({
   isWallOwner?: boolean;
   reactions?: ReactionSummary;
   onToggleReaction?: (emoji: ReactionEmoji) => void;
+  onOpenDetail?: () => void;
 }) {
   const chrome = chromeFor(mark);
   const canShare = shareable && isMarkShareable(mark);
@@ -557,6 +559,8 @@ export function MarkView({
       enter={enter}
       enterIndex={enterIndex}
       highlight={highlight}
+      onPress={!mark.secret ? onOpenDetail : undefined}
+      accessibilityLabel={!mark.secret ? `Open Mark from ${authorName(mark)}` : undefined}
       onLongPress={canReact ? () => setPickerOpen((o) => !o) : undefined}
     >
       {inner}
@@ -579,7 +583,7 @@ export function estimateMarkHeight(mark: MarkWithAuthor): number {
   if (mark.secret) return 120;
   const base: Record<MarkType, number> = {
     text: 110,
-    photo: 220,
+    photo: 250,
     voice: 120,
     video: 220,
   };

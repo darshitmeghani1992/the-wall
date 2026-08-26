@@ -8,6 +8,7 @@ import { Button } from "@/components/Button";
 import { Masonry } from "@/components/Masonry";
 import { InviteCrew } from "@/components/InviteCrew";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
+import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { shareMyWall, inviteFriends } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
@@ -42,6 +43,7 @@ export default function MyWall() {
   const [friendCount, setFriendCount] = useState(0);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const dropIds = useRef<Set<string>>(new Set(justCreated ? [String(justCreated)] : []));
 
   // Initial load: wall + marks + friend count.
@@ -191,11 +193,28 @@ export default function MyWall() {
                 isWallOwner
                 reactions={summaries[m.id]}
                 onToggleReaction={(emoji) => toggle(m.id, emoji)}
+                onOpenDetail={() => setSelectedMark(m)}
               />
             );
           }}
         />
       )}
+
+      <MarkDetailModal
+        mark={selectedMark}
+        viewerId={session?.user.id}
+        wallOwnerId={wall?.owner_id}
+        wallHandle={profile?.handle}
+        shareable
+        reactions={selectedMark ? summaries[selectedMark.id] : undefined}
+        onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined}
+        onClose={() => setSelectedMark(null)}
+        onMarkUpdated={(markId, text) => {
+          setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item));
+          setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
+        }}
+        onMarkRemoved={(markId) => setMarks((current) => current.filter((item) => item.id !== markId))}
+      />
 
       <View style={{ height: 12 }} />
     </Screen>

@@ -190,11 +190,12 @@ export type RemovalReason = "normal" | "safety";
  * the cap, so the UI can steer the owner to a safety removal.
  */
 export async function removeMark(markId: string, reason: RemovalReason): Promise<void> {
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("marks")
-    .update({ status: "removed", removal_reason: reason })
+    .update({ status: "removed", removal_reason: reason }, { count: "exact" })
     .eq("id", markId);
   if (error) throw error;
+  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
 }
 
 /**
@@ -204,12 +205,13 @@ export async function removeMark(markId: string, reason: RemovalReason): Promise
  */
 export async function remainingNormalRemovals(ownerId: string): Promise<number> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from("marks")
     .select("id", { count: "exact", head: true })
     .eq("removed_by", ownerId)
     .eq("removal_reason", "normal")
     .gt("removed_at", since);
+  if (error) throw error;
   return Math.max(0, NORMAL_REMOVAL_LIMIT - (count ?? 0));
 }
 
@@ -224,6 +226,20 @@ export function isWithinEditWindow(mark: Pick<Mark, "created_at">): boolean {
  * error the UI can turn into an honest "the edit window has closed" message.
  */
 export async function editMarkText(markId: string, text: string): Promise<void> {
-  const { error } = await supabase.from("marks").update({ text }).eq("id", markId);
+  const { error, count } = await supabase
+    .from("marks")
+    .update({ text }, { count: "exact" })
+    .eq("id", markId);
   if (error) throw error;
+  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
+}
+
+/** Sender: permanently delete their own Mark inside the server-enforced window. */
+export async function deleteMark(markId: string): Promise<void> {
+  const { error, count } = await supabase
+    .from("marks")
+    .delete({ count: "exact" })
+    .eq("id", markId);
+  if (error) throw error;
+  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
 }

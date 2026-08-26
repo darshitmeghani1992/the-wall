@@ -53,6 +53,15 @@ export const stickySwatches = [
   markColors.skyBlue,
 ] as const;
 
+/** Bright push-pin heads. A Mark's id selects one deterministically. */
+export const pinColors = [
+  markColors.stickyPink,
+  markColors.neonGreen,
+  markColors.skyBlue,
+  markColors.roastOrange,
+  markColors.secretPurple,
+] as const;
+
 /** 4px base unit. */
 export const spacing = {
   unit: 4,

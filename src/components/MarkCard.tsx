@@ -29,6 +29,7 @@ type Props = {
   bordered?: boolean;
   fastener?: "pin" | "tape" | "none";
   onPress?: () => void;
+  accessibilityLabel?: string;
   /** Long-press the whole card (e.g. to open the reaction picker). */
   onLongPress?: () => void;
   /**
@@ -57,6 +58,7 @@ export function MarkCard({
   bordered = false,
   fastener = "tape",
   onPress,
+  accessibilityLabel,
   onLongPress,
   enter = "none",
   enterIndex = 0,
@@ -133,7 +135,7 @@ export function MarkCard({
           washStyle,
         ]}
       />
-      {fastener !== "none" && <Fastener kind={fastener} />}
+      {fastener !== "none" && <Fastener kind={fastener} seed={id} />}
       {children}
     </Animated.View>
   );
@@ -144,6 +146,8 @@ export function MarkCard({
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={onPress ? accessibilityLabel : undefined}
       onPressIn={() =>
         (pressed.value = withTiming(1, { duration: motionTokens.press.downDuration }))
       }

@@ -6,6 +6,7 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Masonry } from "@/components/Masonry";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
+import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { useAuth } from "@/lib/auth";
 import { getWall } from "@/lib/walls";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
@@ -36,6 +37,7 @@ export default function SharedWallScreen() {
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
   useEffect(() => {
@@ -160,6 +162,7 @@ export default function SharedWallScreen() {
                   highlight={m.id === justCreatedId}
                   reactions={summaries[m.id]}
                   onToggleReaction={(emoji) => toggle(m.id, emoji)}
+                  onOpenDetail={() => setSelectedMark(m)}
                 />
               )}
             />
@@ -171,6 +174,19 @@ export default function SharedWallScreen() {
               </Text>
             </View>
           )}
+          <MarkDetailModal
+            mark={selectedMark}
+            viewerId={session?.user.id}
+            wallOwnerId={wall.owner_id}
+            reactions={selectedMark ? summaries[selectedMark.id] : undefined}
+            onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined}
+            onClose={() => setSelectedMark(null)}
+            onMarkUpdated={(markId, text) => {
+              setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item));
+              setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
+            }}
+            onMarkRemoved={(markId) => setMarks((current) => current.filter((item) => item.id !== markId))}
+          />
         </>
       )}
     </Screen>

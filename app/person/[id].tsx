@@ -7,6 +7,7 @@ import { Masonry } from "@/components/Masonry";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
+import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
@@ -32,6 +33,7 @@ export default function PersonWall() {
   const [followBusy, setFollowBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   // Marks that should drop-in (the one I just left, plus any realtime arrivals).
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
@@ -171,6 +173,7 @@ export default function PersonWall() {
                   highlight={mark.id === justCreatedId}
                   reactions={summaries[mark.id]}
                   onToggleReaction={(emoji) => toggle(mark.id, emoji)}
+                  onOpenDetail={() => setSelectedMark(mark)}
                 />
               )}
             />
@@ -180,6 +183,20 @@ export default function PersonWall() {
               <Text variant="body" color={colors.outline} style={{ marginTop: 6 }}>Their Wall is waiting for its first story.</Text>
             </View>
           )}
+          <MarkDetailModal
+            mark={selectedMark}
+            viewerId={session?.user.id}
+            wallOwnerId={wall.owner_id}
+            wallHandle={profile.handle}
+            reactions={selectedMark ? summaries[selectedMark.id] : undefined}
+            onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined}
+            onClose={() => setSelectedMark(null)}
+            onMarkUpdated={(markId, text) => {
+              setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item));
+              setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
+            }}
+            onMarkRemoved={(markId) => setMarks((current) => current.filter((item) => item.id !== markId))}
+          />
         </>
       )}
     </Screen>
