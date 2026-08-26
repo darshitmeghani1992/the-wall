@@ -227,14 +227,31 @@ BEGIN;
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (member of W_PS, NOT W_PS2)
 do $$
+declare rejected boolean := false; v_message text := '';
 begin
   begin
     update wall_members set wall_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'  -- W_PS2; status unchanged
      where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
        and user_id = '22222222-2222-2222-2222-222222222222';
-  exception when others then null;   -- immutability guard raises; expected
+  exception when raise_exception then
+    rejected := true;
+    get stacked diagnostics v_message = message_text;
   end;
-  -- The membership was NOT relocated onto W_PS2 …
+  if not rejected or v_message <> 'C2_MEMBER: cannot reassign or re-role a membership' then
+    raise exception '70 FAIL: wall relocation did not hit the identity guard precisely: %', v_message;
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  -- Trusted postcondition: the original accepted membership remains intact …
+  if not exists (select 1 from wall_members
+                 where wall_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+                   and user_id = '22222222-2222-2222-2222-222222222222'
+                   and role = 'member' and status = 'accepted') then
+    raise exception '70 FAIL: original membership changed during relocation attack (F-B1)';
+  end if;
+  -- … and no membership was fabricated on W_PS2.
   if exists (select 1 from wall_members
              where wall_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
                and user_id = '22222222-2222-2222-2222-222222222222') then
