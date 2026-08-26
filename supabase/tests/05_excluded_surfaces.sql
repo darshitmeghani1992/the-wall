@@ -76,3 +76,41 @@ do $$ declare bad int; begin
 end $$;
 \echo '05 (DEFINER hygiene)               : PASS  (fixed path; narrow execution)'
 
+-- Arbitrary-actor predicates are protected; app helpers bind to auth.uid().
+do $$ declare sig text; begin
+  foreach sig in array array[
+    'is_blocked(uuid,uuid)','are_friends(uuid,uuid)','is_wall_member(uuid,uuid)',
+    'is_approved_writer(uuid,uuid)','is_active_account(uuid)','is_admin(uuid)',
+    'can_view_wall(uuid,uuid)','can_contribute(uuid,uuid)','can_view_profile(uuid,uuid)',
+    'is_mark_true_author(uuid,uuid)','can_react_to_mark(uuid,uuid)'
+  ] loop
+    if has_function_privilege('authenticated',sig,'execute')
+       or has_function_privilege('anon',sig,'execute')
+       or exists(select 1 from pg_proc p,
+                    lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+                  where p.oid=to_regprocedure(sig) and a.grantee=0
+                    and a.privilege_type='EXECUTE') then
+      raise exception '05 FAIL: internal predicate % remains app/PUBLIC executable',sig;
+    end if;
+  end loop;
+  if not has_function_privilege('authenticated','current_user_can_view_wall(uuid)','execute')
+     or not has_function_privilege('authenticated','current_user_can_contribute(uuid)','execute') then
+    raise exception '05 FAIL: auth-bound app helpers unavailable';
+  end if;
+  if has_table_privilege('authenticated','wall_ownership_transfer_authorizations','select')
+     or has_table_privilege('authenticated','wall_ownership_transfer_authorizations','insert') then
+    raise exception '05 FAIL: transfer authorization table exposed';
+  end if;
+end $$;
+
+BEGIN;
+set local role authenticated;
+set local "test.uid"='11111111-1111-1111-1111-111111111111';
+do $$ declare rejected boolean:=false; begin
+  begin perform can_view_wall('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    '33333333-3333-3333-3333-333333333333');
+  exception when insufficient_privilege then rejected:=true; end;
+  if not rejected then raise exception '05 FAIL: arbitrary actor substitution callable'; end if;
+end $$;
+ROLLBACK;
+\echo '05 (privacy-oracle ACL)            : PASS  (internal predicates protected; actor auth-bound)'

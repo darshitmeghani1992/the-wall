@@ -373,7 +373,7 @@ declare
   v_normal_count integer;
 begin
   v_is_owner := exists (select 1 from public.walls w where w.id = old.wall_id and w.owner_id = auth.uid());
-  v_is_author := public.is_mark_true_author(old.id, auth.uid());
+  v_is_author := public.current_user_is_mark_author(old.id);
   v_owner_removing := new.status = 'removed' and old.status is distinct from 'removed'
                       and v_is_owner and not v_privileged;
 
@@ -618,3 +618,244 @@ begin
 end $$;
 revoke all on function get_wall_capabilities(uuid) from public, anon;
 grant execute on function get_wall_capabilities(uuid) to authenticated;
+
+-- ── Reviewer hardening: close arbitrary-actor privacy oracles ─────────────────
+-- Internal predicates retain their historical signatures for migration and
+-- protected-function compatibility, but app roles cannot execute them. Every
+-- app-callable helper below derives the actor exclusively from auth.uid().
+create or replace function current_user_can_view_wall(p_wall_id uuid)
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select public.can_view_wall(p_wall_id, auth.uid());
+$$;
+create or replace function current_user_can_contribute(p_wall_id uuid)
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select public.can_contribute(p_wall_id, auth.uid());
+$$;
+create or replace function current_user_can_view_profile(p_profile_id uuid)
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select public.can_view_profile(p_profile_id, auth.uid());
+$$;
+create or replace function current_user_is_mark_author(p_mark_id uuid)
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select public.is_mark_true_author(p_mark_id, auth.uid());
+$$;
+create or replace function current_user_can_react(p_mark_id uuid)
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select public.can_react_to_mark(p_mark_id, auth.uid());
+$$;
+create or replace function current_user_can_see_wall_member(p_wall_id uuid, p_member_id uuid)
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select auth.uid() is not null
+    and exists (select 1 from public.wall_members target
+                where target.wall_id=p_wall_id and target.user_id=p_member_id)
+    and (
+    p_member_id = auth.uid()
+    or exists (select 1 from public.walls w where w.id=p_wall_id and w.owner_id=auth.uid())
+    or (public.is_wall_member(p_wall_id, auth.uid())
+        and public.is_wall_member(p_wall_id, p_member_id)
+        and not public.is_blocked(auth.uid(), p_member_id))
+  );
+$$;
+create or replace function current_user_is_admin()
+returns boolean language sql stable security definer set search_path = pg_catalog, public as $$
+  select public.is_admin(auth.uid());
+$$;
+
+revoke all on function current_user_can_view_wall(uuid) from public, anon;
+revoke all on function current_user_can_contribute(uuid) from public, anon;
+revoke all on function current_user_can_view_profile(uuid) from public, anon;
+revoke all on function current_user_is_mark_author(uuid) from public, anon;
+revoke all on function current_user_can_react(uuid) from public, anon;
+revoke all on function current_user_can_see_wall_member(uuid,uuid) from public, anon;
+revoke all on function current_user_is_admin() from public, anon;
+grant execute on function current_user_can_view_wall(uuid) to authenticated;
+grant execute on function current_user_can_contribute(uuid) to authenticated;
+grant execute on function current_user_can_view_profile(uuid) to authenticated;
+grant execute on function current_user_is_mark_author(uuid) to authenticated;
+grant execute on function current_user_can_react(uuid) to authenticated;
+grant execute on function current_user_can_see_wall_member(uuid,uuid) to authenticated;
+grant execute on function current_user_is_admin() to authenticated;
+
+-- Revoke every arbitrary-actor/internal predicate from app roles. Protected
+-- triggers/RPCs are SECURITY DEFINER and continue to use them as the owner.
+revoke all on function is_blocked(uuid,uuid) from public, anon, authenticated;
+revoke all on function are_friends(uuid,uuid) from public, anon, authenticated;
+revoke all on function is_wall_member(uuid,uuid) from public, anon, authenticated;
+revoke all on function is_approved_writer(uuid,uuid) from public, anon, authenticated;
+revoke all on function is_active_account(uuid) from public, anon, authenticated;
+revoke all on function is_admin(uuid) from public, anon, authenticated;
+revoke all on function can_view_wall(uuid,uuid) from public, anon, authenticated;
+revoke all on function can_contribute(uuid,uuid) from public, anon, authenticated;
+revoke all on function can_view_profile(uuid,uuid) from public, anon, authenticated;
+revoke all on function is_mark_true_author(uuid,uuid) from public, anon, authenticated;
+revoke all on function can_react_to_mark(uuid,uuid) from public, anon, authenticated;
+
+-- Final RLS policies call only auth-bound helpers or use non-sensitive row-local
+-- predicates. This prevents an app caller substituting a third party as actor.
+drop policy if exists "profiles read available" on profiles;
+create policy "profiles read available" on profiles for select to authenticated
+  using (public.current_user_can_view_profile(id));
+drop policy if exists "walls view canonical" on walls;
+create policy "walls view canonical" on walls for select to authenticated
+  using (public.current_user_can_view_wall(id));
+drop policy if exists "marks view canonical" on marks;
+create policy "marks view canonical" on marks for select to authenticated
+  using (
+    type in ('text'::mark_type,'photo'::mark_type,'voice'::mark_type,'video'::mark_type)
+    and public.current_user_can_view_wall(wall_id)
+    and (status='active' or public.current_user_is_mark_author(id)
+         or exists(select 1 from public.walls w where w.id=wall_id and w.owner_id=auth.uid()))
+  );
+drop policy if exists "wall_members read safe" on wall_members;
+create policy "wall_members read safe" on wall_members for select to authenticated
+  using (public.current_user_can_see_wall_member(wall_id,user_id));
+
+drop policy if exists "reactions view accessible mark" on mark_reactions;
+create policy "reactions view accessible mark" on mark_reactions for select to authenticated
+  using (exists(select 1 from public.marks m where m.id=mark_id and m.status='active'
+                and public.current_user_can_view_wall(m.wall_id)));
+drop policy if exists "reactions insert accessible" on mark_reactions;
+create policy "reactions insert accessible" on mark_reactions for insert to authenticated
+  with check (user_id=auth.uid() and public.current_user_can_react(mark_id));
+drop policy if exists "reactions update accessible" on mark_reactions;
+create policy "reactions update accessible" on mark_reactions for update to authenticated
+  using (user_id=auth.uid()) with check (user_id=auth.uid() and public.current_user_can_react(mark_id));
+
+drop policy if exists "marks insert text compatibility" on marks;
+create policy "marks insert text compatibility" on marks for insert to authenticated
+  with check (
+    type='text'::mark_type and media_url is null and payload is null
+    and public.current_user_can_contribute(wall_id)
+    and ((not anonymous and author_id=auth.uid()) or (anonymous and author_id is null))
+  );
+drop policy if exists "marks update author or owner canonical" on marks;
+create policy "marks update author or owner canonical" on marks for update to authenticated
+  using (public.current_user_is_mark_author(id)
+         or exists(select 1 from public.walls w where w.id=wall_id and w.owner_id=auth.uid()))
+  with check (public.current_user_is_mark_author(id)
+              or exists(select 1 from public.walls w where w.id=wall_id and w.owner_id=auth.uid()));
+drop policy if exists "marks delete author within window" on marks;
+create policy "marks delete true author within window" on marks for delete to authenticated
+  using (public.current_user_is_mark_author(id) and now() < created_at + interval '10 minutes');
+
+-- Pair guards, not app-callable arbitrary predicates, enforce block/active state
+-- for direct relationship writes. RLS still pins row identity to auth.uid().
+create or replace function guard_friendship_pair_write()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+  perform public.lock_user_pair(new.requester_id,new.addressee_id);
+  if public.is_blocked(new.requester_id,new.addressee_id)
+     or not public.is_active_account(new.requester_id)
+     or not public.is_active_account(new.addressee_id) then
+    raise exception 'unavailable' using errcode='42501';
+  end if;
+  return new;
+end $$;
+drop policy if exists "friendships insert requester" on friendships;
+create policy "friendships insert requester" on friendships for insert to authenticated
+  with check (requester_id=auth.uid() and status='pending');
+
+create or replace function guard_follow_pair_write()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+  perform public.lock_user_pair(new.follower_id,new.followed_id);
+  if public.is_blocked(new.follower_id,new.followed_id)
+     or not public.is_active_account(new.follower_id)
+     or not public.is_active_account(new.followed_id) then
+    raise exception 'unavailable' using errcode='42501';
+  end if;
+  return new;
+end $$;
+drop policy if exists "follows insert self" on follows;
+create policy "follows insert self" on follows for insert to authenticated
+  with check (follower_id=auth.uid() and follower_id<>followed_id
+              and exists(select 1 from public.walls w where w.owner_id=followed_id
+                         and w.type='personal' and w.visibility='public'));
+
+create or replace function guard_approved_writer_pair_write()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $$
+declare v_owner uuid;
+begin
+  select w.owner_id into v_owner from public.walls w where w.id=new.wall_id and w.type='personal';
+  perform public.lock_user_pair(v_owner,new.user_id);
+  if v_owner is null or public.is_blocked(v_owner,new.user_id)
+     or not public.is_active_account(v_owner) or not public.is_active_account(new.user_id) then
+    raise exception 'unavailable' using errcode='42501';
+  end if;
+  return new;
+end $$;
+drop policy if exists "approved_writers insert owner" on approved_writers;
+create policy "approved_writers insert owner" on approved_writers for insert to authenticated
+  with check (user_id<>auth.uid() and exists(select 1 from public.walls w
+              where w.id=wall_id and w.owner_id=auth.uid() and w.type='personal'));
+
+create or replace function guard_wall_member_pair_write()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $$
+declare v_owner uuid;
+begin
+  select w.owner_id into v_owner from public.walls w where w.id=new.wall_id and w.type='shared';
+  perform public.lock_user_pair(v_owner,new.user_id);
+  if v_owner is null or public.is_blocked(v_owner,new.user_id)
+     or not public.is_active_account(v_owner) or not public.is_active_account(new.user_id) then
+    raise exception 'unavailable' using errcode='42501';
+  end if;
+  return new;
+end $$;
+
+drop policy if exists "reports read own or admin" on reports;
+create policy "reports read own or admin" on reports for select to authenticated
+  using (reporter_id=auth.uid() or public.current_user_is_admin());
+drop policy if exists "moderation_actions read admin" on moderation_actions;
+create policy "moderation_actions read admin" on moderation_actions for select to authenticated
+  using (public.current_user_is_admin());
+
+-- ── Narrow ownership-transfer authorization ────────────────────────────────
+create table if not exists wall_ownership_transfer_authorizations (
+  transaction_id bigint not null,
+  wall_id uuid not null references walls(id) on delete cascade,
+  old_owner_id uuid not null references auth.users(id),
+  new_owner_id uuid not null references auth.users(id),
+  primary key(transaction_id,wall_id)
+);
+alter table wall_ownership_transfer_authorizations enable row level security;
+revoke all on wall_ownership_transfer_authorizations from public,anon,authenticated,service_role;
+
+create or replace function walls_guard_identity()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+  if new.id is distinct from old.id or new.type is distinct from old.type then
+    raise exception 'WALL_IDENTITY_IMMUTABLE';
+  end if;
+  if new.owner_id is distinct from old.owner_id and not exists(
+    select 1 from public.wall_ownership_transfer_authorizations a
+     where a.transaction_id=txid_current() and a.wall_id=old.id
+       and a.old_owner_id=old.owner_id and a.new_owner_id=new.owner_id
+  ) then raise exception 'WALL_OWNER_RPC_ONLY'; end if;
+  return new;
+end $$;
+
+create or replace function transfer_shared_wall_ownership(p_wall_id uuid,p_target_user_id uuid)
+returns boolean language plpgsql security definer set search_path=pg_catalog,public as $$
+declare v_actor uuid:=auth.uid(); v_owner uuid;
+begin
+  if v_actor is null or p_target_user_id is null or v_actor=p_target_user_id
+     or not public.is_active_account(v_actor) or not public.is_active_account(p_target_user_id) then return false; end if;
+  select w.owner_id into v_owner from public.walls w
+   where w.id=p_wall_id and w.type='shared' for update;
+  if v_owner is distinct from v_actor then return false; end if;
+  perform public.lock_user_pair(v_actor,p_target_user_id);
+  if public.is_blocked(v_actor,p_target_user_id)
+     or not public.is_wall_member(p_wall_id,p_target_user_id) then return false; end if;
+
+  insert into public.wall_ownership_transfer_authorizations
+    (transaction_id,wall_id,old_owner_id,new_owner_id)
+    values(txid_current(),p_wall_id,v_actor,p_target_user_id);
+  delete from public.wall_members where wall_id=p_wall_id and user_id=p_target_user_id;
+  insert into public.wall_members(wall_id,user_id,role,status)
+    values(p_wall_id,v_actor,'member','accepted')
+    on conflict(wall_id,user_id) do update set role='member',status='accepted';
+  update public.walls set owner_id=p_target_user_id where id=p_wall_id;
+  delete from public.wall_ownership_transfer_authorizations
+   where transaction_id=txid_current() and wall_id=p_wall_id;
+  return true;
+end $$;

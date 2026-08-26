@@ -7,7 +7,7 @@ set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';
 do $$ declare wid uuid; rejected boolean:=false; begin
  select id into wid from walls where owner_id=auth.uid() and type='personal';
- if can_contribute(wid,auth.uid()) then raise exception '56 FAIL: owner contribution helper true'; end if;
+ if current_user_can_contribute(wid) then raise exception '56 FAIL: owner contribution helper true'; end if;
  begin insert into marks(wall_id,author_id,type,text) values(wid,auth.uid(),'text','self');
  exception when others then rejected:=true; end;
  if not rejected then raise exception '56 FAIL: owner self-posted ordinary Personal Mark'; end if;
@@ -62,12 +62,18 @@ BEGIN;
 reset role;
 update walls set visibility='private'
  where owner_id='11111111-1111-1111-1111-111111111111' and type='personal';
+create temp table capability_fixture(blocked_wall uuid not null, private_wall uuid not null) on commit drop;
+insert into capability_fixture
+select
+ (select id from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal'),
+ (select id from walls where owner_id='11111111-1111-1111-1111-111111111111' and type='personal');
+grant select on capability_fixture to authenticated;
 set local role authenticated;
 set local "test.uid"='33333333-3333-3333-3333-333333333333'; -- blocked by O
-do $$ declare missing jsonb; blocked jsonb; private_wall uuid; private_result jsonb; begin
+do $$ declare missing jsonb; blocked jsonb; blocked_wall uuid; private_wall uuid; private_result jsonb; begin
  missing := get_wall_capabilities('ffffffff-ffff-ffff-ffff-ffffffffffff');
- blocked := get_wall_capabilities((select id from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal'));
- select id into private_wall from walls where owner_id='11111111-1111-1111-1111-111111111111' and type='personal';
+ select f.blocked_wall,f.private_wall into strict blocked_wall,private_wall from capability_fixture f;
+ blocked := get_wall_capabilities(blocked_wall);
  private_result := get_wall_capabilities(private_wall);
  if missing <> '{"status":"unavailable"}'::jsonb or blocked <> missing or private_result <> missing then
    raise exception '56 FAIL: unavailable capability response enumerates state'; end if;
@@ -77,6 +83,14 @@ ROLLBACK;
 
 -- Shared ownership transfer is atomic and only current-owner → accepted active member.
 BEGIN;
+reset role;
+do $$ declare rejected boolean:=false; begin
+ begin
+   update walls set owner_id='22222222-2222-2222-2222-222222222222'
+    where id='dddddddd-dddd-dddd-dddd-dddddddddddd';
+ exception when others then rejected := (SQLERRM like '%WALL_OWNER_RPC_ONLY%'); end;
+ if not rejected then raise exception '56 FAIL: privileged direct owner rewrite bypassed RPC'; end if;
+end $$;
 set local role authenticated;
 set local "test.uid"='44444444-4444-4444-4444-444444444444';
 do $$ begin

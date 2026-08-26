@@ -100,6 +100,33 @@ end $$;
 \echo '45 (owner cannot hard-delete)      : PASS  (owner removes via quota, not DELETE)'
 ROLLBACK;
 
+-- Named and Anonymous Marks share the true-sender delete window without
+-- exposing the hidden sender through an app-callable predicate.
+BEGIN;
+set local role authenticated;
+set local "test.uid"='11111111-1111-1111-1111-111111111111';
+insert into marks(id,wall_id,author_id,type,text,anonymous) values
+ ('45000000-0000-0000-0000-000000000061','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',auth.uid(),'text','named fresh',false),
+ ('45000000-0000-0000-0000-000000000062','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',null,'text','anon fresh',true),
+ ('45000000-0000-0000-0000-000000000063','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',auth.uid(),'text','named stale',false),
+ ('45000000-0000-0000-0000-000000000064','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',null,'text','anon stale',true);
+reset role;
+update marks set created_at=now()-interval '11 minutes'
+ where id in ('45000000-0000-0000-0000-000000000063','45000000-0000-0000-0000-000000000064');
+set local role authenticated;
+set local "test.uid"='11111111-1111-1111-1111-111111111111';
+delete from marks where id in ('45000000-0000-0000-0000-000000000061','45000000-0000-0000-0000-000000000062');
+delete from marks where id in ('45000000-0000-0000-0000-000000000063','45000000-0000-0000-0000-000000000064');
+reset role;
+do $$ begin
+ if exists(select 1 from marks where id in ('45000000-0000-0000-0000-000000000061','45000000-0000-0000-0000-000000000062')) then
+   raise exception '45 FAIL: fresh named/anonymous true-sender delete failed'; end if;
+ if (select count(*) from marks where id in ('45000000-0000-0000-0000-000000000063','45000000-0000-0000-0000-000000000064'))<>2 then
+   raise exception '45 FAIL: stale named/anonymous delete window bypassed'; end if;
+end $$;
+ROLLBACK;
+\echo '45 (named + Anonymous delete)      : PASS  (true sender; same 10-minute window)'
+
 -- ── Authenticity: the wall owner cannot rewrite another author's content ─────
 -- Owners moderate (remove/hide/pin) but never edit what someone else left (§3.1).
 BEGIN;

@@ -19,12 +19,10 @@ set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (accepted member)
 do $$
 begin
-  if not can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                       '22222222-2222-2222-2222-222222222222') then
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: accepted member cannot VIEW the private shared wall';
   end if;
-  if not can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                        '22222222-2222-2222-2222-222222222222') then
+  if not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: accepted member cannot CONTRIBUTE to the private shared wall';
   end if;
 end $$;
@@ -37,12 +35,10 @@ set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (non-member)
 do $$
 begin
-  if can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                   '88888888-8888-8888-8888-888888888888') then
+  if current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: non-member can VIEW the private shared wall';
   end if;
-  if can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                    '88888888-8888-8888-8888-888888888888') then
+  if current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: non-member can CONTRIBUTE to the private shared wall';
   end if;
 end $$;
@@ -55,12 +51,10 @@ set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner, no member row)
 do $$
 begin
-  if not can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                       '44444444-4444-4444-4444-444444444444') then
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: owner cannot VIEW their own private shared wall';
   end if;
-  if not can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd',
-                        '44444444-4444-4444-4444-444444444444') then
+  if not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '70 FAIL: owner cannot CONTRIBUTE to their own private shared wall';
   end if;
 end $$;
@@ -73,12 +67,10 @@ set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (unrelated to W_O)
 do $$
 begin
-  if not can_view_wall('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-                       '88888888-8888-8888-8888-888888888888') then
+  if not current_user_can_view_wall('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') then
     raise exception '70 FAIL: public shared wall not viewable by unrelated user (regression)';
   end if;
-  if can_contribute('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-                    '88888888-8888-8888-8888-888888888888') then
+  if current_user_can_contribute('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') then
     raise exception '70 FAIL: public Shared-Wall non-member could contribute';
   end if;
 end $$;

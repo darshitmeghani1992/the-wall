@@ -25,8 +25,7 @@ ROLLBACK;
 -- ── AC-S5: interaction eligibility for a blocked pair → all DENIED ───────────
 -- Part 1: block overrides an accepted friendship + contribution eligibility.
 BEGIN;
-set local role authenticated;
-set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O
+reset role; -- protected contract-level verification; app cannot call these predicates
 do $$
 begin
   if are_friends('44444444-4444-4444-4444-444444444444',

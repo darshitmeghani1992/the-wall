@@ -62,7 +62,7 @@ BEGIN;
 set local role authenticated; set local "test.uid"='33333333-3333-3333-3333-333333333333'; -- blocked by O
 do $$ declare o_wall uuid; begin
  select id into o_wall from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
- if can_view_wall(o_wall,auth.uid()) then raise exception '21 FAIL: blocked public Personal Wall visible'; end if;
+ if current_user_can_view_wall(o_wall) then raise exception '21 FAIL: blocked public Personal Wall visible'; end if;
  if exists(select 1 from profiles where id='44444444-4444-4444-4444-444444444444') then raise exception '21 FAIL: blocked profile visible'; end if;
  if exists(select 1 from walls where id=o_wall) then raise exception '21 FAIL: blocked walls row visible'; end if;
 end $$;
