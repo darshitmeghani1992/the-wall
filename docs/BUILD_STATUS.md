@@ -1,5 +1,12 @@
 # The-Wall Build Status
 
+> **CURRENT OPERATING NOTE — 2026-08-25:** Independent Product, Architect and QA audits
+> found P0 authorization/privacy conflicts that supersede the older “backend complete”
+> wording below. The app is **NOT READY** for external beta or production. Current critical
+> path: `docs/architecture/P0_SECURITY_CONTRACT_PLAN.md`. Current handoff:
+> `docs/handoffs/CURRENT.md`. The remainder of this file preserves the 2026-08-20 historical
+> slice evidence until it is fully reconciled; it must not be used as the current next-action list.
+
 > Restart anchor. On `Continue The-Wall build`: read `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`,
 > then this file, then `docs/DECISIONS.md`, inspect git, run the checks below, and
 > resume from **Next Actions**. Operational state only — canonical governance is `docs/aios/`.
