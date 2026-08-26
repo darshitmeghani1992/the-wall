@@ -136,7 +136,7 @@ BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A reacts to own mark
 insert into mark_reactions (mark_id, user_id, emoji)
-values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1','11111111-1111-1111-1111-111111111111','😎');
+values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1','11111111-1111-1111-1111-111111111111','👏');
 reset role;
 do $$
 begin

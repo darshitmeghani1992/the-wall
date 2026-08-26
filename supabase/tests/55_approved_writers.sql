@@ -39,9 +39,9 @@ begin
   if can_contribute(o_wall, '22222222-2222-2222-2222-222222222222') then
     raise exception '55 FAIL: non-approved user could contribute to a selected wall';
   end if;
-  -- Owner can always contribute to their own wall.
-  if not can_contribute(o_wall, '44444444-4444-4444-4444-444444444444') then
-    raise exception '55 FAIL: owner cannot contribute to own selected wall';
+  -- Personal-Wall owners express themselves through Status, never ordinary Marks.
+  if can_contribute(o_wall, '44444444-4444-4444-4444-444444444444') then
+    raise exception '55 FAIL: owner can contribute an ordinary Mark to own Personal Wall';
   end if;
 end $$;
 \echo '55 (approved writer can write)     : PASS  (public selected wall; non-approved denied)'

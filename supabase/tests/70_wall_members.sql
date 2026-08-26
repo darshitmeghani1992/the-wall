@@ -6,7 +6,7 @@
 -- W_O (aaaa…) = O's PUBLIC shared wall, contribution 'everyone' (control).
 --
 -- Proves: accepted member can view+contribute a private shared wall; a non-member
--- cannot; the owner can; a public shared wall stays open for an unrelated user;
+-- cannot; the owner can; a public shared wall is viewable but not writable by a non-member;
 -- the invite/accept vectors hold (non-owner cannot invite; insert-as-accepted /
 -- insert-as-owner escalation rejected; F3 personal-wall invite rejected; only the
 -- invitee accepts; no move back to pending); and the roster SELECT does not recurse.
@@ -77,13 +77,13 @@ begin
                        '88888888-8888-8888-8888-888888888888') then
     raise exception '70 FAIL: public shared wall not viewable by unrelated user (regression)';
   end if;
-  if not can_contribute('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-                        '88888888-8888-8888-8888-888888888888') then
-    raise exception '70 FAIL: public shared wall (everyone) not contributable (regression)';
+  if can_contribute('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+                    '88888888-8888-8888-8888-888888888888') then
+    raise exception '70 FAIL: public Shared-Wall non-member could contribute';
   end if;
 end $$;
 ROLLBACK;
-\echo '70 (public wall unchanged)         : PASS  (member-gating did not affect public)'
+\echo '70 (public view/member write)      : PASS  (public view; non-member write denied)'
 
 -- ── Invite vector: a NON-owner (B) cannot create a membership → DENIED ───────
 BEGIN;

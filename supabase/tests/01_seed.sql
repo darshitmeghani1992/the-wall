@@ -89,6 +89,7 @@ values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
 -- Membership on W_PS: B accepted (view/contribute fixture), F pending (accept /
 -- invite-notification fixture). O needs no membership row (owner via walls.owner_id).
 insert into wall_members (wall_id, user_id, role, status) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','member','accepted'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','22222222-2222-2222-2222-222222222222','member','accepted'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','77777777-7777-7777-7777-777777777777','member','pending');
 
