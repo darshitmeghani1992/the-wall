@@ -252,9 +252,15 @@ create trigger ab_reactions_identity_guard before update on mark_reactions
 
 drop policy if exists "reactions view" on mark_reactions;
 drop policy if exists "reactions view accessible mark" on mark_reactions;
+-- PostgreSQL applies SELECT RLS while locating rows for DELETE. The self arm
+-- exposes only the caller's own reaction row after access loss so the existing
+-- self-delete policy can work; it does not expose the Mark or others' reactions.
 create policy "reactions view accessible mark" on mark_reactions for select to authenticated
-  using (exists (select 1 from public.marks m where m.id = mark_id
-                 and m.status = 'active' and public.can_view_wall(m.wall_id, auth.uid())));
+  using (
+    user_id = auth.uid()
+    or exists (select 1 from public.marks m where m.id = mark_id
+               and m.status = 'active' and public.can_view_wall(m.wall_id, auth.uid()))
+  );
 drop policy if exists "reactions write self" on mark_reactions;
 drop policy if exists "reactions insert accessible" on mark_reactions;
 create policy "reactions insert accessible" on mark_reactions for insert to authenticated
@@ -712,8 +718,11 @@ create policy "wall_members read safe" on wall_members for select to authenticat
 
 drop policy if exists "reactions view accessible mark" on mark_reactions;
 create policy "reactions view accessible mark" on mark_reactions for select to authenticated
-  using (exists(select 1 from public.marks m where m.id=mark_id and m.status='active'
-                and public.current_user_can_view_wall(m.wall_id)));
+  using (
+    user_id=auth.uid()
+    or exists(select 1 from public.marks m where m.id=mark_id and m.status='active'
+              and public.current_user_can_view_wall(m.wall_id))
+  );
 drop policy if exists "reactions insert accessible" on mark_reactions;
 create policy "reactions insert accessible" on mark_reactions for insert to authenticated
   with check (user_id=auth.uid() and public.current_user_can_react(mark_id));
