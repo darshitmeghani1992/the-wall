@@ -193,18 +193,29 @@ end $$;
 -- Mark backed by a validated-then-consumed upload and canonical relation, so a
 -- later zero-row result proves authorization denial rather than absent media.
 do $$ declare personal_wall uuid; begin
+  -- The seed uses this accepted friendship to prove block precedence elsewhere.
+  -- Re-establish its pre-block state here so 333 is a legitimate contributor;
+  -- 111 remains only the viewer whose signing access is tested below.
+  delete from blocks where blocker_id='44444444-4444-4444-4444-444444444444'
+    and blocked_id='33333333-3333-3333-3333-333333333333';
+  delete from friendships where
+    (requester_id='44444444-4444-4444-4444-444444444444' and addressee_id='33333333-3333-3333-3333-333333333333')
+    or (requester_id='33333333-3333-3333-3333-333333333333' and addressee_id='44444444-4444-4444-4444-444444444444');
+  insert into friendships(requester_id,addressee_id,status) values
+    ('44444444-4444-4444-4444-444444444444','33333333-3333-3333-3333-333333333333','accepted');
+  perform set_config('test.uid','33333333-3333-3333-3333-333333333333',true);
   select id into strict personal_wall from walls
    where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
   insert into marks(id,wall_id,author_id,type,text,status)
     values('51000000-0000-0000-0000-000000000040',personal_wall,
-      '11111111-1111-1111-1111-111111111111','photo',null,'active');
+      '33333333-3333-3333-3333-333333333333','photo',null,'active');
   insert into media_uploads(id,uploader_id,uploader_tombstone_id,wall_id,wall_tombstone_id,kind,client_upload_id,
     source_path,state,session_state,declared_mime,declared_bytes,detected_mime,validated_bytes,actual_input_bytes,
     sha256,width,height,validated_path,cache_control_seconds,expires_at,validated_at,quota_day,reserved_charge)
-  values('51000000-0000-0000-0000-000000000041','11111111-1111-1111-1111-111111111111',
-    '11111111-1111-1111-1111-111111111111',personal_wall,personal_wall,'photo',
+  values('51000000-0000-0000-0000-000000000041','33333333-3333-3333-3333-333333333333',
+    '33333333-3333-3333-3333-333333333333',personal_wall,personal_wall,'photo',
     '51000000-0000-0000-0000-000000000042',
-    'staging/11111111-1111-1111-1111-111111111111/51000000-0000-0000-0000-000000000041/source',
+    'staging/33333333-3333-3333-3333-333333333333/51000000-0000-0000-0000-000000000041/source',
     'validated','closed','image/jpeg',1000,'image/jpeg',900,1000,repeat('e',64),100,80,
     'validated/51000000-0000-0000-0000-000000000041/51000000-0000-0000-0000-000000000043/full.jpg',
     60,now()+interval '1 hour',now(),current_date,1000);
@@ -217,6 +228,7 @@ do $$ declare personal_wall uuid; begin
     consumed_mark_tombstone_id='51000000-0000-0000-0000-000000000040',consumed_at=now()
    where id='51000000-0000-0000-0000-000000000041';
 end $$;
+set local "test.uid"='11111111-1111-1111-1111-111111111111';
 set local role service_role;
 do $$ declare mid uuid; allowed_count integer; allowed_position smallint; allowed_path text;
   missing_count integer; personal_count integer; personal_position smallint; personal_path text; begin
