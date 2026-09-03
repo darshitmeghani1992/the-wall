@@ -249,9 +249,34 @@ do $$ declare claimed media_uploads%rowtype; source_delete uuid; jpg_delete uuid
        jsonb_build_object('path',claimed.validated_path||'.webp','outcome','missing','observed_at',clock_timestamp()::text),null) then
     raise exception '53 FAIL: post-fence exact cleanup evidence rejected';
   end if;
-  if exists(select 1 from storage.objects where bucket_id='mark-media' and name in (claimed.source_path,late_path))
-     or (select quota_reservation_released_at from media_uploads where id=claimed.id) is null then
-    raise exception '53 FAIL: late path survived or quota release did not follow complete evidence';
+  if exists(select 1 from storage.objects where bucket_id='mark-media' and name in (claimed.source_path,late_path)) then
+    raise exception '53 FAIL: subject-deleted late path survived complete evidence';
+  end if;
+  -- Exact-path evidence is necessary but cannot release quota while the old
+  -- output credential can still recreate an object at the same destination.
+  if (select quota_reservation_released_at from media_uploads where id=claimed.id) is not null
+     or (select reserved_bytes from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>1000
+     or (select reservation_count from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>1 then
+    raise exception '53 FAIL: subject-deleted evidence bypassed live output-credential fence';
+  end if;
+  -- Simulate the cleanup worker running after actual credential expiry. The
+  -- terminal attempt is already invalidated, so assign a fresh test-only
+  -- identity while advancing its retained audit fence; production never
+  -- shortens the fence within one attempt identity.
+  update media_uploads set attempt_id=gen_random_uuid(),
+    output_credentials_expire_at=clock_timestamp()-interval '1 second'
+    where id=claimed.id;
+  if not release_media_upload_reservation_if_clean(claimed.id) then
+    raise exception '53 FAIL: post-fence subject-deleted cleanup did not release quota';
+  end if;
+  if (select quota_reservation_released_at from media_uploads where id=claimed.id) is null
+     or (select reserved_bytes from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0
+     or (select reservation_count from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0 then
+    raise exception '53 FAIL: post-fence subject-deleted quota release incomplete';
   end if;
 end $$;
 ROLLBACK;
@@ -367,9 +392,28 @@ begin
     raise exception '53 FAIL: fresh post-fence processing-expiry evidence rejected';
   end if;
   if exists(select 1 from storage.objects where bucket_id='mark-media'
-       and name in (claimed.source_path,late_path))
-     or (select quota_reservation_released_at from media_uploads where id=claimed.id) is null then
-    raise exception '53 FAIL: processing-expiry cleanup/release incomplete';
+       and name in (claimed.source_path,late_path)) then
+    raise exception '53 FAIL: processing-expiry late path survived complete evidence';
+  end if;
+  if (select quota_reservation_released_at from media_uploads where id=claimed.id) is not null
+     or (select reserved_bytes from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>1000
+     or (select reservation_count from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>1 then
+    raise exception '53 FAIL: processing-expiry evidence bypassed live output-credential fence';
+  end if;
+  update media_uploads set attempt_id=gen_random_uuid(),
+    output_credentials_expire_at=clock_timestamp()-interval '1 second'
+    where id=claimed.id;
+  if not release_media_upload_reservation_if_clean(claimed.id) then
+    raise exception '53 FAIL: post-fence processing-expiry cleanup did not release quota';
+  end if;
+  if (select quota_reservation_released_at from media_uploads where id=claimed.id) is null
+     or (select reserved_bytes from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0
+     or (select reservation_count from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0 then
+    raise exception '53 FAIL: post-fence processing-expiry quota release incomplete';
   end if;
 end $$;
 ROLLBACK;
