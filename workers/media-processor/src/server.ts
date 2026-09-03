@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, open, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -132,7 +132,7 @@ async function downloadSource(
   const maximum = INPUT_BYTES[claims.kind];
   if (Number.isFinite(announcedLength) && announcedLength > maximum) throw new MediaProcessingError("TOO_LARGE", "source is too large");
 
-  const handle = await (await import("node:fs/promises")).open(destinationPath, "wx", 0o600);
+  const handle = await open(destinationPath, "wx", 0o600);
   let received = 0;
   try {
     const reader = response.body.getReader();
