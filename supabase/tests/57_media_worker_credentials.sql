@@ -170,7 +170,15 @@ values('57000000-0000-0000-0000-000000000020','11111111-1111-1111-1111-111111111
  'uploaded','closed','image/jpeg',1000,1000,4,now()+interval '1 hour',current_date,1000,now());
 insert into media_quota_daily(user_tombstone_id,quota_day,reserved_bytes,ingested_bytes,reservation_count,open_sessions)
 values('11111111-1111-1111-1111-111111111111',current_date,1000,1000,1,0);
-do $$ declare u media_uploads%rowtype; t timestamptz; source_id uuid; jpg_id uuid; webp_id uuid; begin
+do $$ declare
+  u media_uploads%rowtype;
+  t timestamptz;
+  source_id uuid;
+  jpg_id uuid;
+  webp_id uuid;
+  requirement_count integer;
+  incomplete_count integer;
+begin
   perform rotate_media_envelope_key(null,'key-clean');
   select * into strict u from claim_media_validation_jobs(1,'57000000-0000-0000-0000-000000000022');
   t:=clock_timestamp();
@@ -206,12 +214,46 @@ do $$ declare u media_uploads%rowtype; t timestamptz; source_id uuid; jpg_id uui
      or not record_media_object_deletion(webp_id,
        jsonb_build_object('path',u.validated_path||'.webp','outcome','missing','observed_at',clock_timestamp()::text),null) then
     raise exception '57 FAIL: fresh post-fence evidence rejected'; end if;
-  -- Simulate actual passage in addition to the outbox clock for the upload-level release guard.
-  update media_uploads set attempt_id=gen_random_uuid(),
+  select count(*),count(*) filter (where d.state<>'deleted' or d.object_evidence is null
+      or (d.preview_path is not null and d.preview_evidence is null))
+    into requirement_count,incomplete_count
+    from media_upload_cleanup_requirements r
+    join media_object_deletions d on d.id=r.deletion_id
+    where r.upload_id=u.id;
+  if requirement_count<>3 or incomplete_count<>0 then
+    raise exception '57 FAIL: cleanup prerequisites count %, incomplete %',
+      requirement_count,incomplete_count;
+  end if;
+  if not exists(select 1 from media_uploads where id=u.id and state='failed'
+       and quota_reservation_released_at is null
+       and output_credentials_expire_at>clock_timestamp()) then
+    raise exception '57 FAIL: live upload fence/pre-release state incorrect';
+  end if;
+  if not exists(select 1 from media_quota_daily where user_tombstone_id=u.uploader_tombstone_id
+       and quota_day=u.quota_day and reserved_bytes=1000 and reservation_count=1 and open_sessions=0) then
+    raise exception '57 FAIL: pre-release quota ledger incorrect';
+  end if;
+  -- Simulate actual passage in addition to the outbox clock for the upload-level
+  -- release guard. Invalidate the terminal attempt's credential identity while
+  -- changing attempt identity, which permits this trusted fixture to advance
+  -- the retained fence without weakening the production non-shrinking trigger.
+  update media_uploads set attempt_id=null,dispatch_nonce_hash=null,completion_nonce_hash=null,
+    dispatch_redeemed_at=null,completion_redeemed_at=null,envelope_kid=null,
+    dispatch_envelope_expires_at=null,
     output_credentials_expire_at=clock_timestamp()-interval '1 second' where id=u.id;
+  if not exists(select 1 from media_uploads where id=u.id and state='failed'
+       and attempt_id is null and dispatch_nonce_hash is null and completion_nonce_hash is null
+       and envelope_kid is null and output_credentials_expire_at<=clock_timestamp()
+       and quota_reservation_released_at is null) then
+    raise exception '57 FAIL: post-fence terminal fixture state incorrect';
+  end if;
   if not release_media_upload_reservation_if_clean(u.id)
-     or (select reserved_bytes from media_quota_daily where user_tombstone_id=u.uploader_tombstone_id
-       and quota_day=u.quota_day)<>0 then raise exception '57 FAIL: post-fence quota release'; end if;
+     then raise exception '57 FAIL: protected post-fence release returned false'; end if;
+  if not exists(select 1 from media_uploads where id=u.id and quota_reservation_released_at is not null)
+     or not exists(select 1 from media_quota_daily where user_tombstone_id=u.uploader_tombstone_id
+       and quota_day=u.quota_day and reserved_bytes=0 and reservation_count=0 and open_sessions=0) then
+    raise exception '57 FAIL: post-fence quota ledger reconciliation incorrect';
+  end if;
 end $$;
 ROLLBACK;
 \echo '57 (late-PUT/evidence/quota fence)    : PASS'
