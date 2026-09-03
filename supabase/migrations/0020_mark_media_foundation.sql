@@ -901,7 +901,11 @@ create or replace function complete_media_validation(
   p_upload_id uuid,p_attempt_id uuid,p_detected_mime text,p_validated_bytes bigint,p_sha256 text,
   p_width integer,p_height integer,p_duration_ms integer,p_validated_path text,p_preview_path text,p_cache_control_seconds integer
 ) returns boolean language plpgsql security definer set search_path=pg_catalog,public as $$
-declare v_up media_uploads%rowtype; v_kind mark_type;
+declare
+  v_up media_uploads%rowtype;
+  v_kind mark_type;
+  v_expected_validated_path text;
+  v_expected_preview_path text;
 begin
   if current_user not in ('postgres','service_role') then raise exception 'unavailable' using errcode='42501'; end if;
   select kind into v_kind from media_uploads where id=p_upload_id;
@@ -912,17 +916,27 @@ begin
      or v_up.uploader_id is null or v_up.wall_id is null
      or v_up.dispatch_redeemed_at is null or v_up.completion_redeemed_at is null
      or not exists(select 1 from media_kind_controls where kind=v_up.kind and processing_enabled) then return false; end if;
-  if p_validated_path <> case v_up.kind
-       when 'photo'::mark_type then v_up.validated_path || case p_detected_mime when 'image/jpeg' then '.jpg' else '.webp' end
-       when 'voice'::mark_type then v_up.validated_path || '.m4a'
-       when 'video'::mark_type then v_up.validated_path || '.mp4'
-     end
-     or p_preview_path is distinct from case
-       when v_up.kind='photo'::mark_type and p_preview_path is not null then
-         'validated/'||v_up.id::text||'/'||v_up.attempt_id::text||'/thumb.webp'
-       when v_up.kind='video'::mark_type and p_preview_path is not null then
-         'validated/'||v_up.id::text||'/'||v_up.attempt_id::text||'/poster.webp'
-       else null end
+
+  if v_up.kind='photo'::mark_type then
+    if p_detected_mime='image/jpeg' then
+      v_expected_validated_path := v_up.validated_path||'.jpg';
+    else
+      v_expected_validated_path := v_up.validated_path||'.webp';
+    end if;
+    if p_preview_path is not null then
+      v_expected_preview_path := 'validated/'||v_up.id::text||'/'||v_up.attempt_id::text||'/thumb.webp';
+    end if;
+  elsif v_up.kind='voice'::mark_type then
+    v_expected_validated_path := v_up.validated_path||'.m4a';
+  elsif v_up.kind='video'::mark_type then
+    v_expected_validated_path := v_up.validated_path||'.mp4';
+    if p_preview_path is not null then
+      v_expected_preview_path := 'validated/'||v_up.id::text||'/'||v_up.attempt_id::text||'/poster.webp';
+    end if;
+  end if;
+
+  if p_validated_path <> v_expected_validated_path
+     or p_preview_path is distinct from v_expected_preview_path
      or p_validated_bytes<=0
      or p_sha256 !~ '^[0-9a-f]{64}$' or p_cache_control_seconds not between 0 and 60 then return false; end if;
   if (v_up.kind='photo' and (p_detected_mime not in ('image/jpeg','image/webp') or p_validated_bytes>10485760
