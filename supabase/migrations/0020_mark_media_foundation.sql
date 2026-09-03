@@ -540,6 +540,7 @@ declare
   v_checked_at timestamptz;
   v_object_observed_at timestamptz;
   v_preview_observed_at timestamptz;
+  v_upload_id uuid;
 begin
   if current_user not in ('postgres','service_role') then
     raise exception 'unavailable' using errcode='42501';
@@ -547,8 +548,12 @@ begin
   select * into v_deletion from media_object_deletions where id=p_deletion_id for update;
   if not found then return false; end if;
   if v_deletion.state='deleted' then
-    perform release_media_upload_reservation_if_clean(r.upload_id)
-      from media_upload_cleanup_requirements r where r.deletion_id=v_deletion.id;
+    for v_upload_id in
+      select r.upload_id from media_upload_cleanup_requirements r
+       where r.deletion_id=v_deletion.id
+    loop
+      perform release_media_upload_reservation_if_clean(v_upload_id);
+    end loop;
     return true;
   end if;
   v_checked_at:=clock_timestamp();
@@ -577,8 +582,15 @@ begin
          object_evidence=p_object_evidence,preview_evidence=p_preview_evidence,lease_expires_at=null,
          updated_at=now()
    where id=v_deletion.id;
-  perform release_media_upload_reservation_if_clean(r.upload_id)
-    from media_upload_cleanup_requirements r where r.deletion_id=v_deletion.id;
+  -- Make the evidence -> ledger transition explicit. A deletion row is
+  -- normally upload-specific, but the schema permits more than one dependent
+  -- upload, so release each dependency through an explicit procedural call.
+  for v_upload_id in
+    select r.upload_id from media_upload_cleanup_requirements r
+     where r.deletion_id=v_deletion.id
+  loop
+    perform release_media_upload_reservation_if_clean(v_upload_id);
+  end loop;
   return true;
 end $$;
 revoke all on function record_media_object_deletion(uuid,jsonb,jsonb) from public,anon,authenticated;

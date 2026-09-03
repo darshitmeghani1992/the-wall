@@ -107,8 +107,18 @@ do $$ declare claimed media_uploads%rowtype; source_path text; jpg_path text; th
   if (select quota_reservation_released_at from media_uploads where id=claimed.id) is not null then
     raise exception '52 FAIL: partial output cleanup released quota early'; end if;
   if not record_media_object_deletion(webp_delete,
-       jsonb_build_object('path',webp_path,'outcome','missing','observed_at',clock_timestamp()::text),null)
-     or (select quota_reservation_released_at from media_uploads where id=claimed.id) is null then
+       jsonb_build_object('path',webp_path,'outcome','missing','observed_at',clock_timestamp()::text),null) then
+    raise exception '52 FAIL: final terminal cleanup evidence rejected'; end if;
+  if (select count(*) from media_upload_cleanup_requirements r
+      join media_object_deletions d on d.id=r.deletion_id
+      where r.upload_id=claimed.id and d.state='deleted' and d.object_evidence is not null
+        and (d.preview_path is null or d.preview_evidence is not null))<>3 then
+    raise exception '52 FAIL: accepted terminal evidence did not complete every cleanup requirement'; end if;
+  if (select quota_reservation_released_at from media_uploads where id=claimed.id) is null
+     or (select reserved_bytes from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0
+     or (select reservation_count from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0 then
     raise exception '52 FAIL: complete terminal cleanup did not release quota'; end if;
 end $$;
 ROLLBACK;
