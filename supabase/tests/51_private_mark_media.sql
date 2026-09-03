@@ -44,7 +44,6 @@ BEGIN;
 update media_legacy_reconciliation set state='complete',completed_at=now() where singleton;
 create temp table media51_switch(upload_id uuid,path text) on commit drop;
 grant select,insert on media51_switch to authenticated;
-grant select on media51_switch to service_role;
 set local role service_role;
 select set_media_kind_control('photo',true,false,false,false,'C1 switch boundary test');
 set local role authenticated;
@@ -69,14 +68,18 @@ do $$ declare uid uuid; r jsonb; begin
   if r->>'status'<>'unavailable' then raise exception '51 FAIL: upload-transition switch bypass %',r; end if;
 end $$;
 reset role;
-set local role service_role;
-select set_media_kind_control('photo',true,true,false,false,'C1 processing switch test');
-do $$ declare uid uuid; p text; begin
-  select upload_id,path into strict uid,p from media51_switch;
+-- Construct the already-uploaded fixture as the trusted test owner. The worker
+-- role should exercise only its production control and claim interfaces.
+do $$ declare uid uuid; begin
+  select upload_id into strict uid from media51_switch;
   update media_uploads set state='uploaded',session_state='closed',actual_input_bytes=1024,
     quota_session_released_at=now() where id=uid;
   update media_quota_daily set open_sessions=open_sessions-1
     where user_tombstone_id='11111111-1111-1111-1111-111111111111' and quota_day=current_date;
+end $$;
+set local role service_role;
+select set_media_kind_control('photo',true,true,false,false,'C1 processing switch test');
+do $$ begin
   if exists(select 1 from claim_media_validation_jobs(1,'51000000-0000-0000-0000-000000000091')) then
     raise exception '51 FAIL: processing switch bypass'; end if;
 end $$;
@@ -186,7 +189,7 @@ do $$ declare mid uuid; alert_count integer; begin
   if alert_count<>1 then raise exception '51 FAIL: expected one Alert, got %',alert_count; end if;
 end $$;
 set local role service_role;
-do $$ declare mid uuid; allowed_count integer; missing_count integer; blocked_count integer; begin
+do $$ declare mid uuid; allowed_count integer; missing_count integer; begin
   select mark_id into strict mid from media51;
   select count(*) into allowed_count from resolve_mark_media_for_signing(
     '11111111-1111-1111-1111-111111111111',mid,'51000000-0000-0000-0000-000000000024');
@@ -195,8 +198,14 @@ do $$ declare mid uuid; allowed_count integer; missing_count integer; blocked_co
     '11111111-1111-1111-1111-111111111111','51000000-0000-0000-0000-000000000025',
     '51000000-0000-0000-0000-000000000026');
   if missing_count<>0 then raise exception '51 FAIL: resolver exposed missing Mark'; end if;
-  insert into blocks(blocker_id,blocked_id) values
-    ('44444444-4444-4444-4444-444444444444','11111111-1111-1111-1111-111111111111');
+end $$;
+reset role;
+-- Blocking is trusted test setup, not part of the signing worker's authority.
+insert into blocks(blocker_id,blocked_id) values
+  ('44444444-4444-4444-4444-444444444444','11111111-1111-1111-1111-111111111111');
+set local role service_role;
+do $$ declare mid uuid; blocked_count integer; begin
+  select mark_id into strict mid from media51;
   select count(*) into blocked_count from resolve_mark_media_for_signing(
     '11111111-1111-1111-1111-111111111111',mid,'51000000-0000-0000-0000-000000000027');
   if blocked_count<>0 then raise exception '51 FAIL: resolver exposed blocked Mark media'; end if;
