@@ -188,27 +188,86 @@ do $$ declare mid uuid; alert_count integer; begin
   select count(*) into alert_count from notifications where mark_id=mid;
   if alert_count<>1 then raise exception '51 FAIL: expected one Alert, got %',alert_count; end if;
 end $$;
+
+-- Independent Personal-Wall signing fixture. It is deliberately a real active
+-- Mark backed by a validated-then-consumed upload and canonical relation, so a
+-- later zero-row result proves authorization denial rather than absent media.
+do $$ declare personal_wall uuid; begin
+  select id into strict personal_wall from walls
+   where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+  insert into marks(id,wall_id,author_id,type,text,status)
+    values('51000000-0000-0000-0000-000000000040',personal_wall,
+      '11111111-1111-1111-1111-111111111111','photo',null,'active');
+  insert into media_uploads(id,uploader_id,uploader_tombstone_id,wall_id,wall_tombstone_id,kind,client_upload_id,
+    source_path,state,session_state,declared_mime,declared_bytes,detected_mime,validated_bytes,actual_input_bytes,
+    sha256,width,height,validated_path,cache_control_seconds,expires_at,validated_at,quota_day,reserved_charge)
+  values('51000000-0000-0000-0000-000000000041','11111111-1111-1111-1111-111111111111',
+    '11111111-1111-1111-1111-111111111111',personal_wall,personal_wall,'photo',
+    '51000000-0000-0000-0000-000000000042',
+    'staging/11111111-1111-1111-1111-111111111111/51000000-0000-0000-0000-000000000041/source',
+    'validated','closed','image/jpeg',1000,'image/jpeg',900,1000,repeat('e',64),100,80,
+    'validated/51000000-0000-0000-0000-000000000041/51000000-0000-0000-0000-000000000043/full.jpg',
+    60,now()+interval '1 hour',now(),current_date,1000);
+  insert into mark_media(mark_id,upload_id,media_type,"position",storage_path,mime_type,byte_size,sha256,width,height)
+  select '51000000-0000-0000-0000-000000000040',id,kind,0,validated_path,detected_mime,
+    validated_bytes,sha256,width,height from media_uploads
+   where id='51000000-0000-0000-0000-000000000041';
+  update media_uploads set state='consumed',
+    consumed_mark_id='51000000-0000-0000-0000-000000000040',
+    consumed_mark_tombstone_id='51000000-0000-0000-0000-000000000040',consumed_at=now()
+   where id='51000000-0000-0000-0000-000000000041';
+end $$;
 set local role service_role;
-do $$ declare mid uuid; allowed_count integer; missing_count integer; begin
+do $$ declare mid uuid; allowed_count integer; allowed_position smallint; allowed_path text;
+  missing_count integer; personal_count integer; personal_position smallint; personal_path text; begin
   select mark_id into strict mid from media51;
-  select count(*) into allowed_count from resolve_mark_media_for_signing(
-    '11111111-1111-1111-1111-111111111111',mid,'51000000-0000-0000-0000-000000000024');
-  if allowed_count<>1 then raise exception '51 FAIL: resolver denied permitted viewer'; end if;
+  select count(*),min(r."position"),min(r.storage_path)
+    into allowed_count,allowed_position,allowed_path from resolve_mark_media_for_signing(
+    '11111111-1111-1111-1111-111111111111',mid,'51000000-0000-0000-0000-000000000024') r;
+  if allowed_count<>1 or allowed_position<>0 or allowed_path<>(select validated_path from media_uploads
+       where id=(select upload_id from media51)) then
+    raise exception '51 FAIL: resolver denied or altered permitted Shared-Wall media'; end if;
   select count(*) into missing_count from resolve_mark_media_for_signing(
     '11111111-1111-1111-1111-111111111111','51000000-0000-0000-0000-000000000025',
     '51000000-0000-0000-0000-000000000026');
   if missing_count<>0 then raise exception '51 FAIL: resolver exposed missing Mark'; end if;
+  select count(*),min(r."position"),min(r.storage_path)
+    into personal_count,personal_position,personal_path from resolve_mark_media_for_signing(
+    '11111111-1111-1111-1111-111111111111','51000000-0000-0000-0000-000000000040',
+    '51000000-0000-0000-0000-000000000044') r;
+  if personal_count<>1 or personal_position<>0 or
+     personal_path<>'validated/51000000-0000-0000-0000-000000000041/51000000-0000-0000-0000-000000000043/full.jpg' then
+    raise exception '51 FAIL: Personal-Wall media pre-block control not readable'; end if;
 end $$;
 reset role;
 -- Blocking is trusted test setup, not part of the signing worker's authority.
 insert into blocks(blocker_id,blocked_id) values
   ('44444444-4444-4444-4444-444444444444','11111111-1111-1111-1111-111111111111');
 set local role service_role;
-do $$ declare mid uuid; blocked_count integer; begin
+do $$ declare mid uuid; shared_count integer; shared_position smallint; shared_path text;
+  personal_count integer; begin
   select mark_id into strict mid from media51;
-  select count(*) into blocked_count from resolve_mark_media_for_signing(
-    '11111111-1111-1111-1111-111111111111',mid,'51000000-0000-0000-0000-000000000027');
-  if blocked_count<>0 then raise exception '51 FAIL: resolver exposed blocked Mark media'; end if;
+  select count(*),min(r."position"),min(r.storage_path)
+    into shared_count,shared_position,shared_path from resolve_mark_media_for_signing(
+    '11111111-1111-1111-1111-111111111111',mid,'51000000-0000-0000-0000-000000000045') r;
+  if shared_count<>1 or shared_position<>0 or shared_path<>(select validated_path from media_uploads
+       where id=(select upload_id from media51)) then
+    raise exception '51 FAIL: block hid or altered existing Shared-Wall media'; end if;
+  select count(*) into personal_count from resolve_mark_media_for_signing(
+    '11111111-1111-1111-1111-111111111111','51000000-0000-0000-0000-000000000040',
+    '51000000-0000-0000-0000-000000000046');
+  if personal_count<>0 then raise exception '51 FAIL: block exposed Personal-Wall media'; end if;
+end $$;
+reset role;
+do $$ begin
+  if not exists(select 1 from mark_media
+      where mark_id='51000000-0000-0000-0000-000000000040'
+        and upload_id='51000000-0000-0000-0000-000000000041'
+        and "position"=0
+        and storage_path='validated/51000000-0000-0000-0000-000000000041/51000000-0000-0000-0000-000000000043/full.jpg')
+     or not exists(select 1 from media_uploads
+      where id='51000000-0000-0000-0000-000000000041' and state='consumed') then
+    raise exception '51 FAIL: Personal-Wall denial was caused by media deletion'; end if;
 end $$;
 ROLLBACK;
 \echo '51 (staging/validation/create)     : PASS'
