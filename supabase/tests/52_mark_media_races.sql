@@ -143,6 +143,24 @@ do $$ declare claimed media_uploads%rowtype; source_path text; jpg_path text; th
       where r.upload_id=claimed.id and d.state='deleted' and d.object_evidence is not null
         and (d.preview_path is null or d.preview_evidence is not null))<>3 then
     raise exception '52 FAIL: accepted terminal evidence did not complete every cleanup requirement'; end if;
+  -- Complete exact-path evidence alone is insufficient while the signed PUT
+  -- credential can still resurrect an output. The upload-level fence is an
+  -- independent release condition, even when test-only outbox clocks advance.
+  if (select quota_reservation_released_at from media_uploads where id=claimed.id) is not null
+     or (select reserved_bytes from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>1000
+     or (select reservation_count from media_quota_daily
+          where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>1 then
+    raise exception '52 FAIL: complete evidence bypassed live output-credential fence'; end if;
+  -- Simulate the cleanup worker running after actual credential expiry. Clear
+  -- the terminal attempt identity and advance its retained audit fence as the
+  -- trusted test owner; production never shortens this value within an attempt.
+  update media_uploads set attempt_id=null,dispatch_nonce_hash=null,completion_nonce_hash=null,
+    dispatch_redeemed_at=null,completion_redeemed_at=null,envelope_kid=null,
+    dispatch_envelope_expires_at=null,output_credentials_expire_at=clock_timestamp()-interval '1 second'
+    where id=claimed.id;
+  if not release_media_upload_reservation_if_clean(claimed.id) then
+    raise exception '52 FAIL: post-fence complete cleanup did not release quota'; end if;
   if (select quota_reservation_released_at from media_uploads where id=claimed.id) is null
      or (select reserved_bytes from media_quota_daily
           where user_tombstone_id=claimed.uploader_tombstone_id and quota_day=claimed.quota_day)<>0
