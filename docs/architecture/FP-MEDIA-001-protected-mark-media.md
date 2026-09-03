@@ -1,6 +1,6 @@
 # FP-MEDIA-001: Protected private Mark media
 
-**Status:** Revised after independent `REQUEST CHANGES`; re-review required
+**Status:** Approved — including independently Two-Key-approved worker credential protocol v2
 **Decision:** [ADR-012](./ADR-012-protected-mark-media.md)
 **Authority:** `THE_WALL_MASTER_BUILD_SPEC_v1.1.md` §§21–25, 62, 67–69, 81, 100, 108, 119–121; `P0_SECURITY_CONTRACT_PLAN.md` Package C
 **Repository base:** `ab5539592e405c23cee49dbf02aeff1aa7e0dd0e`
@@ -16,9 +16,10 @@ exact private staging path, waits for a trusted processor, and then calls one id
 provenance, Secret-text record, and Alert in one PostgreSQL transaction. Viewers receive only
 short-lived signed URLs after current Mark access is rechecked.
 
-Migration `0020` adds the foundation without removing the safe text compatibility writer. Migration
-`0021` is the final cutover after the client, processor, hosted Storage, legacy migration, and tests
-pass. Rollback disables media; it never republishes private objects.
+Migration `0020` adds the foundation without removing the safe text compatibility writer.
+`0021_media_worker_credentials.sql` additively binds the approved worker protocol v2. Migration
+`0022_mark_creation_cutover.sql` is the final cutover after the client, processor, hosted Storage,
+legacy migration, and tests pass. Rollback disables media; it never republishes private objects.
 
 ## Complexity estimate
 
@@ -28,7 +29,7 @@ pass. Rollback disables media; it never republishes private objects.
 | Complexity | Complex: database + RLS + Storage + client + external decoder + migration |
 | Rough effort | 8–12 focused AI implementation/review sessions plus device/hosted verification |
 | Files affected | Approximately 25–40 across migrations, functions, worker, client, tests, CI, docs |
-| Database impact | Additive `0020`, later contract-cutover `0021`; no destructive table drop |
+| Database impact | Additive `0020` + worker correction `0021`, later contract-cutover `0022`; no destructive table drop |
 | Dependency risk | Medium/High: TUS client, pinned image/AV toolchain, one OCI runtime |
 | Operational risk | High: user private media, service credentials, cleanup, legacy public data |
 | Regulated-domain flag | Personal/private user media and potentially identifying metadata |
@@ -57,7 +58,7 @@ pass. Rollback disables media; it never republishes private objects.
 
 ## Repository discovery findings
 
-### Verified current state
+### Verified original state at planning base `ab55395` (historical)
 
 - `HEAD` is the exact green base `ab55395`; migrations end at `0019`.
 - `0018_p0_authorization_contract.sql` allows authenticated direct inserts only for canonical text
@@ -73,6 +74,10 @@ pass. Rollback disables media; it never republishes private objects.
 - `0018` makes `wall_id`, `author_id`, `type`, `anonymous`, and `secret` immutable after creation.
 - The task-supplied base is CI-green with 135 database checks; this docs-only pass did not re-run
   them. There are no hosted Storage API, processor, signed URL, or real media decoding tests.
+
+The current protected-media worktree now contains `0020_mark_media_foundation.sql` and its C1 test
+suite. That later implementation does not make the historical bullets above current claims; C1.1
+must extend the existing migration contract through the separately ordered additive `0021` file.
 
 ### Existing decisions reconciled
 
@@ -221,22 +226,194 @@ HEAD metadata, parses the effective cache value, stores `cache_control_seconds`,
 or greater-than-60 proof. Resolver refuses an unproved object. Hosted tests sign/fetch each kind
 and assert object responses are `max-age<=60`; Edge JSON is independently proven `private,no-store`.
 
-### One-use worker envelope and sandbox
+### Binding worker credential protocol v2
 
-Claim is service-only and requires processing enabled. Each attempt persists hashed dispatch nonce,
-key ID, expiry, and redemption time. Edge issues a signed envelope containing version, issuer,
-audience, job/upload/attempt IDs, exact source/destination/preview paths, `iat`, `exp<=iat+120s`,
-random nonce, and `kid`. The worker accepts only current key or previous key during an overlap no
-longer than the maximum envelope lifetime, verifies every claim, then redeems the nonce atomically
-through Edge before fetching. Replay/expired/forged envelopes fail. Completion uses a different
-one-use nonce/token and is attempt-bound/idempotent once. Rotation records `kid`; emergency
-revocation stops dispatch and redemption.
+This section supersedes the earlier HMAC/unspecified-envelope proposals and is the single
+implementation contract for C2 and C3. It was independently Two-Key approved on 2026-09-03.
 
-Accepted URLs are HTTPS port 443, no userinfo/fragment, exact configured Supabase project hostname,
-exact `mark-media` bucket, and exact decoded paths in the envelope. IP literals, private/reserved IP
-destinations, alternate hosts, encoding ambiguity, and arbitrary URLs fail. Redirect following is
-disabled and response origin is rechecked; network egress permits only the exact Storage origin and
-Edge callback. The worker never accepts a URL from decoded media or parser output.
+#### Signature and canonical wire format
+
+- Dispatch is compact JWS using Ed25519 (`alg=EdDSA`) through native Web Crypto; no JWS package is
+  added. HMAC is forbidden because giving a symmetric signing key to the worker would let a
+  compromised worker forge modified dispatches.
+- The compact form is exactly
+  `base64url(protected).base64url(payload).base64url(signature)`: URL-safe alphabet, no padding or
+  whitespace, exactly three segments, and a 64-byte Ed25519 signature over the ASCII bytes of the
+  first two segments joined by `.`. Algorithm confusion, malformed base64url, duplicate JSON keys,
+  missing keys, and unknown keys fail closed.
+- The protected header has exactly `alg`, `kid`, and `typ`, where `alg="EdDSA"`,
+  `typ="TW-MEDIA-DISPATCH+jws"`, and `kid` matches `[A-Za-z0-9_-]{1,32}`. `kid` exists only in the
+  header; the verified header value is passed to PostgreSQL.
+- Header and payload JSON are UTF-8 without whitespace. Object keys are recursively sorted
+  lexicographically; arrays preserve their specified order. Values are restricted to ASCII strings,
+  safe integers, booleans, or null. The verifier verifies the received segments before parsing and
+  must not reserialize them before signature verification. After verification it parses, applies
+  exact-key/type validation, canonically reserializes, and requires byte equality with the decoded
+  segment; this rejects duplicate keys and non-canonical encodings without a separate JSON parser.
+- The payload has exactly these fields:
+  `version`, `issuer`, `audience`, `purpose`, `job_id`, `upload_id`, `attempt_id`, `kind`, `source`,
+  `destinations`, `callback_url`, `nonce`, `completion_token`, `iat`, and `exp`.
+  `version=1`, `issuer="the-wall-mark-media-edge"`,
+  `audience="the-wall-media-processor"`, and `purpose="dispatch"`. UUIDs use canonical lowercase
+  form; `job_id` equals the claim call's `p_worker_execution_id`.
+- `source` is exactly `{method:"GET",path,url}`. Each destination is exactly
+  `{role,method:"PUT",path,url,mime_type,cache_control_seconds:60}`. Photo contains roles
+  `full_jpeg` and `full_webp` plus optional `preview` (two or three destinations); Voice contains
+  `full` only; Video contains `full` plus optional `preview`. The decoded object path in every URL
+  must equal its adjacent `path` byte-for-byte after the one permitted decode.
+- Edge sets integer epoch seconds `iat=now` and `exp=iat+120`. Edge redemption and the worker require
+  `exp>now`, `exp>iat`, `exp-iat<=120`, and `iat<=now+10`; there is no grace after `exp`.
+
+#### Credential custody, domain separation, and gateway authentication
+
+- Edge alone stores the PKCS#8 private signing key. Edge redemption and the worker receive a
+  `kid -> raw 32-byte public key` allow-list. Private keys, raw worker gateway secrets, signed URLs,
+  compact JWS values, and nonces are never logged.
+- Edge generates two different random 32-byte base64url-without-padding values. `nonce` is accepted
+  only by `/worker/redeem`. `completion_token` is embedded in the signed dispatch but accepted only
+  by `/worker/complete` or `/worker/fail`. PostgreSQL stores only their SHA-256 hashes and rejects
+  equal hashes. Endpoint, function, and column separation prevents cross-use.
+- The app-facing `mark-media` Edge function keeps `verify_jwt=true` and serves authenticated reads.
+  A separate `mark-media-worker` function uses `verify_jwt=false` and serves only POST
+  `/worker/redeem`, `/worker/complete`, and `/worker/fail`, with no CORS and a 65,536-byte request
+  body cap enforced before JSON parsing.
+  Its canonical callback is the configured worker origin followed by `/worker/complete`.
+- Before parsing job tokens/bodies or creating a service-role client, the worker function checks
+  `Authorization: Bearer <worker-gateway-secret>` by constant-time digest comparison. The dedicated
+  secret is at least 32 random bytes and is not a Supabase JWT, service key, or database credential.
+  Normal secret rotation accepts current and previous for no more than the five-minute attempt lease;
+  emergency rotation has no overlap and lets in-flight jobs retry. The per-job JWS or completion
+  token is carried separately in `X-The-Wall-Job-Token`.
+- Missing or wrong gateway authentication returns one fixed 401. A malformed, expired, replayed,
+  unknown, disabled, wrong-key, wrong-attempt, or otherwise unusable job credential returns one
+  fixed 404 `UNAVAILABLE` response. Valid but schema-invalid completion data returns fixed 422
+  `INVALID_RESULT`. Successful and exact-idempotent operations return 204. Every response has
+  `Cache-Control: no-store` and never echoes a URL, path, token, parser detail, or state reason.
+
+#### Dispatch ordering and signed-output cleanup fence
+
+The exact dispatch order is:
+
+1. claim a current attempt while processing is enabled;
+2. generate distinct dispatch and completion credentials;
+3. request every exact signed destination upload URL;
+4. only after the final signed-upload API call returns, capture trusted Edge time `t_return` and
+   compute `output_credentials_expire_at = t_return + 2 hours + 30 seconds`;
+5. atomically bind both credential hashes, `kid`, dispatch `exp`, and the non-shrinking output fence
+   to the current attempt; and
+6. only after binding succeeds, sign/send the dispatch.
+
+If URL creation succeeds but binding fails, no dispatch is sent and no worker possesses those URLs.
+Within an attempt, the persisted output fence may be extended but never shortened. Dispatch
+redemption requires the persisted fence and envelope expiry, then atomically spends the dispatch
+nonce. The worker may fetch bytes only after a 204 redemption response.
+
+Every outbox record for an attempt-writable output—including failed, superseded, expired,
+subject-deleted, unused Photo candidate, preview, and canonical Mark output—has
+`not_before >= output_credentials_expire_at`. Source cleanup may proceed earlier because its
+credential is GET-only. Deletion/missing evidence observed before `not_before` is invalid, and
+quota/session reservation release waits for every required exact-path evidence row created after
+that fence. Neither the five-minute lease nor the 120-second dispatch expiry is an output deletion
+fence. This prevents a still-valid signed PUT from resurrecting an object after cleanup evidence and
+quota release.
+
+#### Database-linearized key lifecycle
+
+Private `media_envelope_keys` stores `kid` as its primary key, `status` in
+`active|retiring|revoked`, `last_dispatch_exp`, `last_completion_exp`, timestamps, and
+`revoked_at`. It has RLS enabled, no app policy/grant/Realtime publication, and protected
+rotation/revocation functions.
+
+Bind, dispatch redemption, callback finalization, rotation, and revocation lock and evaluate the
+key-state row in the same transaction as their attempt mutation, always key row before attempt row.
+Binding requires `active` and atomically extends `last_dispatch_exp` to the JWS expiry and
+`last_completion_exp` to the attempt lease. Dispatch redemption accepts `active` or `retiring`,
+never `revoked`, only through `last_dispatch_exp`. Finalization accepts `active` or `retiring`, never
+`revoked`, only through `last_completion_exp`, except that an exact already-committed receipt retry
+returns its prior idempotent success without authorizing another mutation.
+
+Normal rotation transactionally makes the old key `retiring` and the new key `active`; no new
+attempt binds the retiring key. Its public key is retained only through `last_dispatch_exp`, no more
+than 120 seconds after final issue. Its non-secret database row may remain through
+`last_completion_exp`, at most the five-minute attempt lease, solely for an already-redeemed job to
+finish. Emergency revocation sets `revoked` and disables processing under the same lock discipline;
+redeem/finalize transactions linearized afterward deny. Edge environment allow-lists are defense in
+depth, not the revocation authority.
+
+#### Atomic completion and durable callback receipt
+
+Private `media_validation_callback_receipts` has no deletable foreign key and contains
+`(upload_id,attempt_id)` primary key, `completion_token_hash`, `envelope_kid`, `outcome` in
+`success|failed`, `canonical_result_sha256`, and `created_at`. It has RLS enabled, no app
+policy/grant/Realtime publication, and survives attempt cleanup.
+
+Worker completion/failure uses one service-only
+`finalize_media_validation_attempt(upload,attempt,raw_completion_token,kid,outcome,result)` RPC.
+The standalone sequence “redeem completion nonce, then complete/fail” is forbidden. In one
+transaction the RPC:
+
+1. takes a deterministic upload/attempt advisory lock;
+2. hashes the raw token and canonical, normalized result inside PostgreSQL;
+3. looks up the receipt first—an exact token-hash, `kid`, outcome, and result-hash match returns
+   idempotent success even if current attempt fields were later cleared or replaced; any mismatch
+   returns generic denial;
+4. when no receipt exists, locks/checks the applicable key row, then the current upload attempt;
+5. requires a live processing lease, redeemed dispatch, processing enabled, and matching stored
+   completion hash/`kid`;
+6. validates all metadata, exact paths, cache proof, or bounded failure code before token use; and
+7. inserts the receipt, marks completion redeemed, and applies the success/failure state transition
+   atomically. Any validation or database fault rolls back every effect.
+
+A lost 204 followed by the identical callback therefore succeeds. A changed outcome or result
+denies. Key revocation cannot create a new state mutation, while an exact receipt retry after
+revocation remains a harmless acknowledgement of the already-committed result.
+
+#### Credential test vector
+
+This vector uses the RFC 8032 seed
+`9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60` and raw public key
+`d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a`.
+
+Canonical protected JSON:
+
+```json
+{"alg":"EdDSA","kid":"test-a","typ":"TW-MEDIA-DISPATCH+jws"}
+```
+
+Canonical payload JSON (the line inside this code block is exact):
+
+```json
+{"attempt_id":"00000000-0000-4000-8000-000000000003","audience":"the-wall-media-processor","callback_url":"https://p.supabase.co/functions/v1/mark-media-worker/worker/complete","completion_token":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","destinations":[{"cache_control_seconds":60,"method":"PUT","mime_type":"audio/mp4","path":"validated/00000000-0000-4000-8000-000000000002/00000000-0000-4000-8000-000000000003/full.m4a","role":"full","url":"https://p.supabase.co/storage/v1/object/upload/sign/mark-media/validated/00000000-0000-4000-8000-000000000002/00000000-0000-4000-8000-000000000003/full.m4a?token=dst"}],"exp":1788408120,"iat":1788408000,"issuer":"the-wall-mark-media-edge","job_id":"00000000-0000-4000-8000-000000000001","kind":"voice","nonce":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","purpose":"dispatch","source":{"method":"GET","path":"staging/00000000-0000-4000-8000-000000000004/00000000-0000-4000-8000-000000000002/source","url":"https://p.supabase.co/storage/v1/object/sign/mark-media/staging/00000000-0000-4000-8000-000000000004/00000000-0000-4000-8000-000000000002/source?token=src"},"upload_id":"00000000-0000-4000-8000-000000000002","version":1}
+```
+
+Protected segment:
+
+```text
+eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtYSIsInR5cCI6IlRXLU1FRElBLURJU1BBVENIK2p3cyJ9
+```
+
+Payload segment:
+
+```text
+eyJhdHRlbXB0X2lkIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzIiwiYXVkaWVuY2UiOiJ0aGUtd2FsbC1tZWRpYS1wcm9jZXNzb3IiLCJjYWxsYmFja191cmwiOiJodHRwczovL3Auc3VwYWJhc2UuY28vZnVuY3Rpb25zL3YxL21hcmstbWVkaWEtd29ya2VyL3dvcmtlci9jb21wbGV0ZSIsImNvbXBsZXRpb25fdG9rZW4iOiJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCIiwiZGVzdGluYXRpb25zIjpbeyJjYWNoZV9jb250cm9sX3NlY29uZHMiOjYwLCJtZXRob2QiOiJQVVQiLCJtaW1lX3R5cGUiOiJhdWRpby9tcDQiLCJwYXRoIjoidmFsaWRhdGVkLzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMi8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMvZnVsbC5tNGEiLCJyb2xlIjoiZnVsbCIsInVybCI6Imh0dHBzOi8vcC5zdXBhYmFzZS5jby9zdG9yYWdlL3YxL29iamVjdC91cGxvYWQvc2lnbi9tYXJrLW1lZGlhL3ZhbGlkYXRlZC8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDIvMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzL2Z1bGwubTRhP3Rva2VuPWRzdCJ9XSwiZXhwIjoxNzg4NDA4MTIwLCJpYXQiOjE3ODg0MDgwMDAsImlzc3VlciI6InRoZS13YWxsLW1hcmstbWVkaWEtZWRnZSIsImpvYl9pZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImtpbmQiOiJ2b2ljZSIsIm5vbmNlIjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsInB1cnBvc2UiOiJkaXNwYXRjaCIsInNvdXJjZSI6eyJtZXRob2QiOiJHRVQiLCJwYXRoIjoic3RhZ2luZy8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDQvMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyL3NvdXJjZSIsInVybCI6Imh0dHBzOi8vcC5zdXBhYmFzZS5jby9zdG9yYWdlL3YxL29iamVjdC9zaWduL21hcmstbWVkaWEvc3RhZ2luZy8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDQvMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyL3NvdXJjZT90b2tlbj1zcmMifSwidXBsb2FkX2lkIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwidmVyc2lvbiI6MX0
+```
+
+Signature segment:
+
+```text
+oG7jrzajNltxT6q4AeUSmRXT1zFYnZRel8HD6mQY4DK_MNKDT1Q6cZHNPCpBFXY1q6yAKs3uWqyEh--8SS--DQ
+```
+
+The signing-input SHA-256 is
+`a9d432e9c5a9acb30e2bd770f4c9f8547a0472a9f0b3d281cd99c0f0696008af`; the complete compact JWS
+SHA-256 is `5483f9f6275376ca93f53ed6a16430176140f436e5cf2dec1927e1b766bd17bf`.
+
+Accepted URLs are otherwise HTTPS port 443, no userinfo/fragment, exact configured Supabase project
+hostname, exact `mark-media` bucket, and exact decoded paths in the envelope. IP literals,
+private/reserved IP destinations, alternate hosts, encoding ambiguity, and arbitrary URLs fail.
+Redirect following is disabled and response origin is rechecked; network egress permits only the
+exact Storage origin and worker Edge callback. The worker never accepts a URL from decoded media or
+parser output.
 
 Container requirements are non-root UID, read-only root, `cap-drop=ALL`, no-new-privileges,
 seccomp, per-job writable directory, tmpfs <=512 MiB, PIDs <=64, memory <=1 GiB, CPU <=2, wall time
@@ -259,10 +436,10 @@ quarantined count, missing count, remaining non-null legacy URL count, exact pub
 fresh-denial proofs, and completed timestamp/actor. Completion requires counts to reconcile, zero
 unquarantined `media_url`, and fresh uncached unauthenticated denial evidence for **every inventoried
 legacy URL**, including each migrated, missing, or quarantined entry. A quarantined URL that remains
-reachable blocks completion, media creation, `0021`, and the privacy claim. The only exception is a
+reachable blocks completion, media creation, `0022`, and the privacy claim. The only exception is a
 separate Founder acceptance of a specifically documented residual privacy exception; it is not an
 automatic quarantine waiver. The kind-control setter refuses user `creation_enabled=true` until complete;
-`0021` asserts the same and aborts if false. Legacy processing alone may be enabled while user
+`0022` asserts the same and aborts if false. Legacy processing alone may be enabled while user
 reservation, upload transition, and creation stay disabled.
 
 ### Current Supabase claims used by this design
@@ -324,7 +501,9 @@ returned only by an actor-bound function. All transitions are protected function
 | `consumed_mark_id` | `uuid NULL FK marks ON DELETE SET NULL` | Set only by `create_mark`; unique while live |
 | `consumed_mark_tombstone_id` | `uuid NULL` | Immutable after consumption; survives Mark deletion |
 | `quota_day/reserved_charge` | date / bigint | Atomic quota attribution retained through cleanup |
-| `dispatch_nonce_hash/completion_nonce_hash/kid` | typed nullable | Current attempt one-use worker authorization evidence |
+| `dispatch_nonce_hash/completion_nonce_hash/envelope_kid` | typed nullable | Current attempt one-use worker authorization evidence |
+| `dispatch_envelope_expires_at` | `timestamptz` | Bound JWS expiry; required before dispatch redemption |
+| `output_credentials_expire_at` | `timestamptz` | Non-shrinking signed-PUT cleanup fence captured after URL issuance |
 | `created_at/updated_at/validated_at/consumed_at` | `timestamptz` | Audit/lifecycle |
 
 Required constraints/indexes:
@@ -380,6 +559,38 @@ Private idempotency table, no app policies/grants or Realtime publication.
 Primary key `(actor_id, request_id)`. Retry behavior is the binding state machine above. Mark
 deletion must retain the tombstone for the maximum client retry horizon; deleting it while the
 actor remains active is forbidden because it could recreate the Mark.
+
+### `media_envelope_keys`
+
+Private database authority for dispatch-key lifecycle and revocation. RLS is enabled with no app
+policy, grant, or Realtime publication. Protected rotation/revocation is the only mutation path.
+
+| Column | Type | Purpose |
+|---|---|---|
+| `kid` | `text PK` | `[A-Za-z0-9_-]{1,32}` identifier from the verified JWS header |
+| `status` | `text` | `active`, `retiring`, or `revoked` |
+| `last_dispatch_exp` | `timestamptz` | Greatest JWS expiry bound to this key |
+| `last_completion_exp` | `timestamptz` | Greatest attempt lease bound to this key |
+| `created_at/updated_at/revoked_at` | `timestamptz` | Lifecycle evidence |
+
+All key mutations and attempt bind/redeem/finalize functions lock this row before the attempt row.
+Exactly one active key is permitted. Environment public-key lists do not replace this authority.
+
+### `media_validation_callback_receipts`
+
+Private, durable completion idempotency evidence with no foreign key to a deletable workflow row.
+RLS is enabled with no app policy, grant, or Realtime publication.
+
+| Column | Type | Purpose |
+|---|---|---|
+| `upload_id/attempt_id` | `uuid/uuid PK` | Stable callback identity after attempt cleanup/replacement |
+| `completion_token_hash` | `text` | SHA-256 of the opaque token; raw token is never stored |
+| `envelope_kid` | `text` | Key state used when the attempt was bound |
+| `outcome` | `text` | `success` or `failed` |
+| `canonical_result_sha256` | `text` | DB-computed hash of normalized metadata or safe failure code |
+| `created_at` | `timestamptz` | Commit evidence |
+
+An exact receipt retry acknowledges the already-committed result; it cannot mutate workflow state.
 
 ### `legacy_media_migrations`
 
@@ -520,11 +731,19 @@ Not app-executable:
 
 - `claim_media_validation_jobs(p_limit, p_worker_execution_id)` uses `FOR UPDATE SKIP LOCKED`,
   retries expired leases, creates new attempt IDs/paths, and returns only claimed jobs.
-- `complete_media_validation(p_upload_id, p_attempt_id, trusted_metadata)` accepts only the current
-  unexpired attempt and kind-valid trusted output; old attempts are ignored and cleaned.
-- `fail_media_validation(...)` records a bounded error code and schedules retry/terminal failure.
+- `bind_media_validation_attempt_credentials(...)` locks the active key row and attempt, then binds
+  dispatch/completion hashes, header `kid`, dispatch expiry, and the non-shrinking output-credential
+  fence. It is the only path that makes an attempt dispatchable.
+- `redeem_media_validation_dispatch_nonce(...)` locks/checks key state and the current attempt, then
+  spends the dispatch nonce once before any worker byte fetch.
+- `finalize_media_validation_attempt(...)` implements both success and failure through the atomic
+  callback-receipt transaction specified above. Edge must not call a standalone completion-redeem
+  function followed by `complete_media_validation` or `fail_media_validation`.
+- protected key rotation/revocation changes `media_envelope_keys` under the same key-row-first lock
+  order used by bind/redeem/finalize.
 - `expire_media_uploads()` changes expired drafts to `expired`; Storage deletion remains worker/API
-  work rather than direct SQL manipulation of platform-owned Storage tables.
+  work rather than direct SQL manipulation of platform-owned Storage tables, and output cleanup
+  retains the persisted signed-PUT fence.
 
 ## Trusted processor contract
 
@@ -614,7 +833,7 @@ that Cron run history is observable and recommends jobs run no longer than ten m
 ## Legacy public-media migration and proof
 
 No hosted count is assumed. Run the following on a frozen media-write boundary (already achieved by
-`0018`) before `0021`:
+`0018`) before `0022`:
 
 1. **Inventory:** export every canonical Photo/Voice/Video Mark with non-null `media_url`, parse only
    the exact expected `attachments/marks/*` URL shape, and inventory the corresponding Storage
@@ -640,7 +859,7 @@ No hosted count is assumed. Run the following on a frozen media-write boundary (
 10. **Completion gate:** counts must reconcile: inventory = migrated + explicitly quarantined;
     zero non-quarantined canonical media Mark has `media_url`; **every inventoried legacy URL,
     including quarantined and missing entries**, has fresh unauthenticated denial evidence. Any
-    reachable quarantine blocks media creation, `0021`, and the privacy claim unless the Founder
+    reachable quarantine blocks media creation, `0022`, and the privacy claim unless the Founder
     separately accepts a documented residual privacy exception for that exact URL/risk.
 
 Rollback before public deletion simply uses dual-read legacy URLs. Rollback after public deletion
@@ -661,6 +880,14 @@ uses the private canonical object; it never recreates a public original.
   `create_mark`, one-use worker helpers, and reconciliation singleton.
 - Preserve `0018` text direct-insert compatibility temporarily.
 - Do not enable Photo/Voice/Video client flags yet.
+
+### Phase 1.1 — `0021_media_worker_credentials.sql`
+
+- Add the output-credential fence, database key-state authority, durable callback receipts, atomic
+  finalize contract, and exact grants/revocations defined by worker credential protocol v2.
+- Replace the shorter attempt-output cleanup fence and prevent standalone completion redemption
+  from being an Edge-callable workflow.
+- Preserve default-off media controls and the safe text compatibility writer.
 
 ### Phase 2 — processor and hosted staging
 
@@ -683,7 +910,7 @@ uses the private canonical object; it never recreates a public original.
 - Run the ledgered inventory/copy/process/link/delete/purge/proof sequence above.
 - Resolve/quarantine every exception; do not silently hide content.
 
-### Phase 5 — `0021_mark_creation_cutover.sql`
+### Phase 5 — `0022_mark_creation_cutover.sql`
 
 - Assert the legacy reconciliation singleton is complete and abort otherwise.
 - Revoke direct app `marks` insert and all app media/job writes.
@@ -699,12 +926,13 @@ Names are binding unless an independent review finds a repository collision.
 |---|---|---|---|---|
 | C0 architecture review | Architect + Security/Reviewer | these two architecture docs | none | APPROVE with no blocker/high |
 | C1 DB foundation | Backend | `supabase/migrations/0020_mark_media_foundation.sql`, `supabase/tests/{51_private_mark_media,52_mark_media_races,53_media_quota_outbox}.sql`, update `00_bootstrap.sql`, `01_seed.sql`, `run_tests.sh` | C0 | controls, FKs/tombstones, resolver grants, idempotency/quota races, outbox + full suite green |
-| C2 Edge orchestration/read | Backend/DevOps | `supabase/functions/mark-media/index.ts`, `_shared/{media-contract,worker-envelope,url-policy}.ts`, `supabase/functions/tests/mark-media.test.ts`, function config | C1 | JWT/service resolver, no-store signer, one-use envelopes, SSRF/replay tests verified |
-| C3 trusted worker | Backend/DevOps | `workers/media-processor/{Dockerfile,package.json,package-lock.json,tsconfig.json}`, `src/{server,photo,audio,video,limits,contract,url-policy}.ts`, `test/**`, `deploy/{seccomp.json,container-policy.yaml}` | C0 | hostile corpus, envelope/SSRF, golden outputs, pinned SBOM/CVE, resource caps green |
+| C1.1 worker credential DB correction | Backend | `supabase/migrations/0021_media_worker_credentials.sql`, `supabase/tests/57_media_worker_credentials.sql`, `supabase/tests/57_media_worker_credentials_races.sh`, update `run_tests.sh` | C1 + approved protocol v2 | 2h+30s fence, DB-linearized keys, atomic receipts/finalize, fault/race/idempotency suite green |
+| C2 Edge orchestration/read | Backend/DevOps | `supabase/functions/mark-media/index.ts`, `supabase/functions/mark-media-worker/index.ts`, `_shared/{media-contract,worker-envelope,url-policy}.ts`, `supabase/functions/tests/{mark-media,mark-media-worker}.test.ts`, `supabase/config.toml` | C1.1 | JWT read route, custom-auth worker route, no-store signer, Ed25519 vector, SSRF/replay tests verified |
+| C3 trusted worker | Backend/DevOps | `workers/media-processor/{Dockerfile,package.json,package-lock.json,tsconfig.json}`, `src/{server,photo,audio,video,limits,contract,url-policy}.ts`, `test/**`, `deploy/{seccomp.json,container-policy.yaml}` | C0 + C1.1 | hostile corpus, envelope/SSRF, golden outputs, pinned SBOM/CVE, resource caps green |
 | C4 client writer | Frontend | `app/create.tsx`, `src/lib/upload.ts`, `src/lib/marks.ts`, new `src/lib/mark-media.ts`, `src/lib/types.ts`, `package.json`, `package-lock.json` | C1/C2 | 5-photo order/retry, AV progress, draft preservation |
 | C5 client reader | Frontend | `src/components/marks/MarkView.tsx`, `src/components/marks/MarkDetailModal.tsx`, new `src/hooks/use-mark-media.ts` | C1/C2 | full-frame photo, URL refresh, AV playback, access error |
 | C6 legacy tooling | Backend/DevOps | `scripts/media/{inventory,migrate,reconcile,verify-public-denial}.ts`, `docs/runbooks/MARK_MEDIA.md` | C1/C3 | singleton complete, reconciled counts, no unproved deletion |
-| C7 final cutover | Backend | `supabase/migrations/0021_mark_creation_cutover.sql`, expand 51/52, update old-client tests | C4/C6 | old/direct paths fail; RPC all types green |
+| C7 final cutover | Backend | `supabase/migrations/0022_mark_creation_cutover.sql`, expand 51/52, update old-client tests | C4/C6 | old/direct paths fail; RPC all types green |
 | C8 independent verification | Reviewer + QA + Security | exact commit, CI, hosted staging, iOS/Android evidence | C1–C7 | Two-Key, full suite, device + hosted Pass |
 | C9 operational docs | Documentation/DevOps | `docs/BUILD_STATUS.md`, `docs/handoffs/CURRENT.md`, `docs/runbooks/MARK_MEDIA.md`, `docs/DECISIONS.md` | C8 | zero stale public-media claims |
 
@@ -721,8 +949,8 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - inactive/suspended/unrelated/blocked/owner-self Personal actor cannot reserve or create;
 - accepted Shared owner/member works; pending/removed/public non-member fails;
 - arbitrary path, other upload ID, other Wall, expired row, wrong kind, reused upload fail;
-- direct app DML to `mark_media`, workflow/ledger tables, and new `marks` after `0021` fails;
-- text/media legacy fields and payload injection fail at `0018`, `0020`, and `0021`;
+- direct app DML to `mark_media`, workflow/ledger tables, and new `marks` after `0022` fails;
+- text/media legacy fields and payload injection fail at `0018`, `0020`, and `0022`;
 - exact 0/1/5/6 photo and 0/1/2 AV cardinalities;
 - Secret text succeeds; Secret media fails with no object relation or Alert;
 - idempotent same retry returns one Mark/Alert; version/hash mismatch fails;
@@ -733,6 +961,17 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
   reconciliation, over-limit deletion, incomplete 24-hour TUS charge, and session expiry are proven;
 - contribution/block revoked between reserve/upload/validation/create is honored;
 - worker old attempt, forged attempt, expired lease, double complete, failure rollback;
+- binding refuses an output fence captured before the final signed-upload API return, a missing
+  fence, and any attempt to shrink an existing fence; dispatch before durable binding fails;
+- every attempt-output cleanup reason has `not_before>=output_credentials_expire_at`; deletion
+  evidence at lease+two minutes but before the two-hour-and-30-second fence fails, quota remains
+  charged, and only fresh exact evidence after the fence permits release;
+- callback fault injection after receipt insertion and after state mutation rolls back both;
+  identical retry after a lost 204 succeeds, changed outcome/result fails, and an old exact receipt
+  remains idempotent after the current attempt is replaced;
+- key rotation/revocation races against bind, dispatch redemption, and finalization linearize at the
+  database key-row lock: retiring blocks new bind, recorded deadlines bound existing work, and a
+  committed revoke blocks later mutations while exact committed-receipt retry stays harmless;
 - hidden/removed/pending Mark media read follows canonical Mark visibility;
 - signed read denied for inaccessible Mark; direct table/bucket/path enumeration denied;
 - app roles cannot execute the service path resolver; missing/inaccessible/deleted/blocked responses
@@ -757,6 +996,14 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - forged/replayed/expired dispatch and completion credentials; key rotation/revocation; redirect,
   alternate host, IP literal, private/reserved IP, encoded-path ambiguity, arbitrary URL, and final
   origin attacks;
+- the exact Ed25519 vector above passes independently in target Deno and Node; signature bit flips,
+  `alg`/`typ` confusion, unknown/duplicate keys, padding, wrong purpose/endpoint, +10/+11-second
+  `iat`, expiry boundary, nonce cross-use, and removed `kid` fail;
+- `mark-media` rejects missing/invalid app JWTs; `mark-media-worker` reaches no privileged code with
+  missing/wrong/rotated-out gateway secret despite `verify_jwt=false`; function configuration tests
+  prove the two deployments cannot silently exchange authentication modes;
+- Photo accepts the exact two-full-destination contract plus optional preview (maximum three), and
+  every URL's decoded object path equals its adjacent signed claim;
 - output/file-count bombs and CPU, memory, PID, tmpfs, wall-clock exhaustion; resolution, fps,
   frame, channel, sample-rate, stream-count, probe-byte, and analysis-time caps.
 
@@ -779,7 +1026,7 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - cleanup idempotency, dead-letter visibility, metrics/alert thresholds, recovery runbook.
 - legacy singleton cannot complete on count mismatch, unquarantined URL, missing deletion evidence,
   or missing fresh denial proof for any inventoried URL including quarantine; any reachable
-  quarantine blocks kind creation, `0021`, and privacy claim absent a separate documented Founder
+  quarantine blocks kind creation, `0022`, and privacy claim absent a separate documented Founder
   residual-risk exception.
 
 ## Observability and alerting
@@ -809,8 +1056,8 @@ true Anonymous authors, block state, or private Wall names.
 
 ## Rollback and incident response
 
-- **Before `0021`:** disable media flags; text compatibility remains. Keep private objects/private.
-- **After `0021`:** disable media flags and keep RPC text creation. Do not restore direct inserts;
+- **Before `0022`:** disable media flags; text compatibility remains. Keep private objects/private.
+- **After `0022`:** disable media flags and keep RPC text creation. Do not restore direct inserts;
   forward-fix the RPC or deploy a narrowly reviewed text-only RPC compatibility migration.
 - **Processor incident:** stop dispatch, let leases expire, preserve sources, rotate worker callback
   secret, delete attempt outputs only from ledger/state evidence.
@@ -827,12 +1074,13 @@ true Anonymous authors, block state, or private Wall names.
 | Decoder exploit/resource bomb | High | isolated worker, pinned patched tools, byte/pixel/resource caps, hostile corpus |
 | Broad worker credential compromise | High | worker gets attempt-scoped signed URLs only; no service key/DB URL |
 | Signed URL shared after block | Medium | 60s TTL, proven <=60s cache, transactional linearization, no-store manifest, bounded ~120s lag |
-| Late worker corrupts current output | High | attempt-specific paths + lease token + stale completion denial |
+| Late signed PUT resurrects deleted output | High | attempt paths + persisted post-issuance 2h30 fence before evidence/quota release |
+| Late worker corrupts current result | High | attempt-specific paths + atomic callback receipt + stale completion denial |
 | Five-file partial failure | High | validate first, one transaction for Mark/media/Alert, no partial UI |
 | Legacy public cache survives deletion | High | exact purge where available, wait, multi-region fresh denial proof, residual browser-cache truth |
 | Processor hosting not chosen | Medium | portable OCI interface; implementation can be tested locally, deployment remains blocked |
 | Mobile large-upload memory/network failure | Medium | TUS/resumable for >6 MB, progress/retry, no ArrayBuffer whole-file dependency |
-| Cleanup deletes evidence too early | High | ledger/state first, idempotent deletion, retention windows, no wildcard delete |
+| Cleanup deletes evidence too early | High | ledger/state first, signed-PUT fence, idempotent exact deletion, no wildcard delete |
 | New contract diverges from existing triggers | High | insert through canonical `marks` row and existing triggers; full 135-test regression |
 
 ## Success metrics
@@ -847,25 +1095,25 @@ true Anonymous authors, block state, or private Wall names.
 
 ## Build readiness assessment
 
-**Status: NOT READY for implementation or production enablement at this exact document version.**
+**Status: READY for local C1.1/C2/C3 implementation; NOT READY for hosted or production enablement.**
 
-The package has been revised to close the independent review's blocking and additional findings,
-but the reviewer has not yet approved this exact revision. AIOS therefore requires a fresh Two-Key
-review before Backend writes `0020`.
-Deployment also needs an OCI runtime/provider and hosted Supabase inventory/config evidence; those
-do not block local processor prototyping after design approval but do block staging/public enablement.
+The worker credential protocol v2 and its exactness addendum were independently Two-Key approved on
+2026-09-03. C1.1 may now add the database correction in
+`0021_media_worker_credentials.sql`; C2 and C3 consume that contract without making another
+cryptographic, authentication, cleanup-fence, or callback-idempotency decision.
+
+Deployment still needs an OCI runtime/provider and hosted Supabase inventory/config evidence. Those
+do not block local implementation and deterministic tests, but they block staging/public enablement.
 
 Blockers:
 
-1. Independent Architect/Security reviewer must approve this revised ADR-012 + FP-MEDIA-001 with
-   no blocker/high, specifically verifying every binding reviewer-closure clause.
-2. DevOps/Founder must approve the selected OCI hosting/infrastructure before deployment or spend.
-3. Hosted discovery must verify plan/CDN purge availability, private bucket behavior, Storage API
+1. DevOps/Founder must approve the selected OCI hosting/infrastructure before deployment or spend.
+2. Hosted discovery must verify plan/CDN purge availability, private bucket behavior, Storage API
    RLS, legacy media counts/paths, and Cron/Edge configuration.
+3. Target Deno CI must verify the exact Ed25519 vector; Node verification alone is not hosted proof.
 
-Once blocker 1 closes, **C1 DB foundation and local C3 processor prototype are READY to build in
-separate work units**. All four server-side switches remain off until their specific downstream
-gates pass; `creation_enabled` also remains mechanically blocked on legacy reconciliation.
+All four server-side switches remain off until their specific downstream gates pass;
+`creation_enabled` also remains mechanically blocked on legacy reconciliation.
 
 ## AI readiness check
 
@@ -879,7 +1127,8 @@ gates pass; `creation_enabled` also remains mechanically blocked on legacy recon
 
 ## Confidence
 
-- **Verified:** Repository facts and official Supabase platform claims linked in ADR-012/this plan.
+- **Verified:** Repository facts, official Supabase platform claims linked in ADR-012/this plan, the
+  exact Node Ed25519 vector/path self-check, and independent Two-Key approval of protocol v2.
 - **Believed-likely:** This is implementable with current Supabase Storage/Postgres/Edge orchestration
   plus a small OCI processor and avoids known public-URL/CPU-limit failure modes.
 - **Inferred:** Hosted data volume, provider cost, processor throughput, TUS behavior in this exact

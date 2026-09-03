@@ -1,6 +1,6 @@
 # ADR-012: Private, staged, server-validated Mark media
 
-**Status:** Revised after independent `REQUEST CHANGES` — re-review required before implementation
+**Status:** Accepted — worker-credential amendment independently Two-Key approved 2026-09-03
 **Date:** 2026-08-27
 **Fast Lane:** High-Risk / Architectural
 **Supersedes:** ADR-006 and D-6 **for Mark media only**. The public `attachments` bucket remains authoritative for public avatars.
@@ -141,12 +141,39 @@ substitute; see [Background Tasks](https://supabase.com/docs/guides/functions/ba
 
 The processor is built as an OCI image so the hosting target can change without changing the DB,
 client, or Storage contracts. It receives one attempt-scoped job, downloads only the signed source,
-writes only the signed destinations, and completes only with the matching opaque lease token. It
-never receives a Supabase secret/service key or direct database credentials. Each dispatch is an
-expiring, one-use signed envelope containing version, issuer, audience, job/upload/attempt, exact
-source/destination paths, `iat`, `exp<=iat+120s`, nonce, and signing-key ID. The worker verifies it
-and atomically redeems its nonce with Edge before download. Completion uses a distinct one-use,
-attempt-bound nonce. Current and previous keys overlap no longer than the two-minute lifetime.
+writes only the signed destinations, and completes only with the matching opaque completion token.
+It never receives a Supabase secret/service key or direct database credentials.
+
+Each dispatch is an Ed25519 compact JWS (`alg=EdDSA`) produced with native Web Crypto. The Edge
+orchestrator alone holds the private key; the worker receives only the keyed public-key allow-list,
+so compromise of a worker cannot mint or alter a dispatch. The protected header, canonical payload,
+key lifecycle, exact URL/path binding, and deterministic test vector are specified once in
+[FP-MEDIA-001](./FP-MEDIA-001-protected-mark-media.md#binding-worker-credential-protocol-v2).
+The signed dispatch contains a random one-use dispatch nonce and a different random opaque
+completion token. The worker verifies the JWS and atomically redeems the dispatch nonce through the
+worker Edge gateway before downloading bytes. Completion/failure authenticates to that gateway and
+uses one atomic database operation that validates the result, consumes the completion token,
+changes attempt state, and writes a durable idempotency receipt.
+
+User media reads and worker callbacks are separate deployments. `mark-media` retains
+`verify_jwt=true`; `mark-media-worker` uses `verify_jwt=false` because its dedicated worker bearer
+credential is not a Supabase JWT. The worker route performs constant-time custom authentication
+before parsing a job token or constructing any privileged client.
+
+Supabase signed upload credentials are conservatively treated as write-capable for two hours.
+After every signed destination URL has been returned, Edge records a non-shrinking output-credential
+fence equal to that return time plus two hours and 30 seconds. No job may be dispatched before that
+fence is durably bound to its attempt. Attempt-output cleanup, deletion evidence, and quota release
+must wait until the persisted fence; the shorter five-minute lease or two-minute dispatch envelope
+must never be used as the output deletion fence. This prevents a still-valid signed PUT from
+resurrecting an object after cleanup was declared complete.
+
+Normal key rotation stops new binding to the retiring key and retains its public key only through
+the greatest issued dispatch expiry, never more than 120 seconds after the final issue. A private
+database key-state row remains through the greatest bound completion lease so already-redeemed work
+can finish. Bind, redeem, finalize, rotation, and emergency revocation all lock and evaluate that
+key-state row in the same database transaction as their attempt mutation; environment allow-lists
+are defense in depth, not the revocation authority.
 
 The worker accepts HTTPS port 443 only, with no userinfo/fragment, on the exact configured Supabase
 project host, bucket `mark-media`, and envelope-bound decoded paths. It rejects IP literals,
@@ -180,7 +207,7 @@ duration is a contract change.
 
 ### 5. One atomic Mark creation contract
 
-`create_mark(...)` is the sole canonical creation path after migration `0021`. It derives the actor
+`create_mark(...)` is the sole canonical creation path after migration `0022`. It derives the actor
 from `auth.uid()`, rechecks account and current contribution authorization, validates the complete
 request, locks every referenced upload row, and commits the following in one PostgreSQL transaction:
 
@@ -238,14 +265,16 @@ null/service ownership and requires exact equality with the uploader JWT subject
 deprecated `owner`, and service-key-created objects have no owner. See
 [Storage ownership](https://supabase.com/docs/guides/storage/security/ownership).
 
-Only after hosted staging, a reconciled `media_legacy_reconciliation` singleton, processor
-verification, client minimum-version enforcement, and adversarial tests pass does
-`0021_mark_creation_cutover.sql`; the migration aborts if that gate is incomplete. A legacy worker
+Migration `0021_media_worker_credentials.sql` additively corrects the worker-credential protocol
+using the approved contract in FP-MEDIA-001; it does not perform the Mark-creation cutover. Only
+after hosted staging, a reconciled `media_legacy_reconciliation` singleton, processor verification,
+client minimum-version enforcement, and adversarial tests pass does
+`0022_mark_creation_cutover.sql`; the migration aborts if that gate is incomplete. A legacy worker
 may process inventory while user reservation/upload/create switches remain off. Public media
 creation cannot be enabled before reconciliation. Reconciliation requires a fresh unauthenticated
 denial proof for **every** inventoried legacy URL, including quarantined or missing-source entries;
-any reachable quarantine blocks creation, `0021`, and the privacy claim unless the Founder
-separately accepts a documented residual privacy exception. `0021` then:
+any reachable quarantine blocks creation, `0022`, and the privacy claim unless the Founder
+separately accepts a documented residual privacy exception. `0022` then:
 
 - revoke direct authenticated `INSERT` on `marks`;
 - revoke all app writes on `mark_media`, job/ledger tables, and legacy Mark Storage paths;
@@ -308,7 +337,7 @@ and streaming complexity. The approved MVP accepts the documented short signed-U
 
 ## Reversibility
 
-The schema and client cutover are two-way doors until `0021`. After public originals are deleted,
+The schema and client cutover are two-way doors until `0022`. After public originals are deleted,
 the privacy direction is intentionally one-way: rollback may disable the feature, but may not
 republish content. The OCI processor hosting provider remains replaceable.
 
