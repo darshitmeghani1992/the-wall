@@ -372,15 +372,19 @@ test("Supabase dispatch adapter accepts the documented signed-upload data.url fi
   equal(calls.length, 1, "one Storage request");
 });
 
-let failures = 0;
-for (const entry of tests) {
-  try {
-    await entry.run();
-    console.log(`ok - ${entry.name}`);
-  } catch (error) {
-    failures += 1;
-    console.error(`not ok - ${entry.name}`);
-    console.error(error instanceof Error ? error.message : String(error));
+async function runTests(): Promise<void> {
+  let failures = 0;
+  for (const entry of tests) {
+    try {
+      await entry.run();
+      console.log(`ok - ${entry.name}`);
+    } catch (error) {
+      failures += 1;
+      console.error(`not ok - ${entry.name}`);
+      console.error(error instanceof Error ? error.message : String(error));
+    }
   }
+  if (failures > 0) throw new Error(`${failures} mark-media test(s) failed`);
 }
-if (failures > 0) throw new Error(`${failures} mark-media test(s) failed`);
+
+void runTests();

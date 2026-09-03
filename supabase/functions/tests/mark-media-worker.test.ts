@@ -289,15 +289,19 @@ test("base64url decoder enforces no padding and canonical round trip", () => {
   assert(failed, "padded base64url denied");
 });
 
-let failures = 0;
-for (const entry of tests) {
-  try {
-    await entry.run();
-    console.log(`ok - ${entry.name}`);
-  } catch (error) {
-    failures += 1;
-    console.error(`not ok - ${entry.name}`);
-    console.error(error instanceof Error ? error.message : String(error));
+async function runTests(): Promise<void> {
+  let failures = 0;
+  for (const entry of tests) {
+    try {
+      await entry.run();
+      console.log(`ok - ${entry.name}`);
+    } catch (error) {
+      failures += 1;
+      console.error(`not ok - ${entry.name}`);
+      console.error(error instanceof Error ? error.message : String(error));
+    }
   }
+  if (failures > 0) throw new Error(`${failures} mark-media-worker test(s) failed`);
 }
-if (failures > 0) throw new Error(`${failures} mark-media-worker test(s) failed`);
+
+void runTests();
