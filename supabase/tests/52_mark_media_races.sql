@@ -189,17 +189,34 @@ ROLLBACK;
 \echo '52 (transaction rollback)          : PASS'
 
 BEGIN;
--- Completed request becomes a permanent deleted tombstone and cannot recreate.
+-- Null and explicit-empty media inputs normalize to the same no-media text
+-- request. Completed deletion remains a permanent tombstone and cannot recreate.
 set local role authenticated;
 set local "test.uid"='11111111-1111-1111-1111-111111111111';
 do $$ declare a jsonb; b jsonb; mid uuid; begin
   a:=create_mark('52000000-0000-0000-0000-000000000050','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'text','delete retry',null,false,false,0,'{}'::uuid[]);
+    'text','delete retry',null,false,false,0,null::uuid[]);
+  if a->>'status'<>'created' then raise exception '52 FAIL: null no-media text create rejected %',a; end if;
   mid:=(a->>'mark_id')::uuid;
-  delete from marks where id=mid;
   b:=create_mark('52000000-0000-0000-0000-000000000050','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'text','delete retry',null,false,false,0,'{}'::uuid[]);
+  if b->>'status'<>'existing' or (b->>'mark_id')::uuid<>mid then
+    raise exception '52 FAIL: null/empty no-media inputs did not normalize'; end if;
+  if create_mark('52000000-0000-0000-0000-000000000051','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      'photo',null,null,false,false,0,null::uuid[])->>'status'<>'invalid' then
+    raise exception '52 FAIL: null media list accepted for photo Mark'; end if;
+  delete from marks where id=mid;
+  b:=create_mark('52000000-0000-0000-0000-000000000050','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'text','delete retry',null,false,false,0,null::uuid[]);
   if b->>'status'<>'deleted' or (b->>'mark_id')::uuid<>mid then raise exception '52 FAIL: deleted retry recreated'; end if;
+end $$;
+reset role;
+do $$ begin
+  if exists(select 1 from mark_creation_requests
+       where request_id='52000000-0000-0000-0000-000000000051')
+     or (select count(*) from mark_creation_requests
+          where request_id='52000000-0000-0000-0000-000000000050' and state='deleted')<>1 then
+    raise exception '52 FAIL: null-array validation/tombstone side effects incorrect'; end if;
 end $$;
 ROLLBACK;
 \echo '52 (post-delete tombstone)         : PASS'

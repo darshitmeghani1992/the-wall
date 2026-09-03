@@ -1104,7 +1104,10 @@ begin
     return jsonb_build_object('status','unavailable');
   end if;
 
-  foreach v_uid in array (select array_agg(x order by x) from unnest(v_uploads) x) loop
+  -- Lock uploads in a deterministic order. A FOR query naturally performs zero
+  -- iterations for the normalized empty array used by text Marks; array_agg()
+  -- would turn that empty set back into NULL and make FOREACH raise.
+  for v_uid in select x.id from unnest(v_uploads) as x(id) order by x.id loop
     perform 1 from media_uploads where id=v_uid for update;
   end loop;
   select count(*) into v_count from media_uploads u where u.id=any(v_uploads)
