@@ -1,0 +1,46 @@
+apiVersion: the-wall.dev/v1alpha1
+kind: MediaProcessorRuntimeRequirements
+metadata:
+  name: protected-mark-media
+spec:
+  status: local-prototype-only
+  image:
+    immutableDigestRequired: true
+    sbomRequired: true
+    blockCriticalAndHighCves: true
+  process:
+    runAsUser: 10001
+    runAsGroup: 10001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilitiesDrop:
+      - ALL
+    seccompProfile: deploy/seccomp.json
+    pidLimit: 64
+  resources:
+    cpuLimit: "2"
+    memoryLimit: 1Gi
+    jobTmpfs:
+      mountPath: /tmp
+      sizeLimit: 512Mi
+      mode: "0700"
+    wallTimeSeconds:
+      photo: 30
+      voice: 45
+      video: 120
+  network:
+    defaultDenyEgress: true
+    httpsPort: 443
+    allowedDestinations:
+      - exact-supabase-storage-origin-from-deployment
+      - exact-edge-callback-origin-from-deployment
+    followRedirects: false
+  secrets:
+    forbidden:
+      - SUPABASE_SERVICE_ROLE_KEY
+      - SUPABASE_DB_URL
+      - SUPABASE_SECRET_KEY
+    envelopeVerification: native-webcrypto-ed25519-v2
+  deploymentGate:
+    runnableEntrypointConfigured: false
+    note: C2 gateway redeem/finalize adapters and selected runtime must be approved before deployment.
