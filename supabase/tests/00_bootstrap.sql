@@ -58,10 +58,12 @@ alter default privileges in schema public grant select on tables to anon;
 
 -- ── storage schema: buckets, objects, foldername() ──────────────────────────
 create table storage.buckets (
-  id         text primary key,
-  name       text,
-  public     boolean not null default false,
-  created_at timestamptz not null default now()
+  id                 text primary key,
+  name               text,
+  public             boolean not null default false,
+  file_size_limit    bigint,
+  allowed_mime_types text[],
+  created_at         timestamptz not null default now()
 );
 
 create table storage.objects (
@@ -69,7 +71,12 @@ create table storage.objects (
   bucket_id  text references storage.buckets(id),
   name       text not null,
   owner      uuid default auth.uid(),      -- Storage sets owner = auth.uid() on insert
-  created_at timestamptz not null default now()
+  -- Hosted Supabase Storage exposes `owner_id` as text. Preserve that exact
+  -- type so policy and transition tests catch UUID/text drift.
+  owner_id   text default auth.uid()::text,
+  metadata   jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (bucket_id, name)
 );
 
 -- Faithfully emulate hosted Supabase, where RLS on storage.objects is already
