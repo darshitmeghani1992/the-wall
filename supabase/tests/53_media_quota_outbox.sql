@@ -128,7 +128,9 @@ values('53000000-0000-0000-0000-000000000030','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaa
  '11111111-1111-1111-1111-111111111111','photo',null,'active');
 insert into media_uploads(id,uploader_id,uploader_tombstone_id,wall_id,wall_tombstone_id,kind,client_upload_id,
  source_path,state,session_state,declared_mime,declared_bytes,detected_mime,validated_bytes,actual_input_bytes,sha256,
- width,height,validated_path,preview_path,cache_control_seconds,expires_at,validated_at,quota_day,reserved_charge)
+ width,height,validated_path,preview_path,cache_control_seconds,attempt_id,dispatch_nonce_hash,
+ completion_nonce_hash,envelope_kid,dispatch_envelope_expires_at,output_credentials_expire_at,
+ expires_at,validated_at,quota_day,reserved_charge)
 values('53000000-0000-0000-0000-000000000031','11111111-1111-1111-1111-111111111111',
  '11111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','photo','53000000-0000-0000-0000-000000000032',
@@ -136,6 +138,8 @@ values('53000000-0000-0000-0000-000000000031','11111111-1111-1111-1111-111111111
  'validated','closed','image/jpeg',1000,'image/jpeg',900,1000,repeat('d',64),100,80,
  'validated/53000000-0000-0000-0000-000000000031/53000000-0000-0000-0000-000000000033/full.jpg',
  'validated/53000000-0000-0000-0000-000000000031/53000000-0000-0000-0000-000000000033/thumb.webp',60,
+ '53000000-0000-0000-0000-000000000033',repeat('e',64),repeat('f',64),'mark-delete-key',
+ now()+interval '120 seconds',now()+interval '2 hours 30 seconds',
  now()+interval '1 hour',now(),current_date,1000);
 insert into mark_media(mark_id,upload_id,media_type,"position",storage_path,preview_path,mime_type,byte_size,sha256,width,height)
 select '53000000-0000-0000-0000-000000000030',id,kind,0,validated_path,preview_path,detected_mime,validated_bytes,sha256,width,height
@@ -150,7 +154,10 @@ do $$ begin
   if not exists(select 1 from media_object_deletions where
       object_path='validated/53000000-0000-0000-0000-000000000031/53000000-0000-0000-0000-000000000033/full.jpg'
       and preview_path='validated/53000000-0000-0000-0000-000000000031/53000000-0000-0000-0000-000000000033/thumb.webp'
-      and reason='mark_deleted') then raise exception '53 FAIL: exact canonical outbox missing'; end if;
+      and reason='mark_deleted'
+      and not_before>=(select output_credentials_expire_at from media_uploads
+        where id='53000000-0000-0000-0000-000000000031')) then
+    raise exception '53 FAIL: exact canonical outbox/fence missing'; end if;
 end $$;
 ROLLBACK;
 \echo '53 (hard-delete durable outbox)    : PASS'
@@ -176,11 +183,14 @@ insert into storage.objects(bucket_id,name,owner_id,metadata)
 values('mark-media','staging/11111111-1111-1111-1111-111111111111/53000000-0000-0000-0000-000000000040/source',
  '11111111-1111-1111-1111-111111111111'::text,'{"size":1000}');
 do $$ declare claimed media_uploads%rowtype; source_delete uuid; jpg_delete uuid; webp_delete uuid;
-  late_path text; thumb_path text; early jsonb; begin
+  late_path text; thumb_path text; early jsonb; returned_at timestamptz; begin
+  if not rotate_media_envelope_key(null,'media53-kid') then raise exception '53 FAIL: key setup'; end if;
   select * into strict claimed from claim_media_validation_jobs(1,'53000000-0000-0000-0000-000000000042');
-  if not bind_media_validation_attempt_nonces(claimed.id,claimed.attempt_id,
+  returned_at:=clock_timestamp();
+  if not bind_media_validation_attempt_credentials(claimed.id,claimed.attempt_id,
       encode(extensions.digest('media53-dispatch','sha256'),'hex'),
-      encode(extensions.digest('media53-completion','sha256'),'hex'),'media53-kid')
+      encode(extensions.digest('media53-completion','sha256'),'hex'),'media53-kid',
+      returned_at+interval '120 seconds',returned_at,returned_at+interval '2 hours 30 seconds')
      or not redeem_media_validation_dispatch_nonce(claimed.id,claimed.attempt_id,'media53-dispatch','media53-kid') then
     raise exception '53 FAIL: claimed-attempt baseline failed';
   end if;
@@ -192,9 +202,10 @@ do $$ declare claimed media_uploads%rowtype; source_delete uuid; jpg_delete uuid
       and completion_nonce_hash is null and envelope_kid is null) then
     raise exception '53 FAIL: subject deletion did not terminalize/invalidate claim';
   end if;
-  if redeem_media_validation_completion_nonce(claimed.id,claimed.attempt_id,'media53-completion','media53-kid')
-     or complete_media_validation(claimed.id,claimed.attempt_id,'image/jpeg',900,repeat('e',64),100,80,null,
-       claimed.validated_path||'.jpg',null,60)
+  if finalize_media_validation_attempt(claimed.id,claimed.attempt_id,'media53-completion','media53-kid','success',
+       jsonb_build_object('detected_mime','image/jpeg','validated_bytes',900,'sha256',repeat('e',64),
+         'width',100,'height',80,'duration_ms',null,'validated_path',claimed.validated_path||'.jpg',
+         'preview_path',null,'cache_control_seconds',60))
      or exists(select 1 from claim_media_validation_jobs(1,'53000000-0000-0000-0000-000000000043')
        where id=claimed.id) then
     raise exception '53 FAIL: deleted-subject worker path remained live';
@@ -206,6 +217,9 @@ do $$ declare claimed media_uploads%rowtype; source_delete uuid; jpg_delete uuid
     where d.object_path=claimed.validated_path||'.jpg' and d.reason='subject_deleted';
   select d.id into strict webp_delete from media_object_deletions d
     where d.object_path=claimed.validated_path||'.webp' and d.reason='subject_deleted';
+  if exists(select 1 from media_object_deletions d where d.id in (jpg_delete,webp_delete)
+      and d.not_before<(select output_credentials_expire_at from media_uploads where id=claimed.id)) then
+    raise exception '53 FAIL: subject-deleted output escaped credential fence'; end if;
   if record_media_object_deletion(jpg_delete,
        jsonb_build_object('path',claimed.validated_path||'.jpg','outcome','missing','observed_at',clock_timestamp()::text),
        jsonb_build_object('path','validated/'||claimed.id::text||'/'||claimed.attempt_id::text||'/thumb.webp',
@@ -270,15 +284,18 @@ do $$ declare
   thumb_path text;
   stale_object jsonb;
   stale_preview jsonb;
+  returned_at timestamptz;
 begin
+  if not rotate_media_envelope_key(null,'media53-expiry-kid') then raise exception '53 FAIL: expiry key setup'; end if;
   select * into strict claimed from claim_media_validation_jobs(1,'53000000-0000-0000-0000-000000000052');
-  if not bind_media_validation_attempt_nonces(claimed.id,claimed.attempt_id,
+  returned_at:=clock_timestamp();
+  if not bind_media_validation_attempt_credentials(claimed.id,claimed.attempt_id,
       encode(extensions.digest('media53-expiry-dispatch','sha256'),'hex'),
-      encode(extensions.digest('media53-expiry-completion','sha256'),'hex'),'media53-expiry-kid')
+      encode(extensions.digest('media53-expiry-completion','sha256'),'hex'),'media53-expiry-kid',
+      returned_at+interval '120 seconds',returned_at,returned_at+interval '2 hours 30 seconds')
      or not redeem_media_validation_dispatch_nonce(
        claimed.id,claimed.attempt_id,'media53-expiry-dispatch','media53-expiry-kid')
-     or not redeem_media_validation_completion_nonce(
-       claimed.id,claimed.attempt_id,'media53-expiry-completion','media53-expiry-kid') then
+     then
     raise exception '53 FAIL: processing-expiry redeemed baseline failed';
   end if;
 
@@ -292,10 +309,10 @@ begin
   end if;
   if redeem_media_validation_dispatch_nonce(
        claimed.id,claimed.attempt_id,'media53-expiry-dispatch','media53-expiry-kid')
-     or redeem_media_validation_completion_nonce(
-       claimed.id,claimed.attempt_id,'media53-expiry-completion','media53-expiry-kid')
-     or complete_media_validation(claimed.id,claimed.attempt_id,'image/jpeg',900,repeat('f',64),100,80,null,
-       claimed.validated_path||'.jpg',null,60) then
+     or finalize_media_validation_attempt(claimed.id,claimed.attempt_id,'media53-expiry-completion',
+       'media53-expiry-kid','success',jsonb_build_object('detected_mime','image/jpeg',
+         'validated_bytes',900,'sha256',repeat('f',64),'width',100,'height',80,'duration_ms',null,
+         'validated_path',claimed.validated_path||'.jpg','preview_path',null,'cache_control_seconds',60)) then
     raise exception '53 FAIL: expired worker credential remained live';
   end if;
 
@@ -307,7 +324,10 @@ begin
     where object_path=late_path and reason='upload_expired';
   select id into strict webp_delete from media_object_deletions
     where object_path=claimed.validated_path||'.webp' and reason='upload_expired';
-  if exists(select 1 from media_object_deletions where id in (source_delete,jpg_delete,webp_delete)
+  if exists(select 1 from media_object_deletions d where d.id in (jpg_delete,webp_delete)
+      and d.not_before<(select output_credentials_expire_at from media_uploads where id=claimed.id)) then
+    raise exception '53 FAIL: expired output escaped credential fence'; end if;
+  if exists(select 1 from media_object_deletions where id in (jpg_delete,webp_delete)
       and not_before<=clock_timestamp()) then
     raise exception '53 FAIL: processing cleanup was not fenced past live credential';
   end if;

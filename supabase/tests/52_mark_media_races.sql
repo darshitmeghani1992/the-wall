@@ -15,30 +15,46 @@ values('52000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111
  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','photo','52000000-0000-0000-0000-000000000002',
  'staging/11111111-1111-1111-1111-111111111111/52000000-0000-0000-0000-000000000001/source',
  'uploaded','closed','image/jpeg',1000,1000,now()+interval '1 hour',current_date,1000);
-do $$ declare first_try media_uploads%rowtype; second_try media_uploads%rowtype; begin
+do $$ declare first_try media_uploads%rowtype; second_try media_uploads%rowtype; returned_at timestamptz; begin
+  if not rotate_media_envelope_key(null,'media52-kid') then raise exception '52 FAIL: key setup'; end if;
   select * into strict first_try from claim_media_validation_jobs(1,'52000000-0000-0000-0000-000000000010');
-  if not bind_media_validation_attempt_nonces(first_try.id,first_try.attempt_id,
+  returned_at:=clock_timestamp();
+  if not bind_media_validation_attempt_credentials(first_try.id,first_try.attempt_id,
       encode(extensions.digest('media52-first-dispatch','sha256'),'hex'),
-      encode(extensions.digest('media52-first-completion','sha256'),'hex'),'media52-kid') then
+      encode(extensions.digest('media52-first-completion','sha256'),'hex'),'media52-kid',
+      returned_at+interval '120 seconds',returned_at,returned_at+interval '2 hours 30 seconds') then
     raise exception '52 FAIL: first attempt nonce bind rejected'; end if;
+  select * into strict first_try from media_uploads where id=first_try.id;
   update media_uploads set lease_expires_at=now()-interval '1 second' where id=first_try.id;
   select * into strict second_try from claim_media_validation_jobs(1,'52000000-0000-0000-0000-000000000011');
   if first_try.attempt_id=second_try.attempt_id then raise exception '52 FAIL: retry reused attempt identity'; end if;
-  if not bind_media_validation_attempt_nonces(second_try.id,second_try.attempt_id,
+  returned_at:=clock_timestamp();
+  if not bind_media_validation_attempt_credentials(second_try.id,second_try.attempt_id,
       encode(extensions.digest('media52-second-dispatch','sha256'),'hex'),
-      encode(extensions.digest('media52-second-completion','sha256'),'hex'),'media52-kid')
+      encode(extensions.digest('media52-second-completion','sha256'),'hex'),'media52-kid',
+      returned_at+interval '120 seconds',returned_at,returned_at+interval '2 hours 30 seconds')
      or not redeem_media_validation_dispatch_nonce(second_try.id,second_try.attempt_id,'media52-second-dispatch','media52-kid')
-     or not redeem_media_validation_completion_nonce(second_try.id,second_try.attempt_id,'media52-second-completion','media52-kid') then
+     then
     raise exception '52 FAIL: current attempt nonce lifecycle rejected'; end if;
-  if complete_media_validation(first_try.id,first_try.attempt_id,'image/jpeg',900,repeat('a',64),100,80,null,
-      first_try.validated_path||'.jpg',null,60) then raise exception '52 FAIL: stale completion won'; end if;
-  if not complete_media_validation(second_try.id,second_try.attempt_id,'image/jpeg',900,repeat('b',64),100,80,null,
-      second_try.validated_path||'.jpg',null,60) then raise exception '52 FAIL: current completion lost'; end if;
-  if complete_media_validation(second_try.id,second_try.attempt_id,'image/jpeg',900,repeat('b',64),100,80,null,
-      second_try.validated_path||'.jpg',null,60) then raise exception '52 FAIL: completion replay accepted'; end if;
+  if finalize_media_validation_attempt(first_try.id,first_try.attempt_id,'media52-first-completion','media52-kid',
+      'success',jsonb_build_object('detected_mime','image/jpeg','validated_bytes',900,'sha256',repeat('a',64),
+        'width',100,'height',80,'duration_ms',null,'validated_path',first_try.validated_path||'.jpg',
+        'preview_path',null,'cache_control_seconds',60)) then raise exception '52 FAIL: stale completion won'; end if;
+  if not finalize_media_validation_attempt(second_try.id,second_try.attempt_id,'media52-second-completion','media52-kid',
+      'success',jsonb_build_object('detected_mime','image/jpeg','validated_bytes',900,'sha256',repeat('b',64),
+        'width',100,'height',80,'duration_ms',null,'validated_path',second_try.validated_path||'.jpg',
+        'preview_path',null,'cache_control_seconds',60)) then raise exception '52 FAIL: current completion lost'; end if;
+  if not finalize_media_validation_attempt(second_try.id,second_try.attempt_id,'media52-second-completion','media52-kid',
+      'success',jsonb_build_object('detected_mime','image/jpeg','validated_bytes',900,'sha256',repeat('b',64),
+        'width',100,'height',80,'duration_ms',null,'validated_path',second_try.validated_path||'.jpg',
+        'preview_path',null,'cache_control_seconds',60)) then raise exception '52 FAIL: exact completion replay denied'; end if;
   if not exists(select 1 from media_object_deletions
     where reason='superseded_attempt_'||first_try.attempt_id::text) then
     raise exception '52 FAIL: superseded attempt cleanup missing'; end if;
+  if exists(select 1 from media_object_deletions
+      where reason='superseded_attempt_'||first_try.attempt_id::text
+        and not_before<first_try.output_credentials_expire_at) then
+    raise exception '52 FAIL: superseded output escaped credential fence'; end if;
   -- A lease replacement reuses the one staging source. Only the old attempt's
   -- output candidates may be deleted; queueing source would break the winner.
   if exists(select 1 from media_object_deletions
@@ -78,13 +94,22 @@ values('52000000-0000-0000-0000-000000000011','11111111-1111-1111-1111-111111111
 insert into media_quota_daily(user_tombstone_id,quota_day,reserved_bytes,ingested_bytes,reservation_count,open_sessions)
 values('11111111-1111-1111-1111-111111111111',current_date,1000,0,1,0);
 do $$ declare claimed media_uploads%rowtype; source_path text; jpg_path text; thumb_path text; webp_path text;
+  returned_at timestamptz;
   source_delete uuid; jpg_delete uuid; webp_delete uuid; begin
+  if not rotate_media_envelope_key(null,'media52-fail') then raise exception '52 FAIL: failure key setup'; end if;
   select * into strict claimed from claim_media_validation_jobs(1,'52000000-0000-0000-0000-000000000013');
   source_path:=claimed.source_path;
   jpg_path:=claimed.validated_path||'.jpg';
   thumb_path:='validated/'||claimed.id::text||'/'||claimed.attempt_id::text||'/thumb.webp';
   webp_path:=claimed.validated_path||'.webp';
-  if not fail_media_validation(claimed.id,claimed.attempt_id,'DECODER_FAILED') then
+  returned_at:=clock_timestamp();
+  if not bind_media_validation_attempt_credentials(claimed.id,claimed.attempt_id,
+      encode(extensions.digest('media52-fail-dispatch','sha256'),'hex'),
+      encode(extensions.digest('media52-fail-completion','sha256'),'hex'),'media52-fail',
+      returned_at+interval '120 seconds',returned_at,returned_at+interval '2 hours 30 seconds')
+     or not redeem_media_validation_dispatch_nonce(claimed.id,claimed.attempt_id,'media52-fail-dispatch','media52-fail')
+     or not finalize_media_validation_attempt(claimed.id,claimed.attempt_id,'media52-fail-completion','media52-fail',
+       'failed',jsonb_build_object('error_code','DECODER_FAILED')) then
     raise exception '52 FAIL: terminal failure callback rejected'; end if;
   if (select state from media_uploads where id=claimed.id)<>'failed' then
     raise exception '52 FAIL: terminal failure did not persist'; end if;
@@ -98,6 +123,10 @@ do $$ declare claimed media_uploads%rowtype; source_path text; jpg_path text; th
   select id into strict source_delete from media_object_deletions where object_path=source_path and reason='validation_failed';
   select id into strict jpg_delete from media_object_deletions where object_path=jpg_path and reason='validation_failed';
   select id into strict webp_delete from media_object_deletions where object_path=webp_path and reason='validation_failed';
+  -- Simulate passage of the signed-PUT lifetime; output evidence before this
+  -- fence is covered independently by 57_media_worker_credentials.sql.
+  update media_object_deletions set not_before=clock_timestamp()-interval '1 second'
+    where id in (source_delete,jpg_delete,webp_delete);
   if not record_media_object_deletion(source_delete,
        jsonb_build_object('path',source_path,'outcome','missing','observed_at',clock_timestamp()::text),null)
      or not record_media_object_deletion(jpg_delete,

@@ -131,27 +131,35 @@ do $$ declare r jsonb; uid uuid; p text; wrong_owner_denied boolean:=false; affe
   if mark_media_uploaded(uid)->>'status'<>'uploaded' then raise exception '51 FAIL: transition retry not idempotent'; end if;
 end $$;
 reset role;
-do $$ declare u media_uploads%rowtype; claimed media_uploads%rowtype; ok boolean; begin
+do $$ declare u media_uploads%rowtype; claimed media_uploads%rowtype; ok boolean; returned_at timestamptz; begin
+  if not rotate_media_envelope_key(null,'media51-kid') then
+    raise exception '51 FAIL: credential key provisioning rejected'; end if;
   select * into strict u from media_uploads where client_upload_id='51000000-0000-0000-0000-000000000001';
   select * into strict claimed from claim_media_validation_jobs(1,'51000000-0000-0000-0000-000000000010');
   if claimed.id<>u.id or claimed.validated_path not like 'validated/'||u.id::text||'/'||claimed.attempt_id::text||'/full' then
     raise exception '51 FAIL: claim path not bound to attempt'; end if;
-  if not bind_media_validation_attempt_nonces(claimed.id,claimed.attempt_id,
+  returned_at:=clock_timestamp();
+  if not bind_media_validation_attempt_credentials(claimed.id,claimed.attempt_id,
       encode(extensions.digest('media51-dispatch','sha256'),'hex'),
-      encode(extensions.digest('media51-completion','sha256'),'hex'),'media51-kid') then
-    raise exception '51 FAIL: service nonce binding rejected'; end if;
+      encode(extensions.digest('media51-completion','sha256'),'hex'),'media51-kid',
+      returned_at+interval '120 seconds',returned_at,returned_at+interval '2 hours 30 seconds') then
+    raise exception '51 FAIL: service credential binding rejected'; end if;
   if not redeem_media_validation_dispatch_nonce(claimed.id,claimed.attempt_id,'media51-dispatch','media51-kid')
      or redeem_media_validation_dispatch_nonce(claimed.id,claimed.attempt_id,'media51-dispatch','media51-kid') then
     raise exception '51 FAIL: dispatch nonce was not exactly one-use'; end if;
-  if not redeem_media_validation_completion_nonce(claimed.id,claimed.attempt_id,'media51-completion','media51-kid')
-     or redeem_media_validation_completion_nonce(claimed.id,claimed.attempt_id,'media51-completion','media51-kid') then
-    raise exception '51 FAIL: completion nonce was not exactly one-use'; end if;
-  ok:=complete_media_validation(claimed.id,claimed.attempt_id,'image/jpeg',900,repeat('a',64),
-    100,80,null,claimed.validated_path||'.jpg',
-    'validated/'||claimed.id::text||'/'||claimed.attempt_id::text||'/thumb.webp',60);
+  ok:=finalize_media_validation_attempt(claimed.id,claimed.attempt_id,'media51-completion','media51-kid',
+    'success',jsonb_build_object('detected_mime','image/jpeg','validated_bytes',900,
+      'sha256',repeat('a',64),'width',100,'height',80,'duration_ms',null,
+      'validated_path',claimed.validated_path||'.jpg',
+      'preview_path','validated/'||claimed.id::text||'/'||claimed.attempt_id::text||'/thumb.webp',
+      'cache_control_seconds',60));
   if not ok then raise exception '51 FAIL: valid completion rejected'; end if;
   if not exists(select 1 from media_object_deletions where object_path=claimed.source_path and reason='source_validated') then
     raise exception '51 FAIL: validated source cleanup not durable'; end if;
+  if not exists(select 1 from media_object_deletions d join media_uploads mu on mu.id=claimed.id
+      where d.reason='unused_canonical_candidate'
+        and d.not_before>=mu.output_credentials_expire_at) then
+    raise exception '51 FAIL: unused Photo candidate escaped credential fence'; end if;
 end $$;
 set local role authenticated;
 set local "test.uid"='11111111-1111-1111-1111-111111111111';
