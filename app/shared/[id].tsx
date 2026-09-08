@@ -8,7 +8,13 @@ import { Masonry } from "@/components/Masonry";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { useAuth } from "@/lib/auth";
-import { getWall } from "@/lib/walls";
+import {
+  getMyWallMembership,
+  getWall,
+  getWallCapabilities,
+  type WallCapabilities,
+  type WallMember,
+} from "@/lib/walls";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { getProfile } from "@/lib/profiles";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
@@ -18,46 +24,70 @@ import type { Profile, Wall } from "@/lib/types";
 import { colors, markColors, radius } from "@/theme";
 
 /**
- * Shared Wall view — the PUBLIC slice. Reuses the Masonry + MarkView wall surface
- * with staggered realtime arrivals and reactions. Shows the wall name, its owner,
- * its Marks, and the Invite / Share / "Leave a Mark on {name}" CTAs.
- *
- * The "can leave a Mark" check here is UX convenience only — the REAL boundary is
- * the server's `can_contribute` RLS on the marks INSERT. Member rosters, private
- * access, and member counts/avatars are C2 (need `wall_members`), so this screen
- * shows none of them rather than faking membership.
+ * Shared Wall view backed by the auth-bound capability RPC. Client checks only
+ * shape the UI; the database remains the contribution/visibility authority.
  */
 export default function SharedWallScreen() {
   const router = useRouter();
-  const { id, justCreated } = useLocalSearchParams<{ id: string; justCreated?: string }>();
+  const { id, justCreated, focusMark } = useLocalSearchParams<{
+    id: string;
+    justCreated?: string;
+    focusMark?: string;
+  }>();
   const justCreatedId = justCreated ? String(justCreated) : null;
+  const focusMarkId = focusMark ? String(focusMark) : null;
   const { session } = useAuth();
   const [wall, setWall] = useState<Wall | null>(null);
   const [owner, setOwner] = useState<Profile | null>(null);
+  const [capabilities, setCapabilities] = useState<WallCapabilities | null>(null);
+  const [membership, setMembership] = useState<WallMember | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
+  const [focusedMarkUnavailable, setFocusedMarkUnavailable] = useState(false);
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
   useEffect(() => {
     let active = true;
     (async () => {
-      if (!id) return;
+      if (!id || !session?.user.id) {
+        setWall(null);
+        setMarks([]);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
+      setFocusedMarkUnavailable(false);
+      setWall(null);
+      setCapabilities(null);
+      setMembership(null);
+      setMarks([]);
+      setSelectedMark(null);
       try {
-        const w = await getWall(id);
+        const [w, nextCapabilities, nextMembership] = await Promise.all([
+          getWall(id),
+          getWallCapabilities(id),
+          getMyWallMembership(id, session.user.id),
+        ]);
         if (!active) return;
-        if (!w || w.type !== "shared") {
+        if (!w || w.type !== "shared" || !nextCapabilities || nextCapabilities.wallType !== "shared") {
           setError("This Shared Wall isn't available.");
           return;
         }
         setWall(w);
+        setCapabilities(nextCapabilities);
+        setMembership(nextMembership);
         const [ownerProfile, ms] = await Promise.all([getProfile(w.owner_id), getWallMarks(w.id)]);
         if (!active) return;
         setOwner(ownerProfile);
         setMarks(ms);
+        if (focusMarkId) {
+          const focusedMark = ms.find((mark) => mark.id === focusMarkId) ?? null;
+          setSelectedMark(focusedMark);
+          setFocusedMarkUnavailable(!focusedMark);
+        }
       } catch (cause: any) {
         if (active) setError(cause?.message ?? "Couldn't open this Shared Wall.");
       } finally {
@@ -67,7 +97,7 @@ export default function SharedWallScreen() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [focusMarkId, id, session?.user.id]);
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
@@ -76,8 +106,9 @@ export default function SharedWallScreen() {
 
   const { summaries, toggle } = useWallReactions(marks, session?.user.id);
 
-  const canLeaveMark = Boolean(wall) && wall?.contribution_policy !== "nobody";
-  const isOwner = Boolean(wall && session?.user.id === wall.owner_id);
+  const canLeaveMark = capabilities?.canContribute === true;
+  const isOwner = capabilities?.isOwner === true;
+  const isMember = membership?.status === "accepted";
 
   if (loading) {
     return (
@@ -117,7 +148,7 @@ export default function SharedWallScreen() {
             }}
           >
             <Text variant="label" color={markColors.brandYellow} style={{ textAlign: "center" }}>
-              SHARED WALL · PUBLIC
+              SHARED WALL · {wall.visibility === "public" ? "PUBLIC" : wall.visibility === "private" ? "PRIVATE" : "INVITE ONLY"}
             </Text>
           </View>
 
@@ -125,8 +156,14 @@ export default function SharedWallScreen() {
             {wall.name}
           </Text>
           <Text variant="body" color={colors.outline} style={{ marginTop: 4 }}>
-            {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} marks
+            {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} marks · {isOwner ? "owner" : isMember ? "member" : "viewer"}
           </Text>
+
+          {focusedMarkUnavailable ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.outline} style={{ marginTop: 12 }}>
+              This Mark isn&apos;t available anymore.
+            </Text>
+          ) : null}
 
           <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginTop: 16, marginBottom: 16 }}>
             {canLeaveMark ? (
@@ -138,14 +175,21 @@ export default function SharedWallScreen() {
                 }
               />
             ) : null}
-            <Button label="Invite" variant="primary" onPress={() => inviteToSharedWall(wall.id, wall.name)} />
+            {isOwner ? (
+              <Button label="Invite" variant="primary" onPress={() => inviteToSharedWall(wall.id, wall.name)} />
+            ) : null}
             <Button label="Share ↗" variant="ghost" onPress={() => shareSharedWall(wall.id, wall.name)} />
           </View>
 
-          {isOwner ? (
-            <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginBottom: 18 }}>
-              Anyone with the link can view and add to this public Shared Wall. Private walls and member
-              controls are coming soon.
+          <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginBottom: 18 }}>
+            {wall.visibility === "public"
+              ? "Anyone signed in can view. Only the owner and accepted members can leave Marks."
+              : "Only the owner and accepted members can view and leave Marks."}
+          </Text>
+
+          {!canLeaveMark ? (
+            <Text variant="body" color={colors.onSurfaceVariant} style={{ marginBottom: 18 }}>
+              Only accepted members can leave Marks here.
             </Text>
           ) : null}
 
@@ -170,7 +214,9 @@ export default function SharedWallScreen() {
             <View style={{ paddingVertical: 36, alignItems: "center" }}>
               <Text variant="headline">No Marks yet</Text>
               <Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>
-                Be the first to leave a Mark on {wall.name}.
+                {canLeaveMark
+                  ? `Be the first to leave a Mark on ${wall.name}.`
+                  : "This Shared Wall is waiting for its first Mark."}
               </Text>
             </View>
           )}

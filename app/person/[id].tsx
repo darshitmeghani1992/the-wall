@@ -22,8 +22,13 @@ import { colors, markColors, radius } from "@/theme";
 
 export default function PersonWall() {
   const router = useRouter();
-  const { id, justCreated } = useLocalSearchParams<{ id: string; justCreated?: string }>();
+  const { id, justCreated, focusMark } = useLocalSearchParams<{
+    id: string;
+    justCreated?: string;
+    focusMark?: string;
+  }>();
   const justCreatedId = justCreated ? String(justCreated) : null;
+  const focusMarkId = focusMark ? String(focusMark) : null;
   const { session } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [wall, setWall] = useState<Wall | null>(null);
@@ -34,6 +39,7 @@ export default function PersonWall() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
+  const [focusedMarkUnavailable, setFocusedMarkUnavailable] = useState(false);
   // Marks that should drop-in (the one I just left, plus any realtime arrivals).
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
@@ -42,10 +48,11 @@ export default function PersonWall() {
     (async () => {
       if (!session?.user.id || !id) return;
       if (session.user.id === id) {
-        router.replace("/wall");
+        router.replace("/(tabs)/home");
         return;
       }
       setLoading(true);
+      setFocusedMarkUnavailable(false);
       try {
         const [person, personalWall, state, followState] = await Promise.all([
           getProfile(id),
@@ -58,7 +65,16 @@ export default function PersonWall() {
         setWall(personalWall);
         setRelationship(state);
         setFollowing(followState);
-        if (personalWall) setMarks(await getWallMarks(personalWall.id));
+        if (personalWall) {
+          const nextMarks = await getWallMarks(personalWall.id);
+          if (!active) return;
+          setMarks(nextMarks);
+          if (focusMarkId) {
+            const focusedMark = nextMarks.find((mark) => mark.id === focusMarkId) ?? null;
+            setSelectedMark(focusedMark);
+            setFocusedMarkUnavailable(!focusedMark);
+          }
+        }
       } catch (cause: any) {
         if (active) setError(cause?.message ?? "Couldn't open this Wall.");
       } finally {
@@ -66,7 +82,7 @@ export default function PersonWall() {
       }
     })();
     return () => { active = false; };
-  }, [id, session?.user.id, router]);
+  }, [focusMarkId, id, session?.user.id, router]);
 
   // Staggered realtime arrivals (bundled cascade instead of ten at once).
   useStaggeredArrivals(wall?.id, (mark) => {
@@ -126,6 +142,11 @@ export default function PersonWall() {
           {profile.bio ? (
             <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: -6, marginBottom: 18 }}>
               {profile.bio}
+            </Text>
+          ) : null}
+          {focusedMarkUnavailable ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.outline} style={{ marginBottom: 18 }}>
+              This Mark isn&apos;t available anymore.
             </Text>
           ) : null}
           <View style={{ marginBottom: 18 }}>

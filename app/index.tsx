@@ -45,7 +45,7 @@ export default function Index() {
     if (loading || !session || needsProfile) return;
     if (consumed.current) return;
     consumed.current = true;
-    setTarget(consumePendingLink() ?? "/home");
+    setTarget(consumePendingLink() ?? "/(tabs)/home");
   }, [loading, session, needsProfile]);
 
   if (loading) return <Splash />;

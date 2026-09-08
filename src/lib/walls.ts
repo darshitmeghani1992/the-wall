@@ -2,20 +2,7 @@ import { supabase } from "./supabase";
 import { track } from "./analytics";
 import type { Profile, Wall } from "./types";
 
-/**
- * Shared Walls — the PUBLIC slice, built entirely on EXISTING contracts from
- * 0001_init.sql: `walls.type='shared'`, the "walls insert self" policy
- * (owner_id = auth.uid(), any type), and `can_view_wall` / `can_contribute`,
- * which already support public walls (visibility='public', contribution
- * 'everyone'/'friends'). No schema change.
- *
- * HONEST LIMITS (reported as C2 dependencies — NOT faked here):
- *  - There is no `wall_members` table, so membership cannot be enforced
- *    client-side. This module therefore creates PUBLIC shared walls only, and
- *    can only LIST shared walls the user OWNS (a member roster needs C2 schema).
- *  - Private shared walls, invites-as-membership, member counts/avatars, and
- *    covers (no wall cover column / storage contract) are all C2.
- */
+/** Shared Wall client data over the shipped walls, membership, and P0 RLS contracts. */
 
 export type NewSharedWall = {
   name: string;
@@ -48,6 +35,14 @@ export interface WallMember {
   status: WallMemberStatus;
   created_at: string;
 }
+
+export type WallCapabilities = {
+  status: "available";
+  wallType: "personal" | "shared";
+  isOwner: boolean;
+  canView: true;
+  canContribute: boolean;
+};
 
 /** A membership row with its user's profile resolved (null if not readable). */
 export type WallMemberWithProfile = WallMember & { profile: Profile | null };
@@ -88,20 +83,57 @@ export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
 }
 
 /**
- * Fetch a single wall by id. Returns null when the row isn't readable — including
- * the known gap where a private SHARED wall's row is not yet SELECT-able to its
- * accepted members until migration 0009 (parallel Backend work) lands. Callers
- * MUST handle null gracefully rather than assuming a wall always resolves.
- * (RLS "walls view" gates visibility.)
+ * Fetch a single RLS-readable wall by id. Null deliberately conflates missing
+ * and unauthorized so callers cannot turn the read into a privacy oracle.
  */
 export async function getWall(wallId: string): Promise<Wall | null> {
   const { data } = await supabase.from("walls").select("*").eq("id", wallId).maybeSingle();
   return (data as Wall) ?? null;
 }
 
+/** Auth-bound, non-enumerating capability result from the shipped P0 RPC. */
+export async function getWallCapabilities(wallId: string): Promise<WallCapabilities | null> {
+  const { data, error } = await supabase.rpc("get_wall_capabilities", { p_wall_id: wallId });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const value = data as Record<string, unknown>;
+  if (value.status === "unavailable") return null;
+  if (
+    value.status !== "available"
+    || (value.wall_type !== "personal" && value.wall_type !== "shared")
+    || typeof value.is_owner !== "boolean"
+    || value.can_view !== true
+    || typeof value.can_contribute !== "boolean"
+  ) {
+    throw new Error("The Wall capability response wasn't valid.");
+  }
+  return {
+    status: "available",
+    wallType: value.wall_type,
+    isOwner: value.is_owner,
+    canView: true,
+    canContribute: value.can_contribute,
+  };
+}
+
+/** The caller's own membership row, visible through existing wall_members RLS. */
+export async function getMyWallMembership(
+  wallId: string,
+  userId: string,
+): Promise<WallMember | null> {
+  const { data, error } = await supabase
+    .from("wall_members")
+    .select("wall_id, user_id, role, status, created_at")
+    .eq("wall_id", wallId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as WallMember | null) ?? null;
+}
+
 /**
- * The Shared Walls the user OWNS. Non-owned public shared walls are reached via
- * their share link (there is no member roster to enumerate joined walls — C2).
+ * The Shared Walls the user owns. Joined walls are composed separately from the
+ * accepted membership rows by `getAccessibleSharedWalls`.
  */
 export async function getOwnedSharedWalls(userId: string): Promise<Wall[]> {
   const { data, error } = await supabase
@@ -112,6 +144,49 @@ export async function getOwnedSharedWalls(userId: string): Promise<Wall[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Wall[];
+}
+
+/**
+ * Shared Walls available in the My Wall switcher: walls the caller owns plus
+ * walls where their membership is accepted. Every read still goes through RLS;
+ * membership is a discovery key, never a client-side authorization decision.
+ * Duplicate owner/member results are collapsed by wall id.
+ */
+export async function getAccessibleSharedWalls(userId: string): Promise<Wall[]> {
+  const [owned, membershipResult] = await Promise.all([
+    getOwnedSharedWalls(userId),
+    supabase
+      .from("wall_members")
+      .select("wall_id")
+      .eq("user_id", userId)
+      .eq("status", "accepted"),
+  ]);
+
+  if (membershipResult.error) throw membershipResult.error;
+
+  const ownedIds = new Set(owned.map((wall) => wall.id));
+  const joinedIds = Array.from(
+    new Set(
+      (membershipResult.data ?? [])
+        .map((membership) => membership.wall_id)
+        .filter((wallId): wallId is string => Boolean(wallId) && !ownedIds.has(wallId)),
+    ),
+  );
+
+  let joined: Wall[] = [];
+  if (joinedIds.length > 0) {
+    const { data, error } = await supabase
+      .from("walls")
+      .select("*")
+      .in("id", joinedIds)
+      .eq("type", "shared");
+    if (error) throw error;
+    joined = (data ?? []) as Wall[];
+  }
+
+  return [...owned, ...joined]
+    .filter((wall, index, walls) => walls.findIndex((candidate) => candidate.id === wall.id) === index)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 /**
@@ -166,6 +241,24 @@ export async function acceptWallMembership(wallId: string): Promise<void> {
   const { data, error } = await supabase
     .from("wall_members")
     .update({ status: "accepted" })
+    .eq("wall_id", wallId)
+    .eq("user_id", uid)
+    .eq("status", "pending")
+    .select("wall_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("That invite is no longer available.");
+}
+
+/** Decline a pending invite through the shipped self-delete RLS contract. */
+export async function declineWallMembership(wallId: string): Promise<void> {
+  const { data: authData } = await supabase.auth.getUser();
+  const uid = authData.user?.id;
+  if (!uid) throw new Error("You need to be signed in to decline an invite.");
+
+  const { data, error } = await supabase
+    .from("wall_members")
+    .delete()
     .eq("wall_id", wallId)
     .eq("user_id", uid)
     .eq("status", "pending")
