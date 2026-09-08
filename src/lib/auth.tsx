@@ -6,12 +6,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { getProfile } from "./profiles";
 import type { Profile } from "./types";
+import { allocateMediaSessionGeneration, protectedMediaCache } from "./mark-media";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -19,6 +21,9 @@ type AuthState = {
   /** true until the initial session + profile lookup finishes. */
   loading: boolean;
   session: Session | null;
+  /** Monotonic, process-local identity for protected-media cache isolation. */
+  sessionGeneration: number;
+  mediaAppActive: boolean;
   profile: Profile | null;
   /** Signed in but hasn't completed profile setup yet. */
   needsProfile: boolean;
@@ -41,6 +46,8 @@ const redirectTo = makeRedirectUri({ scheme: "thewall", path: "auth/callback" })
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionGeneration, setSessionGeneration] = useState(allocateMediaSessionGeneration);
+  const [mediaAppActive, setMediaAppActive] = useState(AppState.currentState === "active");
   const [profile, setProfile] = useState<Profile | null>(null);
 
   async function loadProfile(s: Session | null) {
@@ -61,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, s) => {
+      protectedMediaCache.clearAll();
+      setSessionGeneration(allocateMediaSessionGeneration());
       setSession(s);
       await loadProfile(s);
     });
@@ -68,6 +77,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
       sub.subscription.unsubscribe();
     };
+  }, []);
+
+  // One process-wide lifecycle boundary avoids one listener per rendered Mark.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      const active = state === "active";
+      setMediaAppActive(active);
+      if (!active) protectedMediaCache.clearAll();
+    });
+    return () => subscription.remove();
   }, []);
 
   // Passwordless: email a 6-digit code / magic link.
@@ -110,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    protectedMediaCache.clearAll();
     await supabase.auth.signOut();
     setProfile(null);
   }
@@ -118,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       loading,
       session,
+      sessionGeneration,
+      mediaAppActive,
       profile,
       needsProfile: Boolean(session?.user) && !profile,
       signInWithEmail,
@@ -126,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       signOut,
     }),
-    [loading, session, profile],
+    [loading, session, sessionGeneration, mediaAppActive, profile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

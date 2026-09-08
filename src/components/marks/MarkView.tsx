@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Pressable, ActivityIndicator } from "react-native";
+import { View, Pressable, ActivityIndicator, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { Audio, Video, ResizeMode } from "expo-av";
 import { MarkCard } from "@/components/MarkCard";
@@ -10,6 +10,8 @@ import { isMarkShareable, shareMark } from "@/lib/share";
 import { formatDuration } from "@/lib/recording";
 import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
+import { useMarkMedia } from "@/hooks/use-mark-media";
+import { AsyncOperationFence, awaitGuarded, selectLocalDraftPreviewUrl, type ProtectedMediaItem } from "@/lib/mark-media";
 
 /** Voice/Video Marks stash their clip length (ms) on payload for the UI. */
 function markDurationMs(mark: MarkWithAuthor): number | null {
@@ -304,19 +306,72 @@ const secretPanel = {
 };
 
 /** Photo Mark: a polaroid frame with the image and an optional caption below. */
-function PhotoMark({ mark }: { mark: MarkWithAuthor }) {
+type MediaPresentation = ReturnType<typeof useMarkMedia>;
+
+function MediaUnavailable({ height = 130 }: { height?: number }) {
+  return <Placeholder label="MEDIA UNAVAILABLE" height={height} />;
+}
+
+function MediaMarkContent({ mark, visible }: { mark: MarkWithAuthor; visible: boolean }) {
+  const media = useMarkMedia(mark, visible);
+  switch (mark.type) {
+    case "photo":
+      return <PhotoMark mark={mark} media={media} />;
+    case "voice":
+      return <VoiceMark mark={mark} media={media} />;
+    case "video":
+      return <VideoMark mark={mark} media={media} />;
+    default:
+      return null;
+  }
+}
+
+function PhotoMark({ mark, media }: { mark: MarkWithAuthor; media: MediaPresentation }) {
+  const [frameWidth, setFrameWidth] = useState(0);
+  const localPreviewUrl = selectLocalDraftPreviewUrl(mark.id, mark.media_url);
+  const previewItem: ProtectedMediaItem[] = localPreviewUrl ? [{
+    position: 0,
+    media_type: "photo",
+    url: localPreviewUrl,
+    preview_url: null,
+    mime_type: "image/jpeg",
+    width: null,
+    height: null,
+    duration_ms: null,
+  }] : [];
+  const items = previewItem.length ? previewItem : media.items;
   return (
     <View>
-      <View style={{ backgroundColor: "#fff", padding: 6, borderRadius: 2 }}>
-        {mark.media_url ? (
-          <Image
-            source={{ uri: mark.media_url }}
-            style={{ width: "100%", height: 180, borderRadius: 1, backgroundColor: colors.surfaceContainerHigh }}
-            contentFit="contain"
-          />
-        ) : (
-          <Placeholder label="PHOTO" height={180} />
-        )}
+      <View
+        onLayout={(event) => setFrameWidth(Math.round(event.nativeEvent.layout.width))}
+        style={{ backgroundColor: "#fff", padding: 6, borderRadius: 2 }}
+      >
+        {items.length > 0 && frameWidth > 0 ? (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            accessibilityLabel={`${items.length} photo Mark${items.length === 1 ? "" : "s"}`}
+          >
+            {items.map((item) => (
+              <Image
+                key={item.position}
+                source={{ uri: item.url }}
+                placeholder={item.preview_url ? { uri: item.preview_url } : undefined}
+                style={{ width: frameWidth - 12, height: 180, borderRadius: 1, backgroundColor: colors.surfaceContainerHigh }}
+                contentFit="contain"
+                cachePolicy="none"
+                onError={media.reportMediaFailure}
+                accessibilityLabel={`Photo ${item.position + 1} of ${items.length}`}
+              />
+            ))}
+          </ScrollView>
+        ) : media.phase === "unavailable" ? <MediaUnavailable height={180} /> : <Placeholder label="LOADING PHOTO…" height={180} />}
+        {items.length > 1 ? (
+          <Text variant="label" color={colors.outline} style={{ textAlign: "center", marginTop: 5 }}>
+            {items.length} PHOTOS · SWIPE
+          </Text>
+        ) : null}
       </View>
       {mark.text ? (
         <Text variant="mark" style={{ fontSize: 16, marginTop: 8 }}>
@@ -333,45 +388,104 @@ function PhotoMark({ mark }: { mark: MarkWithAuthor }) {
  * first play and unloads it on unmount so we never leak an audio player. Device
  * playback is verified on a physical device (final QA pending).
  */
-function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
+function VoiceMark({ mark, media }: { mark: MarkWithAuthor; media: MediaPresentation }) {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const durationMs = markDurationMs(mark);
+  const mountedRef = useRef(false);
+  const createFenceRef = useRef(new AsyncOperationFence());
+  const createFence = createFenceRef.current;
+  const item = media.items[0];
+  const previewUrl = selectLocalDraftPreviewUrl(mark.id, mark.media_url);
+  const mediaUrl = previewUrl ?? item?.url ?? null;
+  const durationMs = mark.id === "preview" ? markDurationMs(mark) : item?.duration_ms ?? null;
+  const registerUnload = media.registerUnload;
+  const setMediaPlaying = media.setPlaying;
 
   useEffect(() => {
-    return () => {
-      void soundRef.current?.unloadAsync();
+    mountedRef.current = true;
+    const unload = async () => {
+      createFence.invalidate();
+      const sound = soundRef.current;
       soundRef.current = null;
+      if (mountedRef.current) {
+        setLoading(false);
+        setPlaying(false);
+        setMediaPlaying(false);
+      }
+      if (sound) await sound.unloadAsync();
     };
-  }, []);
+    registerUnload(unload);
+    return () => {
+      mountedRef.current = false;
+      createFence.invalidate();
+      const sound = soundRef.current;
+      soundRef.current = null;
+      if (sound) void sound.unloadAsync().catch(() => undefined);
+      registerUnload(null);
+    };
+  }, [createFence, registerUnload, setMediaPlaying]);
 
   async function toggle() {
-    if (!mark.media_url) return;
-    try {
-      if (!soundRef.current) {
-        setLoading(true);
-        const { sound } = await Audio.Sound.createAsync({ uri: mark.media_url });
-        soundRef.current = sound;
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setPlaying(false);
-            void sound.setPositionAsync(0);
-          }
-        });
+    if (!mediaUrl) return;
+    const token = createFence.begin();
+    let sound = soundRef.current;
+    if (!sound) {
+      if (!mountedRef.current || !createFence.isCurrent(token)) return;
+      setLoading(true);
+      const created = await awaitGuarded(
+        createFence,
+        token,
+        Audio.Sound.createAsync({ uri: mediaUrl }),
+        async ({ sound: staleSound }) => { await staleSound.unloadAsync(); },
+      );
+      if (created.status === "stale") return;
+      if (created.status === "error") {
+        if (!mountedRef.current || !createFence.isCurrent(token)) return;
         setLoading(false);
-      }
-      if (playing) {
-        await soundRef.current.pauseAsync();
         setPlaying(false);
-      } else {
-        await soundRef.current.playAsync();
-        setPlaying(true);
+        media.setPlaying(false);
+        media.reportMediaFailure();
+        return;
       }
-    } catch {
+      sound = created.value.sound;
+      const ownedSound = sound;
+      if (!mountedRef.current || !createFence.isCurrent(token)) {
+        void ownedSound.unloadAsync().catch(() => undefined);
+        return;
+      }
+      soundRef.current = ownedSound;
+      ownedSound.setOnPlaybackStatusUpdate((status) => {
+        if (!mountedRef.current || soundRef.current !== ownedSound) return;
+        if (status.isLoaded && status.didJustFinish) {
+          setPlaying(false);
+          media.setPlaying(false);
+          void ownedSound.setPositionAsync(0).catch(() => undefined);
+        } else if (!status.isLoaded && "error" in status && status.error) {
+          media.reportMediaFailure();
+        }
+      });
+      if (!mountedRef.current || !createFence.isCurrent(token)) return;
       setLoading(false);
-      setPlaying(false);
     }
+
+    if (!sound) return;
+    const playback = await awaitGuarded(
+      createFence,
+      token,
+      playing ? sound.pauseAsync() : sound.playAsync(),
+    );
+    if (playback.status === "stale") return;
+    if (playback.status === "error") {
+      if (!mountedRef.current || !createFence.isCurrent(token)) return;
+      setPlaying(false);
+      media.setPlaying(false);
+      media.reportMediaFailure();
+      return;
+    }
+    if (!mountedRef.current || !createFence.isCurrent(token)) return;
+    setPlaying(!playing);
+    media.setPlaying(!playing);
   }
 
   return (
@@ -379,7 +493,8 @@ function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
       <Pressable
         onPress={toggle}
         accessibilityRole="button"
-        accessibilityLabel={`${playing ? "Pause" : "Play"} voice Mark${durationMs ? `, ${formatDuration(durationMs)}` : ""}`}
+        disabled={!mediaUrl || media.phase === "loading"}
+        accessibilityLabel={media.phase === "unavailable" ? "Voice Mark unavailable" : `${playing ? "Pause" : "Play"} voice Mark${durationMs ? `, ${formatDuration(durationMs)}` : ""}`}
         style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 }}
       >
         <View
@@ -392,7 +507,7 @@ function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
             justifyContent: "center",
           }}
         >
-          {loading ? (
+          {loading || media.phase === "loading" ? (
             <ActivityIndicator color={colors.surface} />
           ) : (
             <Text style={{ fontSize: 18, color: colors.surface }}>{playing ? "❙❙" : "▶"}</Text>
@@ -401,7 +516,7 @@ function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
         <View style={{ flex: 1 }}>
           <Text variant="label" color={colors.ink}>VOICE MARK</Text>
           <Text variant="label" color={colors.outline}>
-            {durationMs ? formatDuration(durationMs) : "tap to play"}
+            {durationMs ? formatDuration(durationMs) : media.phase === "unavailable" ? "media unavailable" : "tap to play"}
           </Text>
         </View>
       </Pressable>
@@ -416,20 +531,71 @@ function VoiceMark({ mark }: { mark: MarkWithAuthor }) {
 }
 
 /** Video Mark: the clip with native controls + an optional caption below. */
-function VideoMark({ mark }: { mark: MarkWithAuthor }) {
-  const durationMs = markDurationMs(mark);
+function VideoMark({ mark, media }: { mark: MarkWithAuthor; media: MediaPresentation }) {
+  const videoRef = useRef<Video | null>(null);
+  const mountedRef = useRef(false);
+  const callbackFenceRef = useRef(new AsyncOperationFence());
+  const callbackFence = callbackFenceRef.current;
+  const callbackTokenRef = useRef(0);
+  const item = media.items[0];
+  const previewUrl = selectLocalDraftPreviewUrl(mark.id, mark.media_url);
+  const mediaUrl = previewUrl ?? item?.url ?? null;
+  const durationMs = mark.id === "preview" ? markDurationMs(mark) : item?.duration_ms ?? null;
+  const registerUnload = media.registerUnload;
+  const setMediaPlaying = media.setPlaying;
+  const reportMediaFailure = media.reportMediaFailure;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    callbackTokenRef.current = callbackFence.begin();
+    registerUnload(async () => {
+      callbackFence.invalidate();
+      const video = videoRef.current;
+      videoRef.current = null;
+      if (mountedRef.current) setMediaPlaying(false);
+      if (video) await video.unloadAsync();
+    });
+    return () => {
+      mountedRef.current = false;
+      callbackFence.invalidate();
+      // The current native instance is the one that must be released at cleanup.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const video = videoRef.current;
+      videoRef.current = null;
+      if (video) void video.unloadAsync().catch(() => undefined);
+      registerUnload(null);
+    };
+  }, [callbackFence, mediaUrl, registerUnload, setMediaPlaying]);
+
+  function callbackIsCurrent(): boolean {
+    return mountedRef.current && callbackFence.isCurrent(callbackTokenRef.current);
+  }
+
   return (
     <View>
-      {mark.media_url ? (
+      {mediaUrl ? (
         <Video
-          source={{ uri: mark.media_url }}
+          ref={videoRef}
+          source={{ uri: mediaUrl }}
           style={{ width: "100%", height: 180, borderRadius: 2, backgroundColor: "#000" }}
           useNativeControls
           resizeMode={ResizeMode.CONTAIN}
           isLooping={false}
+          posterSource={item?.preview_url ? { uri: item.preview_url } : undefined}
+          usePoster={Boolean(item?.preview_url)}
+          onError={() => {
+            if (callbackIsCurrent()) reportMediaFailure();
+          }}
+          onPlaybackStatusUpdate={(status) => {
+            if (!callbackIsCurrent()) return;
+            if (status.isLoaded) setMediaPlaying(status.isPlaying);
+            else if ("error" in status && status.error) reportMediaFailure();
+          }}
         />
+      ) : media.phase === "unavailable" ? (
+        <MediaUnavailable height={180} />
       ) : (
-        <Placeholder label="VIDEO" height={180} />
+        <Placeholder label="LOADING VIDEO…" height={180} />
       )}
       {durationMs ? (
         <Text variant="label" color={colors.outline} style={{ marginTop: 6 }}>
@@ -510,6 +676,7 @@ export function MarkView({
   reactions,
   onToggleReaction,
   onOpenDetail,
+  mediaVisible = true,
 }: {
   mark: MarkWithAuthor;
   enter?: EnterMode;
@@ -521,6 +688,8 @@ export function MarkView({
   reactions?: ReactionSummary;
   onToggleReaction?: (emoji: ReactionEmoji) => void;
   onOpenDetail?: () => void;
+  /** Fetches protected media only while this Mark surface is active. */
+  mediaVisible?: boolean;
 }) {
   const chrome = chromeFor(mark);
   const canShare = shareable && isMarkShareable(mark);
@@ -536,13 +705,9 @@ export function MarkView({
   } else {
     switch (mark.type) {
       case "photo":
-        inner = <PhotoMark mark={mark} />;
-        break;
       case "voice":
-        inner = <VoiceMark mark={mark} />;
-        break;
       case "video":
-        inner = <VideoMark mark={mark} />;
+        inner = <MediaMarkContent mark={mark} visible={mediaVisible} />;
         break;
       case "text":
       default:
