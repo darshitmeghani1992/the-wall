@@ -11,7 +11,7 @@ import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
-import { isFollowing, followUser, unfollowUser } from "@/lib/follows";
+import { getFollowCounts, isFollowing, followUser, unfollowUser } from "@/lib/follows";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
 import { useWallReactions } from "@/hooks/useWallReactions";
@@ -30,11 +30,12 @@ export default function PersonWall() {
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
   const [relationship, setRelationship] = useState<RelationshipState>("none");
   const [following, setFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
-  // Marks that should drop-in (the one I just left, plus any realtime arrivals).
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
   useEffect(() => {
@@ -47,17 +48,20 @@ export default function PersonWall() {
       }
       setLoading(true);
       try {
-        const [person, personalWall, state, followState] = await Promise.all([
+        const [person, personalWall, state, followState, counts] = await Promise.all([
           getProfile(id),
           getPersonalWall(id),
           getRelationship(session.user.id, id),
           isFollowing(session.user.id, id),
+          getFollowCounts(id),
         ]);
         if (!active) return;
         setProfile(person);
         setWall(personalWall);
         setRelationship(state);
         setFollowing(followState);
+        setFollowersCount(counts.followers);
+        setFollowingCount(counts.following);
         if (personalWall) setMarks(await getWallMarks(personalWall.id));
       } catch (cause: any) {
         if (active) setError(cause?.message ?? "Couldn't open this Wall.");
@@ -68,7 +72,6 @@ export default function PersonWall() {
     return () => { active = false; };
   }, [id, session?.user.id, router]);
 
-  // Staggered realtime arrivals (bundled cascade instead of ten at once).
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
     setMarks((current) => (current.some((item) => item.id === mark.id) ? current : [mark, ...current]));
@@ -81,18 +84,18 @@ export default function PersonWall() {
     [relationship, wall],
   );
 
-  // Follow/unfollow (public Personal Walls only, §17). Optimistic, reverts on
-  // failure — the server rejects follows of private/blocked/deactivated targets.
   async function toggleFollow() {
     if (!profile || followBusy) return;
     const prev = following;
     setFollowBusy(true);
     setFollowing(!prev);
+    setFollowersCount((count) => Math.max(0, count + (prev ? -1 : 1)));
     try {
       if (prev) await unfollowUser(profile.id);
       else await followUser(profile.id);
     } catch {
       setFollowing(prev);
+      setFollowersCount((count) => Math.max(0, count + (prev ? 1 : -1)));
     } finally {
       setFollowBusy(false);
     }
@@ -114,7 +117,7 @@ export default function PersonWall() {
               THIS IS @{profile.handle.toUpperCase()}'S WALL
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <View style={{ width: 58, height: 58, borderRadius: 14, borderWidth: 2, borderColor: colors.ink, backgroundColor: markColors.brandYellow, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
               {profile.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={{ width: "100%", height: "100%" }} /> : <Text variant="display">{profile.display_name[0]?.toUpperCase()}</Text>}
             </View>
@@ -123,6 +126,15 @@ export default function PersonWall() {
               <Text variant="body" color={colors.outline}>@{profile.handle} · {marks.length} marks</Text>
             </View>
           </View>
+
+          <View
+            accessibilityLabel={`${followersCount} followers, ${followingCount} following`}
+            style={{ flexDirection: "row", gap: 20, marginBottom: 18, paddingLeft: 70 }}
+          >
+            <Text variant="label" color={colors.onSurfaceVariant}>{followersCount} FOLLOWERS</Text>
+            <Text variant="label" color={colors.onSurfaceVariant}>{followingCount} FOLLOWING</Text>
+          </View>
+
           {profile.bio ? (
             <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: -6, marginBottom: 18 }}>
               {profile.bio}

@@ -10,11 +10,10 @@ import { Input } from "@/components/Input";
 import { useAuth } from "@/lib/auth";
 import { createProfile, isHandleAvailable } from "@/lib/profiles";
 import { uploadImage } from "@/lib/upload";
-import { onboardingDraft } from "@/lib/onboarding";
 import { colors, markColors, radius } from "@/theme";
 
-/** Final onboarding step: claim a handle, set a display name, bio and avatar.
- *  Creating the profile row triggers the DB to spin up the Personal Wall. */
+/** Final onboarding setup: claim a handle, set a display name, bio and avatar.
+ * Creating the profile row triggers the DB to spin up the Personal Wall. */
 export default function ProfileSetup() {
   const router = useRouter();
   const { session, refreshProfile } = useAuth();
@@ -31,7 +30,6 @@ export default function ProfileSetup() {
     [handle],
   );
 
-  // Debounced handle availability check.
   useEffect(() => {
     if (cleanHandle.length < 3) {
       setHandleFree(null);
@@ -69,11 +67,10 @@ export default function ProfileSetup() {
         display_name: name.trim(),
         bio: bio.trim() || null,
         avatar_url,
-        interests: onboardingDraft.interests,
+        interests: [],
       });
-      onboardingDraft.interests = [];
       await refreshProfile();
-      router.replace("/"); // gate → Home
+      router.replace("/walkthrough");
     } catch (e: any) {
       Alert.alert("Couldn't finish setup", e?.message ?? "Please try again.");
     } finally {
@@ -87,14 +84,13 @@ export default function ProfileSetup() {
     <Screen dockInset={false}>
       <View style={{ paddingTop: 24, gap: 8, marginBottom: 22 }}>
         <Text variant="label" color={colors.outline}>
-          // ALMOST THERE
+          ALMOST THERE
         </Text>
         <Text variant="display" style={{ fontSize: 30 }}>
           Set up your wall
         </Text>
       </View>
 
-      {/* Avatar */}
       <View style={{ alignItems: "center", marginBottom: 22 }}>
         <Pressable onPress={pickAvatar}>
           <View
