@@ -119,7 +119,8 @@ signing-failed request returns the same fixed 404 response; no post-gateway stat
 path count, or error detail may become an existence or authorization oracle. A successful response
 contains only `status`, `expires_at`, and ordered `items`; each item contains only `position`,
 `media_type`, `url`, `preview_url`, `mime_type`, `width`, `height`, and `duration_ms`. It exposes no
-Storage path, hash, byte count, user/Wall/Mark identity, or internal workflow state.
+Storage path, hash, byte count, user/Wall/Mark identity, or internal workflow state. Voice items
+always have `preview_url=null`; only Photo and Video may carry a preview URL.
 
 Immediately before the first signer request, Edge captures trusted time `t_first_sign_request` and
 sets `contract_expiry = t_first_sign_request + 60 seconds`. The manifest expiry is the minimum of
@@ -136,13 +137,23 @@ failure permits exactly one whole-manifest refresh; a second failure becomes una
 than a retry loop. Backgrounding, logout/session replacement, or learned access loss immediately
 clears the manifest and unloads active photo/audio/video resources.
 
-Legacy public-URL fallback is default-off and exists only for the migration window. When explicitly
-enabled, it accepts only the configured HTTPS Supabase project origin and the literal path
+Legacy public-URL fallback is disabled entirely for C5a. The protected reader and native
+Photo/Voice/Video components never emit or consume `marks.media_url`, even when a local feature
+flag is forged. Passing a validated URL directly to Expo Image/AV cannot enforce the binding
+no-redirect rule at the fetch boundary, so client-side pre-validation is not an adequate security
+control. Legacy bytes return only after C6 has copied and validated them into the private pipeline,
+or through a separately approved server-controlled fetch design that rejects redirects before any
+follow; neither path is part of C5a.
+
+For C6 inventory only, the accepted historical locator grammar remains the configured HTTPS
+Supabase project origin plus literal path
 `/storage/v1/object/public/attachments/marks/<same-wall-uuid>/<timestamp>.<allowlisted-extension>`.
-The Wall UUID must equal the containing Mark's Wall, and the timestamp and extension must match the
-configured allow-lists. Any non-443 port, userinfo, query, fragment, redirect, alternate host,
-encoded separator, dot segment, decoding ambiguity, wrong bucket/prefix/Wall, or unexpected suffix
-is rejected without fetching. There is no generic external-URL fallback.
+The Wall UUID must equal the containing Mark's Wall. `<timestamp>` is an opaque historical filename
+identifier: exactly 13 ASCII decimal digits, with no date, clock, past/future, or numeric-range
+semantics. “Invalid timestamp” means only “not exactly 13 ASCII digits.” Any non-443 port, userinfo,
+query, fragment, redirect, alternate host, encoded separator, dot segment, decoding ambiguity,
+wrong bucket/prefix/Wall, or unexpected suffix is rejected. There is no generic external-URL
+fallback.
 
 The resolver is the authorization linearization point. In one transaction it locks the Mark and
 Wall `FOR SHARE`, takes the existing deterministic pair lock where blocking can change visibility,
@@ -309,8 +320,10 @@ request tombstones make delayed retries safe.
 Migration `0020_mark_media_foundation.sql` is additive. It creates the private bucket, tables,
 constraints, policies, default-off controls, staging/processing contracts, deletion outbox, quota
 ledger, reconciliation gate, and `create_mark` but does not yet revoke the migration-0018 text
-compatibility insert. A migrated client uses the RPC for all four types and dual-reads `mark_media`
-before legacy `media_url`. New policies use `storage.objects.owner_id`; a source transition rejects
+compatibility insert. A migrated client uses the RPC for all four types and reads media only from
+linked private `mark_media` relations. A legacy Mark remains temporarily unavailable until C6 has
+copied, validated, linked, and read-proven its canonical private media; the client never falls back
+to `marks.media_url`. New policies use `storage.objects.owner_id`; a source transition rejects
 null/service ownership and requires exact equality with the uploader JWT subject. Supabase has
 deprecated `owner`, and service-key-created objects have no owner. See
 [Storage ownership](https://supabase.com/docs/guides/storage/security/ownership).
@@ -396,7 +409,8 @@ republish content. The OCI processor hosting provider remains replaceable.
 ## Calibrated confidence
 
 - **Verified:** Current repository behavior, migration `0018` cutover state, client single-media
-  shape, public bucket behavior, and current official Supabase Storage/Edge constraints.
+  shape, public bucket behavior, current official Supabase Storage/Edge constraints, and that the
+  reviewed C5a native URI handoff has no redirect-policy enforcement boundary.
 - **Believed-likely:** The staged state machine and isolated processor are the smallest design that
   meets the approved safety contract without pushing CPU-heavy work into Edge Functions.
 - **Inferred:** Hosted legacy object count, active Supabase plan/CDN purge availability, chosen OCI

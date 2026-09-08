@@ -748,9 +748,10 @@ The successful response body is exactly the following shape, with no additional 
 ```
 
 Items are ordered by `position`; the route returns one through five Photo items or exactly one
-Voice/Video item. It never returns a Storage path, checksum, byte count, upload/attempt identifier,
-user identity, Wall identity, Mark identity, author identity, or workflow state. The JWT-verifying
-route sets the binding no-store/no-referrer headers and logs neither paths nor URLs.
+Voice/Video item. Voice always has `preview_url=null`; Photo and Video alone may carry an optional
+preview URL. It never returns a Storage path, checksum, byte count, upload/attempt identifier, user
+identity, Wall identity, Mark identity, author identity, or workflow state. The JWT-verifying route
+sets the binding no-store/no-referrer headers and logs neither paths nor URLs.
 
 Immediately before its first Storage signer request, Edge captures trusted time
 `t_first_sign_request` and sets `contract_expiry = t_first_sign_request + 60 seconds`. It requests
@@ -769,13 +770,24 @@ whole-manifest read; a second failure becomes unavailable with no loop. App back
 session replacement, or learned access loss clears the manifest and unloads every active media
 resource.
 
-Legacy fallback is default-off. During the explicitly enabled migration window it may accept only
+Legacy fallback is disabled entirely in C5a. The reader hook and native Photo/Voice/Video surfaces
+must not emit or consume `marks.media_url`, even when local configuration is forged. Expo Image/AV
+direct URI consumption does not give the reviewed C5a validation boundary control over redirect
+following; validating a URL and then handing it to the native loader therefore cannot satisfy
+“reject redirects before follow.” C5a contains no preflight-and-render exception because it would
+add a second fetch/TOCTOU boundary without proving the native request uses the validated bytes.
+
+Legacy media becomes readable only after C6 copies and validates it into private `mark-media`, or
+through a separately approved server-controlled byte-fetch design whose HTTP client rejects
+redirects before following them. For C6 inventory, the only accepted historical locator grammar is
 the configured HTTPS Supabase project origin and exactly
 `/storage/v1/object/public/attachments/marks/<same-wall-uuid>/<timestamp>.<allowlisted-extension>`.
-The embedded Wall UUID must equal the containing Mark's Wall. Ports other than 443, userinfo,
-queries, fragments, redirects, alternate hosts, IP literals, encoded separators, dot segments,
-decode ambiguity, wrong bucket/prefix/Wall, invalid timestamp, and non-allowlisted extensions are
-rejected before fetch. No arbitrary or external URL fallback exists.
+The embedded Wall UUID must equal the containing Mark's Wall. `<timestamp>` is syntactic and opaque:
+exactly 13 ASCII decimal digits, with no epoch/date, clock, past/future, or numeric-range meaning.
+“Invalid timestamp” means only a filename component that is not exactly those 13 digits. Ports other
+than 443, userinfo, queries, fragments, redirects, alternate hosts, IP literals, encoded separators,
+dot segments, decode ambiguity, wrong bucket/prefix/Wall, and non-allowlisted extensions are
+rejected. No arbitrary or external URL fallback exists.
 
 ### `current_user_can_upload_mark_media_path(p_path text)`
 
@@ -921,7 +933,9 @@ No hosted count is assumed. Run the following on a frozen media-write boundary (
    matches the public-source checksum before processing.
 4. **Process:** sanitize Photo or inspect/transcode Voice/Video through the same worker contract.
 5. **Link:** transactionally insert `mark_media(position=0)`, store canonical checksum, and null only
-   that Mark's `media_url/payload`. The client dual-reads new relation first during rollout.
+   that Mark's `media_url/payload`. Only after this private relation commits may C5a render the
+   migrated media; it never consumes the prior public URL. Not-yet-linked legacy media remains
+   temporarily unavailable.
 6. **Read proof:** as each authorized role, prove the new Mark + signed object is readable; as anon,
    blocked, unrelated, pending, deactivated, and removed roles, prove signing/download fails.
 7. **Public deletion:** delete the exact old public object only after steps 1–6 pass; never delete by
@@ -939,8 +953,11 @@ No hosted count is assumed. Run the following on a frozen media-write boundary (
     reachable quarantine blocks media creation, `0023`, and the privacy claim unless the Founder
     separately accepts a documented residual privacy exception for that exact URL/risk.
 
-Rollback before public deletion simply uses dual-read legacy URLs. Rollback after public deletion
-uses the private canonical object; it never recreates a public original.
+Rollback before public deletion pauses migration and keeps C5a on protected relations only;
+not-yet-linked legacy media remains unavailable. Rollback after public deletion likewise uses only
+the linked private canonical object. Neither rollback returns to public-URL consumption or
+recreates a public original. Exact public deletion still occurs only after private checksum,
+processing, link, authorized-read, and unauthorized-denial proof succeed.
 
 ## Cutover sequence
 
@@ -987,7 +1004,8 @@ uses the private canonical object; it never recreates a public original.
 - Migrate text creation to `create_mark` first and prove idempotency/Alerts.
 - Replace single `MediaDraft` with ordered photo drafts (max five) or one AV draft.
 - Add resumable upload/progress/retry, validation wait, draft preservation, and signed-read refresh.
-- Dual-read `mark_media` first, then legacy `media_url` only during migration.
+- Read media only from linked protected `mark_media`; pre-migration or not-yet-linked legacy media
+  may be temporarily unavailable and never falls back to public `media_url`.
 - Enforce minimum client version before final cutover.
 
 ### Phase 4 — legacy migration
@@ -1000,8 +1018,9 @@ uses the private canonical object; it never recreates a public original.
 - Assert the legacy reconciliation singleton is complete and abort otherwise.
 - Revoke direct app `marks` insert and all app media/job writes.
 - Make RPC the sole runtime creator; enforce null legacy fields.
-- Remove client legacy write code. Keep dual-read only until ledger is fully proven, then remove in a
-  later cleanup commit—not inside the high-risk cutover.
+- Remove client legacy write code. Continue the protected-only reader contract; the cutover never
+  enables public `media_url` consumption. Remove now-dead legacy read fields in a later cleanup
+  commit after the ledger is fully proven—not inside the high-risk cutover.
 
 ## Exact downstream work units and files
 
@@ -1214,7 +1233,8 @@ All four server-side switches remain off until their specific downstream gates p
 ## Confidence
 
 - **Verified:** Repository facts, official Supabase platform claims linked in ADR-012/this plan, the
-  exact Node Ed25519 vector/path self-check, and independent Two-Key approval of protocol v2.
+  exact Node Ed25519 vector/path self-check, independent Two-Key approval of protocol v2, and that
+  the reviewed C5a native URI handoff lacks a redirect-policy enforcement boundary.
 - **Believed-likely:** This is implementable with current Supabase Storage/Postgres/Edge orchestration
   plus a small OCI processor and avoids known public-URL/CPU-limit failure modes.
 - **Inferred:** Hosted data volume, provider cost, processor throughput, TUS behavior in this exact
