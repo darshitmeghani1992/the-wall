@@ -19,7 +19,9 @@
   - Accepts optional normalized Photo/Voice/Video text up to 500 characters in `marks.text` and the request
     fingerprint; Secret media returns `invalid` before request/upload locks or side effects.
   - Keeps the `create_mark` signature stable and does not expose `rate_limited` as a creation result.
-  - Extends expiry to terminalize a requested cancellation after the live worker lease expires.
+  - Extends expiry to terminalize a requested cancellation after the live worker lease expires. Ordinary and
+    cancellation expiry both invalidate the attempt ID and every reusable worker credential while retaining the
+    output-credential timestamp strictly as the exact cleanup fence.
 - `supabase/migrations/0024_mark_creation_cutover.sql`
   - Aborts unless the legacy-reconciliation singleton contains complete count/deletion/denial evidence.
   - Removes direct authenticated/service Mark INSERT and its RLS policy; `create_mark` becomes the runtime path.
@@ -29,7 +31,8 @@
 - Focused tests
   - SQL behavior/grant tests for caption boundaries, normalized idempotency, early Secret rejection across
     nonexistent/owned/foreign bindings with complete no-side-effect assertions,
-    cancellation/status/quota behavior, and finalizer-level persistence/hash normalization for every allowed,
+    cancellation/status/quota behavior, ordinary/cancellation expiry credential invalidation, and finalizer-level
+    persistence/hash normalization for every allowed,
     unknown, malformed, lowercase, oversized, and diagnostic-bearing failure result, including exact retry
     acceptance and changed canonical callback rejection.
   - Node source-contract tests for early-rejection ordering, response union, redaction, and actor-only signature.

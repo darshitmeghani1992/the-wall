@@ -186,7 +186,12 @@ values
  '11111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','photo','59000000-0000-4000-8000-000000000051',
  'staging/11111111-1111-1111-1111-111111111111/59000000-0000-4000-8000-000000000050/source',
- 'expired','expired','image/jpeg',1000,now()-interval '1 second',current_date,1000);
+ 'expired','expired','image/jpeg',1000,now()-interval '1 second',current_date,1000),
+('59000000-0000-4000-8000-000000000054','11111111-1111-1111-1111-111111111111',
+ '11111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+ 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','photo','59000000-0000-4000-8000-000000000055',
+ 'staging/11111111-1111-1111-1111-111111111111/59000000-0000-4000-8000-000000000054/source',
+ 'processing','closed','image/jpeg',1000,now()-interval '1 second',current_date,1000);
 insert into media_uploads(id,uploader_id,uploader_tombstone_id,wall_id,wall_tombstone_id,kind,client_upload_id,
  source_path,state,session_state,declared_mime,declared_bytes,detected_mime,validated_bytes,actual_input_bytes,sha256,
  width,height,validated_path,cache_control_seconds,expires_at,validated_at,quota_day,reserved_charge)
@@ -199,8 +204,20 @@ values('59000000-0000-4000-8000-000000000052','11111111-1111-1111-1111-111111111
  now()+interval '1 hour',now(),current_date,1000);
 update media_uploads set attempt_id='59000000-0000-4000-8000-000000000046',attempt_count=1,
  lease_expires_at=now()+interval '5 minutes',
- validated_path='validated/59000000-0000-4000-8000-000000000044/59000000-0000-4000-8000-000000000046/full'
+ validated_path='validated/59000000-0000-4000-8000-000000000044/59000000-0000-4000-8000-000000000046/full',
+ dispatch_nonce_hash=repeat('a',64),completion_nonce_hash=repeat('b',64),
+ dispatch_redeemed_at=now(),completion_redeemed_at=now(),envelope_kid='media59-cancel',
+ dispatch_envelope_expires_at=now()+interval '2 minutes',
+ output_credentials_expire_at='2099-01-01 00:00:01+00'::timestamptz
  where id='59000000-0000-4000-8000-000000000044';
+update media_uploads set attempt_id='59000000-0000-4000-8000-000000000056',attempt_count=1,
+ lease_expires_at=now()-interval '1 second',
+ validated_path='validated/59000000-0000-4000-8000-000000000054/59000000-0000-4000-8000-000000000056/full',
+ dispatch_nonce_hash=repeat('c',64),completion_nonce_hash=repeat('d',64),
+ dispatch_redeemed_at=now(),completion_redeemed_at=now(),envelope_kid='media59-expiry',
+ dispatch_envelope_expires_at=now()+interval '2 minutes',
+ output_credentials_expire_at='2099-01-01 00:00:02+00'::timestamptz
+ where id='59000000-0000-4000-8000-000000000054';
 set local role authenticated;
 set local "test.uid"='11111111-1111-1111-1111-111111111111';
 do $$ declare a jsonb; b jsonb; c jsonb; s jsonb; state_id uuid; state_result jsonb; begin
@@ -256,13 +273,36 @@ do $$ begin
    where id='59000000-0000-4000-8000-000000000044';
   perform expire_media_uploads();
   if not exists(select 1 from media_uploads where id='59000000-0000-4000-8000-000000000044'
-      and state='expired' and cancelled_at is not null) then
-    raise exception '59 FAIL: expired processing cancellation not terminalized';
+      and state='expired' and cancelled_at is not null and attempt_id is null and lease_expires_at is null
+      and dispatch_nonce_hash is null and completion_nonce_hash is null
+      and dispatch_redeemed_at is null and completion_redeemed_at is null and envelope_kid is null
+      and dispatch_envelope_expires_at is null
+      and output_credentials_expire_at='2099-01-01 00:00:01+00'::timestamptz) then
+    raise exception '59 FAIL: expired processing cancellation retained a worker credential';
   end if;
-  if exists(select 1 from media_object_deletions d
-      where d.idempotency_key like 'upload_cancelled:59000000-0000-4000-8000-000000000044:%'
-        and d.object_path like 'validated/%' and d.not_before<clock_timestamp()-interval '2 seconds') then
-    raise exception '59 FAIL: attempt cleanup lost its lease/output fence';
+  if not exists(select 1 from media_uploads where id='59000000-0000-4000-8000-000000000054'
+      and state='expired' and cancelled_at is null and attempt_id is null and lease_expires_at is null
+      and dispatch_nonce_hash is null and completion_nonce_hash is null
+      and dispatch_redeemed_at is null and completion_redeemed_at is null and envelope_kid is null
+      and dispatch_envelope_expires_at is null
+      and output_credentials_expire_at='2099-01-01 00:00:02+00'::timestamptz) then
+    raise exception '59 FAIL: ordinary processing expiry retained a worker credential';
+  end if;
+  if (select count(*) from media_object_deletions d
+      join media_upload_cleanup_requirements r on r.deletion_id=d.id
+      where r.upload_id='59000000-0000-4000-8000-000000000044'
+        and d.idempotency_key like 'upload_cancelled:59000000-0000-4000-8000-000000000044:%'
+        and d.object_path like 'validated/%'
+        and d.not_before>='2099-01-01 00:00:01+00'::timestamptz)<>2 then
+    raise exception '59 FAIL: cancellation attempt cleanup lost its exact output fence';
+  end if;
+  if (select count(*) from media_object_deletions d
+      join media_upload_cleanup_requirements r on r.deletion_id=d.id
+      where r.upload_id='59000000-0000-4000-8000-000000000054'
+        and d.idempotency_key like 'upload_expired:59000000-0000-4000-8000-000000000054:%'
+        and d.object_path like 'validated/%'
+        and d.not_before>='2099-01-01 00:00:02+00'::timestamptz)<>2 then
+    raise exception '59 FAIL: ordinary expiry attempt cleanup lost its exact output fence';
   end if;
 end $$;
 ROLLBACK;

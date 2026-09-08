@@ -68,3 +68,19 @@ test("cancellation API is actor-bound and accepts no path or actor parameter", (
   assert.doesNotMatch(body, /p_actor|p_path|p_bucket|p_prefix|p_wildcard/);
   assert.match(body, /where id=p_upload_id and uploader_id=v_actor for update/);
 });
+
+test("terminal expiry invalidates reusable worker credentials but retains the cleanup fence", () => {
+  const body = functionBody("expire_media_uploads");
+  for (const field of [
+    "attempt_id=null",
+    "dispatch_nonce_hash=null",
+    "completion_nonce_hash=null",
+    "dispatch_redeemed_at=null",
+    "completion_redeemed_at=null",
+    "envelope_kid=null",
+    "dispatch_envelope_expires_at=null",
+  ]) {
+    assert.ok(body.includes(field), `${field} is not cleared by terminal expiry`);
+  }
+  assert.doesNotMatch(body, /output_credentials_expire_at=null/);
+});

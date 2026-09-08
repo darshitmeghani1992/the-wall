@@ -612,7 +612,12 @@ begin
       else
         perform enqueue_media_upload_full_cleanup(v_up,'upload_expired',true);
       end if;
+      -- Terminal expiry invalidates every reusable worker credential while
+      -- retaining output_credentials_expire_at as the cleanup safety fence.
       update media_uploads set state='expired',session_state='expired',lease_expires_at=null,
+        attempt_id=null,dispatch_nonce_hash=null,completion_nonce_hash=null,
+        dispatch_redeemed_at=null,completion_redeemed_at=null,envelope_kid=null,
+        dispatch_envelope_expires_at=null,
         cancelled_at=case when v_up.cancel_requested_at is not null then v_now else cancelled_at end,
         error_code=case when uploader_id is null or wall_id is null then 'SUBJECT_DELETED'
                         when v_up.cancel_requested_at is not null then null else error_code end,
