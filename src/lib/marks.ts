@@ -1,11 +1,16 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
 import type { Mark, MarkPayload, MarkType } from "./types";
+import {
+  executeTextMarkSubmission,
+  type CreateTextMarkResult,
+  type PreparedTextMarkSubmission,
+} from "./mark-writer-contract";
 
 /** The fields the Writer collects for a new mark. */
 export type MarkDraft = {
   wallId: string;
-  type: MarkType;
+  type: Exclude<MarkType, "text">;
   text?: string | null;
   color?: string | null;
   anonymous?: boolean;
@@ -61,6 +66,15 @@ export async function createMark(draft: MarkDraft): Promise<Mark> {
   if (isAnonymous) track("Anonymous Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
   if (draft.secret) track("Secret Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
   return data as Mark;
+}
+
+/** C4 text-only writer path. Media creation remains on its separately gated flow. */
+export async function createTextMark(submission: PreparedTextMarkSubmission): Promise<CreateTextMarkResult> {
+  return executeTextMarkSubmission(submission, async (args) => {
+    const { data, error } = await supabase.rpc("create_mark", args);
+    if (error) throw error;
+    return data;
+  });
 }
 
 export type Author = {

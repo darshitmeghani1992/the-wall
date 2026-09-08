@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View, TextInput, Pressable, Alert, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { UNSTABLE_usePreventRemove as usePreventRemove } from "@react-navigation/native";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
@@ -9,7 +10,12 @@ import { MarkView } from "@/components/marks/MarkView";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
 import { getWall } from "@/lib/walls";
-import { createMark, type MarkWithAuthor } from "@/lib/marks";
+import { createMark, createTextMark, type MarkWithAuthor } from "@/lib/marks";
+import {
+  prepareTextMarkSubmission,
+  TextSubmissionLock,
+  type PreparedTextMarkSubmission,
+} from "@/lib/mark-writer-contract";
 import { track } from "@/lib/analytics";
 import { uploadMedia, MEDIA_LIMITS } from "@/lib/upload";
 import { useVoiceRecorder, formatDuration, MAX_VOICE_MS, MAX_VIDEO_MS } from "@/lib/recording";
@@ -32,7 +38,7 @@ const MAX_TEXT = 500;
 type MediaKind = "photo" | "voice" | "video";
 type MediaDraft = { kind: MediaKind; uri: string; mime: string; durationMs?: number };
 
-const KIND_TO_TYPE: Record<MediaKind, MarkType> = { photo: "photo", voice: "voice", video: "video" };
+const KIND_TO_TYPE: Record<MediaKind, Exclude<MarkType, "text">> = { photo: "photo", voice: "voice", video: "video" };
 const KIND_TO_UPLOAD: Record<MediaKind, keyof typeof MEDIA_LIMITS> = {
   photo: "image",
   voice: "audio",
@@ -108,6 +114,7 @@ function AttachButton({ label, onPress, disabled }: { label: string; onPress: ()
 
 export default function Composer() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { wallId: targetWallId, recipientId, handle, sharedWallId, wallName } =
     useLocalSearchParams<{
       wallId?: string;
@@ -130,9 +137,35 @@ export default function Composer() {
   const [allowAnonymous, setAllowAnonymous] = useState(true);
   const [targetError, setTargetError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "uploading" | "posting">("idle");
+  const [textSubmissionLocked, setTextSubmissionLocked] = useState(false);
+  const [confirmedTextMarkId, setConfirmedTextMarkId] = useState<string | null>(null);
+  const textSubmissionRef = useRef<PreparedTextMarkSubmission | null>(null);
+  const textSubmissionLockRef = useRef(new TextSubmissionLock());
+  const submitInFlightRef = useRef(false);
+  const trackedTextRequestsRef = useRef(new Set<string>());
   const busy = phase !== "idle";
   const recorder = useVoiceRecorder();
   const recording = recorder.phase === "recording";
+
+  useEffect(
+    () => navigation.addListener("beforeRemove", (event) => {
+      if (!textSubmissionLockRef.current.allowsIntent()) event.preventDefault();
+    }),
+    [navigation],
+  );
+  // Native-stack consults this route-level registry before beginning a gesture;
+  // the listener above also closes the synchronous gap before React re-renders.
+  usePreventRemove(textSubmissionLocked, () => undefined);
+  useEffect(() => {
+    if (textSubmissionLocked || !confirmedTextMarkId) return;
+    setConfirmedTextMarkId(null);
+    if (router.canDismiss()) router.dismissAll();
+    router.push(
+      sharedMode
+        ? `/shared/${sharedWallId}?justCreated=${confirmedTextMarkId}`
+        : `/person/${recipientId}?justCreated=${confirmedTextMarkId}`,
+    );
+  }, [confirmedTextMarkId, recipientId, router, sharedMode, sharedWallId, textSubmissionLocked]);
 
   // Resolve + validate the target wall (RLS still enforces contribution on insert).
   useEffect(() => {
@@ -179,11 +212,14 @@ export default function Composer() {
 
   /** Attach media, clearing Secret (media secrecy is a later slice). */
   function attach(draft: MediaDraft) {
-    setMedia(draft);
-    setSecret(false);
+    textSubmissionLockRef.current.runIntent(() => {
+      setMedia(draft);
+      setSecret(false);
+    });
   }
 
   async function pickPhoto(fromCamera: boolean) {
+    if (!textSubmissionLockRef.current.allowsIntent()) return;
     if (fromCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
@@ -205,6 +241,7 @@ export default function Composer() {
   }
 
   async function pickVideo(fromCamera: boolean) {
+    if (!textSubmissionLockRef.current.allowsIntent()) return;
     if (fromCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
@@ -233,6 +270,7 @@ export default function Composer() {
   }
 
   async function toggleVoice() {
+    if (!textSubmissionLockRef.current.allowsIntent()) return;
     if (recording) {
       const clip = await recorder.stop();
       if (clip) attach({ kind: "voice", uri: clip.uri, mime: clip.mime, durationMs: clip.durationMs });
@@ -242,6 +280,7 @@ export default function Composer() {
   }
 
   async function removeMedia() {
+    if (!textSubmissionLockRef.current.allowsIntent()) return;
     if (media?.kind === "voice") await recorder.reset();
     setMedia(null);
   }
@@ -277,6 +316,7 @@ export default function Composer() {
   );
 
   function confirmDiscard() {
+    if (!textSubmissionLockRef.current.allowsIntent()) return;
     if (!hasContent && !recording) {
       router.back();
       return;
@@ -295,23 +335,64 @@ export default function Composer() {
   }
 
   async function submit() {
-    if (!canSubmit || !wallId) return;
+    if (!canSubmit || !wallId || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    let textAttemptStarted = false;
     try {
-      let mediaUrl: string | null = null;
-      if (media) {
-        setPhase("uploading");
-        try {
-          mediaUrl = await uploadMedia(media.uri, `marks/${wallId}`, media.mime, KIND_TO_UPLOAD[media.kind]);
-        } catch (e: any) {
-          Alert.alert("Upload failed", e?.message ?? "We couldn't upload that. Check your connection and try again.");
+      if (!media) {
+        if (!textSubmissionLockRef.current.tryBegin()) return;
+        textAttemptStarted = true;
+        setTextSubmissionLocked(true);
+        const submission = prepareTextMarkSubmission(
+          { wallId, text, color, anonymous, secret },
+          textSubmissionRef.current,
+        );
+        textSubmissionRef.current = submission;
+        setPhase("posting");
+        const result = await createTextMark(submission);
+        if (result.status !== "created" && result.status !== "existing") {
+          const message = result.status === "deleted"
+            ? "That earlier post was deleted. Make a change before posting it again."
+            : result.status === "invalid"
+              ? "Check this Mark and try again."
+              : result.status === "request_id_reused"
+                ? "This draft changed unexpectedly. Make a change and try again."
+                : "This Wall isn't accepting that Mark right now. Please try again later.";
+          Alert.alert("Couldn't post that", message);
           setPhase("idle");
           return;
         }
+        if (!trackedTextRequestsRef.current.has(submission.requestId)) {
+          trackedTextRequestsRef.current.add(submission.requestId);
+          track("Mark Created", {
+            mark_type: "text",
+            is_anonymous: submission.anonymous,
+            is_secret: submission.secret,
+          });
+          if (submission.anonymous) track("Anonymous Mark Created", { mark_type: "text" });
+          if (submission.secret) track("Secret Mark Created", { mark_type: "text" });
+          if (sharedMode) track("Shared Wall Mark Created", { mark_type: "text" });
+        }
+        textSubmissionLockRef.current.finish();
+        textAttemptStarted = false;
+        setTextSubmissionLocked(false);
+        setPhase("idle");
+        setConfirmedTextMarkId(result.markId);
+        return;
+      }
+      let mediaUrl: string | null = null;
+      setPhase("uploading");
+      try {
+        mediaUrl = await uploadMedia(media.uri, `marks/${wallId}`, media.mime, KIND_TO_UPLOAD[media.kind]);
+      } catch (e: any) {
+        Alert.alert("Upload failed", e?.message ?? "We couldn't upload that. Check your connection and try again.");
+        setPhase("idle");
+        return;
       }
       setPhase("posting");
       const mark = await createMark({
         wallId,
-        type: markType,
+        type: KIND_TO_TYPE[media.kind],
         text: text.trim() || null,
         color: markType === "text" ? color : null,
         anonymous,
@@ -329,6 +410,12 @@ export default function Composer() {
     } catch (e: any) {
       Alert.alert("Couldn't post that", e?.message ?? "Please try again in a moment.");
       setPhase("idle");
+    } finally {
+      if (textAttemptStarted) {
+        textSubmissionLockRef.current.finish();
+        setTextSubmissionLocked(false);
+      }
+      submitInFlightRef.current = false;
     }
   }
 
@@ -350,7 +437,13 @@ export default function Composer() {
     <Screen dockInset={false}>
       {/* Header: Cancel · New Mark · Post */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, marginBottom: 16 }}>
-        <Pressable onPress={confirmDiscard} hitSlop={10} style={{ minHeight: 44, justifyContent: "center" }}>
+        <Pressable
+          onPress={confirmDiscard}
+          disabled={textSubmissionLocked}
+          accessibilityState={{ disabled: textSubmissionLocked }}
+          hitSlop={10}
+          style={{ minHeight: 44, justifyContent: "center", opacity: textSubmissionLocked ? 0.5 : 1 }}
+        >
           <Text variant="label" color={colors.outline}>CANCEL</Text>
         </Pressable>
         <View style={{ alignItems: "center" }}>
@@ -379,11 +472,11 @@ export default function Composer() {
           <MarkView mark={preview} />
           <View style={{ flexDirection: "row", justifyContent: "center", gap: 18, marginTop: 4 }}>
             {media.kind === "photo" ? (
-              <Pressable onPress={() => pickPhoto(false)} hitSlop={8}>
+              <Pressable onPress={() => pickPhoto(false)} disabled={textSubmissionLocked} hitSlop={8}>
                 <Text variant="label" color={colors.outline}>CHANGE</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={removeMedia} hitSlop={8}>
+            <Pressable onPress={removeMedia} disabled={textSubmissionLocked} hitSlop={8}>
               <Text variant="label" color={colors.error}>REMOVE</Text>
             </Pressable>
           </View>
@@ -406,7 +499,8 @@ export default function Composer() {
       >
         <TextInput
           value={text}
-          onChangeText={setText}
+          onChangeText={(value) => textSubmissionLockRef.current.runIntent(() => setText(value))}
+          editable={!textSubmissionLocked}
           placeholder={media ? "add a caption…" : "leave a little note…"}
           placeholderTextColor={colors.outline}
           multiline
@@ -476,8 +570,10 @@ export default function Composer() {
               return (
                 <Pressable
                   key={sw}
-                  onPress={() => setColor(sw)}
+                  onPress={() => textSubmissionLockRef.current.runIntent(() => setColor(sw))}
+                  disabled={textSubmissionLocked}
                   accessibilityRole="button"
+                  accessibilityState={{ disabled: textSubmissionLocked }}
                   accessibilityLabel={`Card color${on ? ", selected" : ""}`}
                   style={{
                     width: 40,
@@ -501,14 +597,14 @@ export default function Composer() {
           <Choice
             active={!anonymous}
             disabled={busy}
-            onPress={() => setAnonymous(false)}
+            onPress={() => textSubmissionLockRef.current.runIntent(() => setAnonymous(false))}
             title="Post as me"
             subtitle={`@${profile?.handle ?? "you"}`}
           />
           <Choice
             active={anonymous}
             disabled={busy || !allowAnonymous}
-            onPress={() => setAnonymous(true)}
+            onPress={() => textSubmissionLockRef.current.runIntent(() => setAnonymous(true))}
             title="Anonymous"
             subtitle={allowAnonymous ? "Name hidden" : "Not allowed here"}
           />
@@ -518,7 +614,7 @@ export default function Composer() {
       {/* Secret — a privacy mode; may coexist with Anonymous. Text-only for now. */}
       <View style={{ marginTop: 16 }}>
         <Pressable
-          onPress={() => setSecret((s) => !s)}
+          onPress={() => textSubmissionLockRef.current.runIntent(() => setSecret((s) => !s))}
           disabled={!canToggleSecret}
           accessibilityRole="switch"
           accessibilityState={{ checked: secret, disabled: !canToggleSecret }}
