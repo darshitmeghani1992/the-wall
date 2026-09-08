@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
@@ -72,23 +72,30 @@ export default function ProfileScreen() {
           </Text>
         ) : null}
 
-        <View
-          accessibilityLabel={`${followers} followers, ${following} following`}
-          style={{ flexDirection: "row", alignItems: "center", gap: 26, marginTop: 4 }}
-        >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 26, marginTop: 4 }}>
           {countsLoading ? (
             <ActivityIndicator color={markColors.brandYellow} />
           ) : (
             <>
-              <View style={{ alignItems: "center" }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${followers} followers. Open followers list.`}
+                onPress={() => router.push("/social/followers")}
+                style={{ alignItems: "center", minWidth: 76, minHeight: 44, justifyContent: "center" }}
+              >
                 <Text variant="headline">{followers}</Text>
                 <Text variant="label" color={colors.outline}>FOLLOWERS</Text>
-              </View>
+              </Pressable>
               <View style={{ width: 1, height: 30, backgroundColor: colors.outline, opacity: 0.35 }} />
-              <View style={{ alignItems: "center" }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${following} following. Open following list.`}
+                onPress={() => router.push("/social/following")}
+                style={{ alignItems: "center", minWidth: 76, minHeight: 44, justifyContent: "center" }}
+              >
                 <Text variant="headline">{following}</Text>
                 <Text variant="label" color={colors.outline}>FOLLOWING</Text>
-              </View>
+              </Pressable>
             </>
           )}
         </View>
