@@ -13,18 +13,20 @@
 
 BEGIN;
 
--- A posts an anonymous mark, explicitly sending its own id as author_id.
+-- A posts an Anonymous Mark through the actor-bound writer contract.
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc06',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','anonymous secret', true);
+do $$ declare result jsonb; begin
+ result := create_mark('30000000-0000-4000-8000-000000000001',
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','anonymous secret',null,true,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception 'AC-S6 FAIL: canonical creation returned %',result; end if;
+ perform set_config('test.mark30_anon',result->>'mark_id',true);
+end $$;
 
 -- Base row: author_id nulled at the write boundary.
 do $$
 begin
-  if (select author_id from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc06') is not null then
+  if (select author_id from marks where id = current_setting('test.mark30_anon')::uuid) is not null then
     raise exception 'AC-S6 FAIL: base row author_id was not nulled';
   end if;
 end $$;
@@ -35,7 +37,7 @@ do $$
 declare payload record;
 begin
   select id, wall_id, author_id, anonymous
-    into payload from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc06';
+    into payload from marks where id = current_setting('test.mark30_anon')::uuid;
   if payload.author_id is not null then
     raise exception 'AC-S6 FAIL: realtime INSERT payload would leak author_id';
   end if;
@@ -48,7 +50,7 @@ set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (ordinary user)
 do $$
 begin
-  if (select author_id from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc06') is not null then
+  if (select author_id from marks where id = current_setting('test.mark30_anon')::uuid) is not null then
     raise exception 'AC-S6 FAIL: ordinary reader obtained author_id via marks';
   end if;
 end $$;
@@ -56,7 +58,7 @@ do $$
 declare denied boolean := false;
 begin
   begin
-    perform 1 from anonymous_mark_authors where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc06';
+    perform 1 from anonymous_mark_authors where mark_id = current_setting('test.mark30_anon')::uuid;
   exception when others then denied := true;  -- revoked from authenticated → permission denied
   end;
   if not denied then raise exception 'AC-S6 FAIL: ordinary user read the moderator-only side table'; end if;
@@ -70,7 +72,7 @@ set local "test.uid" = '';
 do $$
 begin
   if (select author_id from anonymous_mark_authors
-        where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc06')
+        where mark_id = current_setting('test.mark30_anon')::uuid)
      is distinct from '11111111-1111-1111-1111-111111111111'::uuid then
     raise exception 'AC-S6 FAIL: moderation path could not read the true author';
   end if;

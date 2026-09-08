@@ -3,7 +3,7 @@
 **Role:** Backend
 **Date:** 2026-09-08
 **Architecture contract:** ADR-012 and FP-MEDIA-001 C4 writer amendment
-**State:** Local implementation awaiting exact-snapshot Reviewer approval; not committed, deployed, or PostgreSQL-executed
+**State:** Integrated locally with activation foundation; fixture correction awaiting exact-snapshot Reviewer approval; not deployed or PostgreSQL-executed
 
 ## Built
 
@@ -38,7 +38,19 @@
     that every media-kind control is disabled.
   - Final-cutover shell test proving incomplete reconciliation aborts before applying `0024`, followed by
     direct-write denial and canonical Text/Photo/Voice/Video RPC success.
-  - `run_tests.sh` loads `0023`, runs the writer suites, and applies/tests `0024` last.
+  - The integrated runner preserves strict production order `0022` → `0023` → `0024` → `0025` before seed
+    data or behavioral assertions. Its disposable database records an empty, complete legacy reconciliation before
+    guarded `0024`; the dedicated cutover runner still independently proves incomplete reconciliation aborts.
+- Post-cutover fixture migration
+  - Every positive authenticated Text-Mark creation in the SQL suite now uses actor-bound `create_mark` with a
+    stable idempotency key. Random server-generated Mark IDs are carried to subsequent assertions through
+    transaction-local test settings.
+  - Authenticated direct INSERT remains only where the test explicitly proves final-cutover denial. Trusted
+    postgres INSERT remains only for seed/history, protected lifecycle states, controlled timestamps, deep
+    constraints, or manual private-media relation fixtures that cannot represent app permission.
+  - Authorization-negative scenarios (blocked contributor, revoked approved writer, and Personal-Wall owner)
+    exercise `create_mark` and assert the non-enumerating `unavailable` result rather than passing accidentally at
+    the global direct-write boundary.
 
 ## Tested
 

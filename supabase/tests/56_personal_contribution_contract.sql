@@ -1,13 +1,18 @@
 -- 56 · Personal-Wall contribution + immutable identity + capabilities
 \set ON_ERROR_STOP on
 
--- Owner self-posting is denied by helper and direct RLS insert.
+-- Owner self-posting is denied by the actor-bound writer and direct RLS insert.
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';
-do $$ declare wid uuid; rejected boolean:=false; begin
+do $$ declare wid uuid; rejected boolean:=false; result jsonb; begin
  select id into wid from walls where owner_id=auth.uid() and type='personal';
  if current_user_can_contribute(wid) then raise exception '56 FAIL: owner contribution helper true'; end if;
+ result:=create_mark('56000000-0000-4000-8000-000000000001',wid,'text','self',null,false,false,0,'{}'::uuid[]);
+ if result->>'status'<>'unavailable' then
+   raise exception '56 FAIL: canonical owner self-post returned %',result;
+ end if;
+ -- Retain direct denial as the independent post-cutover boundary assertion.
  begin insert into marks(wall_id,author_id,type,text) values(wid,auth.uid(),'text','self');
  exception when others then rejected:=true; end;
  if not rejected then raise exception '56 FAIL: owner self-posted ordinary Personal Mark'; end if;
