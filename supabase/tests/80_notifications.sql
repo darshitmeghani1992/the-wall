@@ -91,11 +91,6 @@ ROLLBACK;
 
 -- ── anon mark → actor_id NULL (no de-anon via the mark trigger) ──────────────
 BEGIN;
-reset role;
--- The activation default is Anonymous OFF; enable it explicitly for this
--- product-permitted notification fixture.
-update walls set allow_anonymous=true
- where owner_id='11111111-1111-1111-1111-111111111111' and type='personal';
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G posts ANON on A's wall
 do $$ declare wid uuid; result jsonb; begin

@@ -51,6 +51,10 @@
   - Authorization-negative scenarios (blocked contributor, revoked approved writer, and Personal-Wall owner)
     exercise `create_mark` and assert the non-enumerating `unavailable` result rather than passing accidentally at
     the global direct-write boundary.
+  - `01_seed.sql` centrally restores the legacy suite's documented Personal-Wall baseline (public, friends-only
+    contribution, Anonymous enabled) after activation creates the eight fixed seed profiles. The dedicated
+    activation suite creates separate profiles and continues to prove the production defaults are private,
+    friends-only, and Anonymous disabled.
 
 ## Tested
 

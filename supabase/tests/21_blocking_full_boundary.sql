@@ -16,10 +16,6 @@ insert into walls(id,owner_id,type,name,visibility,contribution_policy) values
 insert into wall_members values
  ('21000000-0000-0000-0000-000000000001','88888888-8888-8888-8888-888888888888','member','pending',now()),
  ('21000000-0000-0000-0000-000000000002','88888888-8888-8888-8888-888888888888','member','accepted',now());
--- Activation defaults Personal Walls to Anonymous OFF. Enable it explicitly for
--- the product-permitted Anonymous cleanup fixture in this rolled-back transaction.
-update walls set allow_anonymous=true
- where owner_id='88888888-8888-8888-8888-888888888888' and type='personal';
 
 -- B leaves named + Anonymous Marks on G's friends-only Personal Wall.
 set local role authenticated; set local "test.uid"='22222222-2222-2222-2222-222222222222';

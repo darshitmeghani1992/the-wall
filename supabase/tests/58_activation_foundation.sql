@@ -9,6 +9,11 @@
 \ir ../migrations/0025_activation_foundation.sql
 
 -- ── Established-account backfill and new-account defaults ──────────────────
+begin;
+insert into auth.users(id,email)
+values('58000000-0000-0000-0000-000000000001','activation-new@test');
+insert into public.profiles(id,handle,display_name)
+values('58000000-0000-0000-0000-000000000001','activation_new','Activation New');
 do $$
 declare
   v_existing_wall public.walls%rowtype;
@@ -33,7 +38,7 @@ begin
 
   if not exists (
     select 1 from public.profiles
-     where id = '11111111-1111-1111-1111-111111111111'
+     where id = '58000000-0000-0000-0000-000000000001'
        and onboarding_completed = false
        and walkthrough_completed_at is null
   ) then
@@ -41,7 +46,7 @@ begin
   end if;
 
   select * into strict v_new_wall from public.walls
-   where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal';
+   where owner_id = '58000000-0000-0000-0000-000000000001' and type = 'personal';
   if v_new_wall.visibility <> 'private'
      or v_new_wall.contribution_policy <> 'friends'
      or v_new_wall.allow_anonymous then
@@ -54,6 +59,7 @@ begin
     raise exception '58 FAIL: onboarding default is not false';
   end if;
 end $$;
+rollback;
 \echo '58 (activation defaults)            : PASS  (established backfill; safe new defaults)'
 
 -- ── Bootstrap signature, ACL, fixed outcomes, and identity binding ──────────
@@ -452,6 +458,7 @@ begin;
 do $$ declare v_wall uuid; begin
   select id into strict v_wall from public.walls
    where owner_id='11111111-1111-1111-1111-111111111111' and type='personal';
+  update public.walls set visibility='private' where id=v_wall;
   insert into public.wall_statuses(wall_id,body) values(v_wall,'Private context');
 end $$;
 set local role authenticated;

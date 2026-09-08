@@ -17,7 +17,7 @@
 -- ── Owner approves a writer → that writer can contribute (public wall) ────────
 BEGIN;
 reset role;
-update walls set contribution_policy = 'selected', visibility = 'public'
+update walls set contribution_policy = 'selected'
   where owner_id = '44444444-4444-4444-4444-444444444444' and type = 'personal';   -- O personal, public
 
 -- O adds G as an approved writer.
@@ -50,7 +50,7 @@ ROLLBACK;
 -- ── Owner-only management; no add across a block; approval revocable ─────────
 BEGIN;
 reset role;
-update walls set contribution_policy = 'selected', visibility = 'public'
+update walls set contribution_policy = 'selected'
   where owner_id = '44444444-4444-4444-4444-444444444444' and type = 'personal';
 
 -- A non-owner (B) cannot add an approved writer to O's wall.
