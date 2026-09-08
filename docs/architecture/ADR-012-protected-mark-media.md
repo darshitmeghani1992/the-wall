@@ -1,6 +1,6 @@
 # ADR-012: Private, staged, server-validated Mark media
 
-**Status:** Accepted — worker-credential amendment independently Two-Key approved 2026-09-03
+**Status:** Accepted — worker-credential and reader/operations amendments independently Two-Key approved
 **Date:** 2026-08-27
 **Fast Lane:** High-Risk / Architectural
 **Supersedes:** ADR-006 and D-6 **for Mark media only**. The public `attachments` bucket remains authoritative for public avatars.
@@ -112,6 +112,38 @@ remain in private browser cache for no more than another 60 seconds.
 See [createSignedUrls](https://supabase.com/docs/reference/javascript/file-buckets-createsignedurls)
 and [Smart CDN](https://supabase.com/docs/guides/storage/cdn/smart-cdn).
 
+The app-facing reader contract is exact. `POST /functions/v1/mark-media/read` accepts a JSON object containing
+only `mark_id` and `request_id`, both canonical lowercase UUID strings. Once the JWT gateway has
+accepted the caller, every malformed, missing, deleted, blocked, inaccessible, unresolved, or
+signing-failed request returns the same fixed 404 response; no post-gateway status, body, header,
+path count, or error detail may become an existence or authorization oracle. A successful response
+contains only `status`, `expires_at`, and ordered `items`; each item contains only `position`,
+`media_type`, `url`, `preview_url`, `mime_type`, `width`, `height`, and `duration_ms`. It exposes no
+Storage path, hash, byte count, user/Wall/Mark identity, or internal workflow state.
+
+Immediately before the first signer request, Edge captures trusted time `t_first_sign_request` and
+sets `contract_expiry = t_first_sign_request + 60 seconds`. The manifest expiry is the minimum of
+that contract expiry and every authoritative per-item expiry Storage actually returns. If Storage
+returns no authoritative per-item expiry, the manifest uses `contract_expiry`; per-item expiry is
+not required. After final validation, Edge returns the manifest only when at least 15 seconds remain;
+otherwise it discards the whole result and fails through the fixed 404 boundary. A response is
+always all-or-nothing.
+
+The client cache identity is exactly authenticated subject + local session generation + Mark ID.
+The signed URLs are volatile values only, never part of a persistent cache key or persisted state.
+Every network request uses a fresh request UUID. A 400, 401, 403, 404, or opaque native media-load
+failure permits exactly one whole-manifest refresh; a second failure becomes unavailable rather
+than a retry loop. Backgrounding, logout/session replacement, or learned access loss immediately
+clears the manifest and unloads active photo/audio/video resources.
+
+Legacy public-URL fallback is default-off and exists only for the migration window. When explicitly
+enabled, it accepts only the configured HTTPS Supabase project origin and the literal path
+`/storage/v1/object/public/attachments/marks/<same-wall-uuid>/<timestamp>.<allowlisted-extension>`.
+The Wall UUID must equal the containing Mark's Wall, and the timestamp and extension must match the
+configured allow-lists. Any non-443 port, userinfo, query, fragment, redirect, alternate host,
+encoded separator, dot segment, decoding ambiguity, wrong bucket/prefix/Wall, or unexpected suffix
+is rejected without fetching. There is no generic external-URL fallback.
+
 The resolver is the authorization linearization point. In one transaction it locks the Mark and
 Wall `FOR SHARE`, takes the existing deterministic pair lock where blocking can change visibility,
 locks relevant membership/relationship rows, then evaluates the canonical Mark-read rule. A
@@ -183,6 +215,24 @@ capabilities dropped, `no-new-privileges`/seccomp, per-job isolation, bounded tm
 PIDs, 1 GiB memory, 2 CPUs, wall clocks of 30/45/120 seconds (Photo/Voice/Video), and output caps of
 10/10/50 MiB plus 2 MiB preview. Decoders are pinned/patched with SBOM and CVE gating.
 
+The future operations control plane is bound to additive migration
+`0022_media_operations.sql` and a separate `mark-media-ops` Edge function. The scheduled route uses
+its dedicated scheduler credential and performs constant-time authentication before reading or
+parsing the request body, constructing privileged clients, or exposing route-specific behavior.
+It dispatches the already-bound compact JWS as the raw body of an HTTPS POST to the exact configured
+OCI worker endpoint `/v1/media-jobs` with `Content-Type: application/jose`; the only delivery
+acknowledgement is `202 Accepted` with an empty body. Redirects are forbidden. After an ambiguous
+network outcome, the dispatcher does not redirect or retry before the current database lease
+expires; recovery begins through the next lease/attempt rather than guessing whether the worker
+redeemed the credential.
+
+Cleanup claims only exact durable outbox records. Initial claim and expired-lease reclaim each
+create a fresh attempt identity and a live lease; deletion evidence and completion are accepted
+only for that current attempt while its lease is live. Retries preserve exact paths and durable
+history. A cleanup item becomes terminal only after at least six failed attempts or at least 24
+hours of age; this is an inclusive OR boundary. A callback from a stale attempt, an expired lease,
+or a superseded claim is denied without changing deletion evidence, quota, or current state.
+
 Photo processing must:
 
 - cap source at 6 MB, 8,192 pixels per edge, and 25 megapixels before full decode allocation;
@@ -207,7 +257,7 @@ duration is a contract change.
 
 ### 5. One atomic Mark creation contract
 
-`create_mark(...)` is the sole canonical creation path after migration `0022`. It derives the actor
+`create_mark(...)` is the sole canonical creation path after migration `0023`. It derives the actor
 from `auth.uid()`, rechecks account and current contribution authorization, validates the complete
 request, locks every referenced upload row, and commits the following in one PostgreSQL transaction:
 
@@ -266,15 +316,17 @@ deprecated `owner`, and service-key-created objects have no owner. See
 [Storage ownership](https://supabase.com/docs/guides/storage/security/ownership).
 
 Migration `0021_media_worker_credentials.sql` additively corrects the worker-credential protocol
-using the approved contract in FP-MEDIA-001; it does not perform the Mark-creation cutover. Only
+using the approved contract in FP-MEDIA-001; it does not perform the Mark-creation cutover.
+Migration `0022_media_operations.sql` then adds the independently bound dispatcher, scheduler, and
+exact-object cleanup control plane without enabling media kinds or performing the cutover. Only
 after hosted staging, a reconciled `media_legacy_reconciliation` singleton, processor verification,
 client minimum-version enforcement, and adversarial tests pass does
-`0022_mark_creation_cutover.sql`; the migration aborts if that gate is incomplete. A legacy worker
+`0023_mark_creation_cutover.sql`; the migration aborts if that gate is incomplete. A legacy worker
 may process inventory while user reservation/upload/create switches remain off. Public media
 creation cannot be enabled before reconciliation. Reconciliation requires a fresh unauthenticated
 denial proof for **every** inventoried legacy URL, including quarantined or missing-source entries;
-any reachable quarantine blocks creation, `0022`, and the privacy claim unless the Founder
-separately accepts a documented residual privacy exception. `0022` then:
+any reachable quarantine blocks creation, `0023`, and the privacy claim unless the Founder
+separately accepts a documented residual privacy exception. `0023` then:
 
 - revoke direct authenticated `INSERT` on `marks`;
 - revoke all app writes on `mark_media`, job/ledger tables, and legacy Mark Storage paths;
@@ -337,7 +389,7 @@ and streaming complexity. The approved MVP accepts the documented short signed-U
 
 ## Reversibility
 
-The schema and client cutover are two-way doors until `0022`. After public originals are deleted,
+The schema and client cutover are two-way doors until `0023`. After public originals are deleted,
 the privacy direction is intentionally one-way: rollback may disable the feature, but may not
 republish content. The OCI processor hosting provider remains replaceable.
 

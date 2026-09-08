@@ -18,8 +18,10 @@ short-lived signed URLs after current Mark access is rechecked.
 
 Migration `0020` adds the foundation without removing the safe text compatibility writer.
 `0021_media_worker_credentials.sql` additively binds the approved worker protocol v2. Migration
-`0022_mark_creation_cutover.sql` is the final cutover after the client, processor, hosted Storage,
-legacy migration, and tests pass. Rollback disables media; it never republishes private objects.
+`0022_media_operations.sql` adds the bound scheduled dispatcher and exact-object cleanup control
+plane. Migration `0023_mark_creation_cutover.sql` is the final cutover after the client, processor,
+hosted Storage, legacy migration, and tests pass. Rollback disables media; it never republishes
+private objects.
 
 ## Complexity estimate
 
@@ -29,7 +31,7 @@ legacy migration, and tests pass. Rollback disables media; it never republishes 
 | Complexity | Complex: database + RLS + Storage + client + external decoder + migration |
 | Rough effort | 8–12 focused AI implementation/review sessions plus device/hosted verification |
 | Files affected | Approximately 25–40 across migrations, functions, worker, client, tests, CI, docs |
-| Database impact | Additive `0020` + worker correction `0021`, later contract-cutover `0022`; no destructive table drop |
+| Database impact | Additive `0020` + worker correction `0021` + operations `0022`, later contract-cutover `0023`; no destructive table drop |
 | Dependency risk | Medium/High: TUS client, pinned image/AV toolchain, one OCI runtime |
 | Operational risk | High: user private media, service credentials, cleanup, legacy public data |
 | Regulated-domain flag | Personal/private user media and potentially identifying metadata |
@@ -197,7 +199,7 @@ revocation primitive.
 
 ### Service-only read resolver and bounded revocation
 
-Edge `POST /mark-media/read` deploys with `verify_jwt=true`, verifies the user token following
+Edge `POST /functions/v1/mark-media/read` deploys with `verify_jwt=true`, verifies the user token following
 Supabase's current authenticated-function pattern, and derives actor ID only from that verified
 subject. It then calls `resolve_mark_media_for_signing(p_actor_id,p_mark_id,p_request_id)` through a
 service-role client. `PUBLIC`, `anon`, and `authenticated` have execute revoked; direct Data API
@@ -436,10 +438,10 @@ quarantined count, missing count, remaining non-null legacy URL count, exact pub
 fresh-denial proofs, and completed timestamp/actor. Completion requires counts to reconcile, zero
 unquarantined `media_url`, and fresh uncached unauthenticated denial evidence for **every inventoried
 legacy URL**, including each migrated, missing, or quarantined entry. A quarantined URL that remains
-reachable blocks completion, media creation, `0022`, and the privacy claim. The only exception is a
+reachable blocks completion, media creation, `0023`, and the privacy claim. The only exception is a
 separate Founder acceptance of a specifically documented residual privacy exception; it is not an
 automatic quarantine waiver. The kind-control setter refuses user `creation_enabled=true` until complete;
-`0022` asserts the same and aborts if false. Legacy processing alone may be enabled while user
+`0023` asserts the same and aborts if false. Legacy processing alone may be enabled while user
 reservation, upload transition, and creation stay disabled.
 
 ### Current Supabase claims used by this design
@@ -707,17 +709,73 @@ Rules:
 - existing triggers remain responsible for Anonymous provenance, status, Secret text, and Alert;
 - every side effect is one DB transaction; one failure means zero visible partial state.
 
-### Service-only `resolve_mark_media_for_signing(...)` + Edge `POST /mark-media/read`
+### Service-only `resolve_mark_media_for_signing(...)` + Edge `POST /functions/v1/mark-media/read`
 
 The resolver returns ordered trusted metadata/private paths only to service role after Edge passes
 the verified actor and the binding linearization protocol succeeds. Secret Marks return no media.
 `PUBLIC`, `anon`, and `authenticated` cannot execute it; app roles cannot resolve or read paths
 through the Data API.
 
-The JWT-verifying Edge route signs the service-only result for 60 seconds and returns metadata plus
-signed URLs while suppressing raw paths and setting the binding no-store/no-referrer headers. A
-failure to resolve or sign any path returns the same generic unavailable response and never a
-partial carousel. The signer is actor-rate-limited and logs neither paths nor URLs.
+The public request body is exactly:
+
+```json
+{"mark_id":"00000000-0000-4000-8000-000000000001","request_id":"00000000-0000-4000-8000-000000000002"}
+```
+
+Both values are required canonical lowercase UUID strings; unknown keys, alternate casing/forms,
+arrays, coercions, and non-JSON bodies fail closed. Once the JWT gateway has accepted the caller,
+every malformed, missing, deleted, blocked, inaccessible, unresolved, or signing-failed request
+returns the same fixed 404 response. Post-gateway response status, body, headers, path count, and
+diagnostics never distinguish existence from authorization or signing failure.
+
+The successful response body is exactly the following shape, with no additional fields:
+
+```text
+{
+  status: "ready",
+  expires_at: RFC3339 timestamp,
+  items: [{
+    position: integer,
+    media_type: "photo" | "voice" | "video",
+    url: HTTPS signed URL,
+    preview_url: HTTPS signed URL | null,
+    mime_type: string,
+    width: integer | null,
+    height: integer | null,
+    duration_ms: integer | null
+  }]
+}
+```
+
+Items are ordered by `position`; the route returns one through five Photo items or exactly one
+Voice/Video item. It never returns a Storage path, checksum, byte count, upload/attempt identifier,
+user identity, Wall identity, Mark identity, author identity, or workflow state. The JWT-verifying
+route sets the binding no-store/no-referrer headers and logs neither paths nor URLs.
+
+Immediately before its first Storage signer request, Edge captures trusted time
+`t_first_sign_request` and sets `contract_expiry = t_first_sign_request + 60 seconds`. It requests
+the binding 60-second lifetime for every full and preview object. Response `expires_at` is the
+minimum of `contract_expiry` and every authoritative per-item expiry Storage actually returns. If
+Storage returns no authoritative per-item expiry, `expires_at` is `contract_expiry`; per-item expiry
+is not required. It does not calculate a later deadline from response-completion time. If any URL
+is absent or less than 15 seconds of usable life remains after final validation, the entire request
+fails through the fixed 404 boundary; partial carousels are forbidden.
+
+Client memory caching uses exactly `(verified subject, local session generation, mark_id)` as its
+identity. URLs and `expires_at` are volatile values, never cache-key material and never persisted.
+Every read call sends a fresh `request_id`. On HTTP 400, 401, 403, or 404, or an opaque native
+photo/audio/video load failure, the client may clear the manifest and perform exactly one fresh
+whole-manifest read; a second failure becomes unavailable with no loop. App backgrounding, logout,
+session replacement, or learned access loss clears the manifest and unloads every active media
+resource.
+
+Legacy fallback is default-off. During the explicitly enabled migration window it may accept only
+the configured HTTPS Supabase project origin and exactly
+`/storage/v1/object/public/attachments/marks/<same-wall-uuid>/<timestamp>.<allowlisted-extension>`.
+The embedded Wall UUID must equal the containing Mark's Wall. Ports other than 443, userinfo,
+queries, fragments, redirects, alternate hosts, IP literals, encoded separators, dot segments,
+decode ambiguity, wrong bucket/prefix/Wall, invalid timestamp, and non-allowlisted extensions are
+rejected before fetch. No arbitrary or external URL fallback exists.
 
 ### `current_user_can_upload_mark_media_path(p_path text)`
 
@@ -826,14 +884,33 @@ Cleanup lifecycle:
 - cleanup is idempotent and records object-delete result; a DB row is not erased before deletion
   evidence exists.
 
-A scheduled dispatcher/cleanup job may use Supabase Cron/`pg_cron` and `pg_net`; Supabase documents
-that Cron run history is observable and recommends jobs run no longer than ten minutes. See
-[Supabase Cron](https://supabase.com/docs/guides/cron). CPU-heavy work stays in the OCI processor.
+Future migration `0022_media_operations.sql` adds the scheduler/dispatcher and exact-object cleanup
+state required here; it does not enable media kinds or perform final creation cutover. A separate
+`mark-media-ops` Edge function is the only scheduled HTTP control plane. Its dedicated scheduler
+credential is checked by constant-time comparison before the function reads/parses the body,
+constructs a privileged client, or selects route-specific behavior. Missing or invalid scheduler
+authentication therefore reaches no privileged or parser code and returns one fixed response.
+
+The dispatcher sends the already-bound compact JWS as the raw body of `POST /v1/media-jobs` at the
+exact configured HTTPS OCI origin with `Content-Type: application/jose`. The only successful
+delivery acknowledgement is HTTP `202 Accepted` with an empty body. It follows no redirect. If the
+request has an ambiguous network outcome, it performs no redirect or retry before the current
+database lease expires; a later claim creates the next attempt rather than risking two workers for
+one live lease.
+
+Cleanup claims a pending record or reclaims only a processing record whose lease has expired. Each
+claim/reclaim creates a fresh attempt ID and live lease. Evidence/finalization must match that exact
+current attempt and arrive while its lease is live; stale-attempt, expired-lease, and superseded
+callbacks are denied without mutating evidence, quota, or current state. Retries retain exact paths
+and append durable attempt history. An item becomes terminal when either `attempt_count >= 6` **or**
+age is `>=24 hours`; neither boundary is strict-greater and the conditions are not ANDed. CPU-heavy
+work stays in the OCI processor. Supabase Cron run history remains operational evidence; see
+[Supabase Cron](https://supabase.com/docs/guides/cron).
 
 ## Legacy public-media migration and proof
 
 No hosted count is assumed. Run the following on a frozen media-write boundary (already achieved by
-`0018`) before `0022`:
+`0018`) before `0023`:
 
 1. **Inventory:** export every canonical Photo/Voice/Video Mark with non-null `media_url`, parse only
    the exact expected `attachments/marks/*` URL shape, and inventory the corresponding Storage
@@ -859,7 +936,7 @@ No hosted count is assumed. Run the following on a frozen media-write boundary (
 10. **Completion gate:** counts must reconcile: inventory = migrated + explicitly quarantined;
     zero non-quarantined canonical media Mark has `media_url`; **every inventoried legacy URL,
     including quarantined and missing entries**, has fresh unauthenticated denial evidence. Any
-    reachable quarantine blocks media creation, `0022`, and the privacy claim unless the Founder
+    reachable quarantine blocks media creation, `0023`, and the privacy claim unless the Founder
     separately accepts a documented residual privacy exception for that exact URL/risk.
 
 Rollback before public deletion simply uses dual-read legacy URLs. Rollback after public deletion
@@ -889,6 +966,14 @@ uses the private canonical object; it never recreates a public original.
   from being an Edge-callable workflow.
 - Preserve default-off media controls and the safe text compatibility writer.
 
+### Phase 1.2 — `0022_media_operations.sql`
+
+- Add the bound `mark-media-ops` scheduled route, lease-aware dispatch, and exact-object cleanup
+  claim/reclaim/finalization state described above.
+- Require auth-before-parse, raw `application/jose` OCI dispatch, exact empty `202` acknowledgement,
+  no redirects, and no pre-lease-expiry retry after ambiguous delivery.
+- Keep every media-kind switch off and preserve the safe text compatibility writer.
+
 ### Phase 2 — processor and hosted staging
 
 - Build the OCI processor and Supabase orchestration Edge Function.
@@ -910,7 +995,7 @@ uses the private canonical object; it never recreates a public original.
 - Run the ledgered inventory/copy/process/link/delete/purge/proof sequence above.
 - Resolve/quarantine every exception; do not silently hide content.
 
-### Phase 5 — `0022_mark_creation_cutover.sql`
+### Phase 5 — `0023_mark_creation_cutover.sql`
 
 - Assert the legacy reconciliation singleton is complete and abort otherwise.
 - Revoke direct app `marks` insert and all app media/job writes.
@@ -932,7 +1017,8 @@ Names are binding unless an independent review finds a repository collision.
 | C4 client writer | Frontend | `app/create.tsx`, `src/lib/upload.ts`, `src/lib/marks.ts`, new `src/lib/mark-media.ts`, `src/lib/types.ts`, `package.json`, `package-lock.json` | C1/C2 | 5-photo order/retry, AV progress, draft preservation |
 | C5 client reader | Frontend | `src/components/marks/MarkView.tsx`, `src/components/marks/MarkDetailModal.tsx`, new `src/hooks/use-mark-media.ts` | C1/C2 | full-frame photo, URL refresh, AV playback, access error |
 | C6 legacy tooling | Backend/DevOps | `scripts/media/{inventory,migrate,reconcile,verify-public-denial}.ts`, `docs/runbooks/MARK_MEDIA.md` | C1/C3 | singleton complete, reconciled counts, no unproved deletion |
-| C7 final cutover | Backend | `supabase/migrations/0022_mark_creation_cutover.sql`, expand 51/52, update old-client tests | C4/C6 | old/direct paths fail; RPC all types green |
+| C3.1 operations control plane | Backend/DevOps | `supabase/migrations/0022_media_operations.sql`, `supabase/functions/mark-media-ops/index.ts`, operations tests and runbook | C1.1/C2/C3 | auth-before-parse; exact OCI dispatch/ack; lease-safe ambiguity; exact cleanup retries/stale denial |
+| C7 final cutover | Backend | `supabase/migrations/0023_mark_creation_cutover.sql`, expand 51/52, update old-client tests | C4/C6/C3.1 | old/direct paths fail; RPC all types green |
 | C8 independent verification | Reviewer + QA + Security | exact commit, CI, hosted staging, iOS/Android evidence | C1–C7 | Two-Key, full suite, device + hosted Pass |
 | C9 operational docs | Documentation/DevOps | `docs/BUILD_STATUS.md`, `docs/handoffs/CURRENT.md`, `docs/runbooks/MARK_MEDIA.md`, `docs/DECISIONS.md` | C8 | zero stale public-media claims |
 
@@ -949,8 +1035,8 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - inactive/suspended/unrelated/blocked/owner-self Personal actor cannot reserve or create;
 - accepted Shared owner/member works; pending/removed/public non-member fails;
 - arbitrary path, other upload ID, other Wall, expired row, wrong kind, reused upload fail;
-- direct app DML to `mark_media`, workflow/ledger tables, and new `marks` after `0022` fails;
-- text/media legacy fields and payload injection fail at `0018`, `0020`, and `0022`;
+- direct app DML to `mark_media`, workflow/ledger tables, and new `marks` after `0023` fails;
+- text/media legacy fields and payload injection fail at `0018`, `0020`, and `0023`;
 - exact 0/1/5/6 photo and 0/1/2 AV cardinalities;
 - Secret text succeeds; Secret media fails with no object relation or Alert;
 - idempotent same retry returns one Mark/Alert; version/hash mismatch fails;
@@ -1026,7 +1112,7 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - cleanup idempotency, dead-letter visibility, metrics/alert thresholds, recovery runbook.
 - legacy singleton cannot complete on count mismatch, unquarantined URL, missing deletion evidence,
   or missing fresh denial proof for any inventoried URL including quarantine; any reachable
-  quarantine blocks kind creation, `0022`, and privacy claim absent a separate documented Founder
+  quarantine blocks kind creation, `0023`, and privacy claim absent a separate documented Founder
   residual-risk exception.
 
 ## Observability and alerting
@@ -1056,8 +1142,8 @@ true Anonymous authors, block state, or private Wall names.
 
 ## Rollback and incident response
 
-- **Before `0022`:** disable media flags; text compatibility remains. Keep private objects/private.
-- **After `0022`:** disable media flags and keep RPC text creation. Do not restore direct inserts;
+- **Before `0023`:** disable media flags; text compatibility remains. Keep private objects/private.
+- **After `0023`:** disable media flags and keep RPC text creation. Do not restore direct inserts;
   forward-fix the RPC or deploy a narrowly reviewed text-only RPC compatibility migration.
 - **Processor incident:** stop dispatch, let leases expire, preserve sources, rotate worker callback
   secret, delete attempt outputs only from ledger/state evidence.
