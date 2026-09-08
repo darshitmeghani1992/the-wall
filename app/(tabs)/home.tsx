@@ -9,6 +9,7 @@ import { Masonry } from "@/components/Masonry";
 import { InviteCrew } from "@/components/InviteCrew";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
+import { WallStatus } from "@/components/WallStatus";
 import { shareMyWall, inviteFriends } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
@@ -185,6 +186,8 @@ export default function MyWall() {
           </View>
         </View>
 
+        <WallStatus wallId={wall?.id} viewerId={userId} isOwner />
+
         <View style={{ marginHorizontal: -20, marginTop: 16 }}>
           <ScrollView
             horizontal
@@ -272,7 +275,7 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, marks.length, profile, router, sharedWalls, sharedWallsError, wall],
+    [filter, friendCount, initial, marks.length, profile, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   return (

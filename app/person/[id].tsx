@@ -8,6 +8,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
+import { WallStatus } from "@/components/WallStatus";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
@@ -144,6 +145,7 @@ export default function PersonWall() {
               {profile.bio}
             </Text>
           ) : null}
+          <WallStatus wallId={wall.id} viewerId={session?.user.id} />
           {focusedMarkUnavailable ? (
             <Text accessibilityRole="alert" variant="body" color={colors.outline} style={{ marginBottom: 18 }}>
               This Mark isn&apos;t available anymore.
