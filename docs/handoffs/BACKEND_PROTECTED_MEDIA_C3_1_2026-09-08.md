@@ -14,6 +14,8 @@
     before mutating evidence, quota, history, or current deletion state.
   - Exact C1 `not_before` and path-evidence validation retained behind the new attempt fence.
   - Inclusive terminal boundary: six completed/expired attempts **or** 24 hours of record age.
+  - One private immutable terminal predicate shared by claim/finalization, with a frozen-clock regression
+    for younger-than, exactly-at, and older-than 24 hours plus queue-integration diagnostics.
   - Legacy service-role access to the unfenced deletion-evidence RPC revoked.
   - No media-kind control changed and no scheduler/cutover installed.
 - `supabase/functions/mark-media-ops/index.ts`

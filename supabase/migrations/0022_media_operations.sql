@@ -25,6 +25,18 @@ alter table media_object_deletion_attempts enable row level security;
 revoke all on media_object_deletion_attempts from public,anon,authenticated;
 grant select,insert,update,delete on media_object_deletion_attempts to service_role;
 
+-- Keep the inclusive OR terminal boundary in one deterministic predicate. The
+-- explicit reference time makes exact-boundary behavior directly testable and
+-- prevents claim/finalization drift without exposing a service-callable RPC.
+create or replace function media_object_deletion_is_terminal_at(
+  p_created_at timestamptz,p_attempt_count integer,p_reference_time timestamptz
+) returns boolean language sql immutable strict
+set search_path=pg_catalog,public as $$
+  select p_attempt_count>=6 or p_created_at<=p_reference_time-interval '24 hours'
+$$;
+revoke all on function media_object_deletion_is_terminal_at(timestamptz,integer,timestamptz)
+  from public,anon,authenticated,service_role;
+
 -- Claim only due exact-object records. An expired lease is a failed delivery
 -- attempt; it is durably closed before a fresh attempt identity is installed.
 create or replace function claim_media_object_deletions(
@@ -65,7 +77,7 @@ begin
 
     -- Six completed/expired attempts or 24 hours of age is terminal. A pending
     -- row at attempt_count=5 may still receive its sixth and final attempt.
-    if v_row.created_at<=v_now-interval '24 hours' or v_row.attempt_count>=6 then
+    if media_object_deletion_is_terminal_at(v_row.created_at,v_row.attempt_count,v_now) then
       update media_object_deletions
          set state='failed',attempt_id=null,lease_expires_at=null,updated_at=v_now
        where id=v_row.id;
@@ -145,7 +157,7 @@ begin
      set state='failed',error_code=p_error_code,completed_at=v_now,updated_at=v_now
    where deletion_id=p_deletion_id and attempt_id=p_attempt_id and state='processing';
   update media_object_deletions
-     set state=case when attempt_count>=6 or created_at<=v_now-interval '24 hours'
+     set state=case when media_object_deletion_is_terminal_at(created_at,attempt_count,v_now)
                     then 'failed' else 'pending' end,
          attempt_id=null,lease_expires_at=null,updated_at=v_now
    where id=p_deletion_id;
