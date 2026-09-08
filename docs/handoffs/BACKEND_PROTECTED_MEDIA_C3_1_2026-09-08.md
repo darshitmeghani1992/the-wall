@@ -57,6 +57,8 @@
 - `git diff --check`: passed.
 - Root lint: passed with pre-existing warnings outside C3.1.
 - Reviewer preliminary transport findings have dedicated regression tests.
+- CI run 112 executed migration `0022`, the deterministic age-boundary SQL, and every preceding database
+  suite successfully before identifying an ordering flaw in the physical race fixture.
 
 ### Believed-likely
 
@@ -68,8 +70,10 @@
 
 ### Unverified
 
-- Full PostgreSQL suite and two-session cleanup race: `psql` is not installed and no Docker/Podman runtime
-  is available.
+- The corrected two-session cleanup race is not locally executable because `psql` is not installed and no
+  Docker/Podman runtime is available. It now isolates unrelated due records without deleting their durable
+  history, uses bounded committed `first_ready`/`second_done` latches so session one cannot commit before
+  session two finishes, and binds the final 1:1 history assertion to one fixed target/attempt.
 - Migration rollback: no rollback migration has been authored or executed. If `0022` is ever applied, rollback
   must be a separately reviewed forward migration; source-file reversion is sufficient only while unshipped.
 - Hosted Edge gateway behavior, scheduler/Cron execution, secret rotation, OCI DNS/egress enforcement,
