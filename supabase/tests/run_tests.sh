@@ -121,6 +121,18 @@ echo "── load: 0022_media_operations.sql"
 psql_test -f "$MIG/0022_media_operations.sql" >/dev/null
 echo "── load: 0023_mark_writer_contract.sql"
 psql_test -f "$MIG/0023_mark_writer_contract.sql" >/dev/null
+# The disposable suite has no legacy inventory, so complete the zero-row
+# reconciliation before exercising the guarded final cutover in release order.
+echo "── fixture: complete empty legacy-media reconciliation"
+psql_test -c "update media_legacy_reconciliation set state='complete', completed_at=clock_timestamp() where singleton;" >/dev/null
+echo "── load: 0024_mark_creation_cutover.sql"
+psql_test -f "$MIG/0024_mark_creation_cutover.sql" >/dev/null
+# This fixture exists before 0025 so the suite proves the established-account
+# backfill without changing the shared seed contract.
+echo "── fixture: pre-0025 established account"
+psql_test -c "insert into auth.users (id,email) values ('99999999-9999-9999-9999-999999999999','established@test'); insert into profiles (id,handle,display_name) values ('99999999-9999-9999-9999-999999999999','established','Established');" >/dev/null
+echo "── load: 0025_activation_foundation.sql"
+psql_test -f "$MIG/0025_activation_foundation.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -130,6 +142,7 @@ echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
 for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
+            58_activation_foundation \
             60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 85_moderation 90_profile_links \
             95_account_lifecycle; do
   psql_test -f "$HERE/$area.sql"
