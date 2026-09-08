@@ -821,11 +821,19 @@ on any of these functions. The obsolete standalone `fail_media_validation(uuid,u
 revoked from `service_role`; it is not restored as a second failure path.
 
 `PUBLIC`, `anon`, and `authenticated` are revoked from every service helper/finalizer. The exact
-grant surface is: `authenticated` may execute `begin_media_upload(uuid,mark_type,uuid,text,bigint)`,
-`mark_media_uploaded(uuid)`, `get_media_upload_status(uuid[])`,
-`cancel_media_upload(uuid)`, and
-`create_mark(uuid,uuid,mark_type,text,text,boolean,boolean,real,uuid[])`; `anon`/`PUBLIC` may execute
-none. Cancellation does not grant table or Storage DML.
+authenticated surface has two explicitly distinct classes:
+
+1. Five client-called media writer/workflow RPCs:
+   `begin_media_upload(uuid,mark_type,uuid,text,bigint)`, `mark_media_uploaded(uuid)`,
+   `get_media_upload_status(uuid[])`, `cancel_media_upload(uuid)`, and
+   `create_mark(uuid,uuid,mark_type,text,text,boolean,boolean,real,uuid[])`.
+2. One actor-bound Storage-policy predicate:
+   `current_user_can_upload_mark_media_path(text)`. Its authenticated `EXECUTE` is load-bearing for
+   the private Storage `INSERT` policy and must not be revoked by 0023 grant normalization.
+
+No other protected-media function signature is app-executable. `anon`/`PUBLIC` may execute none of
+the six. The policy predicate grants no table or Storage DML by itself; cancellation likewise adds
+no table or Storage DML.
 
 Backward compatibility is deliberate. `create_mark` keeps its SQL signature, so the default-off C4
 client can adopt captions without a second RPC name. Existing text-only RPC callers retain the same
@@ -920,7 +928,18 @@ rejected. No arbitrary or external URL fallback exists.
 
 Auth-bound boolean used by the Storage `INSERT` policy. It returns true only for the caller's exact,
 unexpired, `initiated` staging row and current contribution. It never accepts an actor parameter,
-returns metadata, or confirms another user's path. `PUBLIC/anon` execution is revoked.
+returns metadata, or confirms another user's path. PostgreSQL evaluates the Storage policy as the
+calling authenticated role, so that role must retain `EXECUTE` on this predicate for an authorized
+Storage insert to work. `authenticated` execution is therefore required; `PUBLIC/anon` execution is
+revoked.
+
+This is a **policy-only predicate**, not a sixth client workflow/writer action. An authenticated
+caller can necessarily invoke it directly because PostgreSQL function privileges do not distinguish
+a policy invocation from a Data API RPC invocation. That direct call is deliberately non-enumerating:
+the caller's own exact currently authorized staging path returns `true`; a foreign, missing,
+expired, wrong-state, malformed, or no-longer-contributable path returns the same `false`, with no
+upload ID, owner, Wall, existence, state, expiry, quota, or other metadata. It derives the actor
+only from `auth.uid()` and never accepts an actor argument.
 
 ### Internal worker contracts
 
@@ -1231,8 +1250,18 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
   reach an app result;
 - `create_mark` response-contract tests prove `rate_limited` is absent while reservation continues
   to return it at its atomic quota boundaries;
-- catalog grant tests prove only the five bound media-writer authenticated RPC signatures are app-executable and
-  cancellation adds no table, Storage, service-helper, or arbitrary-actor privilege;
+- catalog grant tests classify the exact authenticated surface: only the five bound client-called
+  media-writer RPC signatures plus the single policy-only
+  `current_user_can_upload_mark_media_path(text)` predicate are executable; every service helper,
+  finalizer and arbitrary-actor predicate remains revoked;
+- direct-call policy-predicate tests prove the caller's own exact unexpired initiated and currently
+  contributable staging path returns `true`, while foreign and missing paths return the identical
+  boolean `false`; wrong-state/expired/malformed/access-revoked controls also return `false`, and no
+  call returns or exposes metadata;
+- revoking authenticated execution on the policy predicate makes the Storage policy path fail,
+  while restoring only that exact signature restores the already-authorized insert; this proves
+  the grant is policy-load-bearing rather than an accidental public workflow API;
+- cancellation adds no table, Storage, service-helper, or arbitrary-actor privilege;
 - worker old attempt, forged attempt, expired lease, double complete, failure rollback;
 - binding refuses an output fence captured before the final signed-upload API return, a missing
   fence, and any attempt to shrink an existing fence; dispatch before durable binding fails;
