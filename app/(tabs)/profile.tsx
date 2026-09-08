@@ -1,19 +1,38 @@
-import { View } from "react-native";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
+import { getFollowCounts } from "@/lib/follows";
 import { shareMyWall } from "@/lib/share";
 import { colors, markColors } from "@/theme";
 
-/** Profile — real user identity, edit, share-your-Wall, and sign-out. */
+/** Profile — real user identity, social proof, edit, share-your-Wall, and sign-out. */
 export default function ProfileScreen() {
   const router = useRouter();
   const { profile, signOut } = useAuth();
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(0);
+  const [countsLoading, setCountsLoading] = useState(false);
   const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
+
+  const refreshCounts = useCallback(async () => {
+    if (!profile?.id) return;
+    setCountsLoading(true);
+    try {
+      const next = await getFollowCounts(profile.id);
+      setFollowers(next.followers);
+      setFollowing(next.following);
+    } finally {
+      setCountsLoading(false);
+    }
+  }, [profile?.id]);
+
+  useFocusEffect(useCallback(() => { void refreshCounts(); }, [refreshCounts]));
 
   return (
     <Screen>
@@ -52,6 +71,28 @@ export default function ProfileScreen() {
             @{profile.handle}
           </Text>
         ) : null}
+
+        <View
+          accessibilityLabel={`${followers} followers, ${following} following`}
+          style={{ flexDirection: "row", alignItems: "center", gap: 26, marginTop: 4 }}
+        >
+          {countsLoading ? (
+            <ActivityIndicator color={markColors.brandYellow} />
+          ) : (
+            <>
+              <View style={{ alignItems: "center" }}>
+                <Text variant="headline">{followers}</Text>
+                <Text variant="label" color={colors.outline}>FOLLOWERS</Text>
+              </View>
+              <View style={{ width: 1, height: 30, backgroundColor: colors.outline, opacity: 0.35 }} />
+              <View style={{ alignItems: "center" }}>
+                <Text variant="headline">{following}</Text>
+                <Text variant="label" color={colors.outline}>FOLLOWING</Text>
+              </View>
+            </>
+          )}
+        </View>
+
         {profile?.bio ? (
           <Text variant="body" color={colors.onSurfaceVariant} style={{ textAlign: "center" }}>
             {profile.bio}
