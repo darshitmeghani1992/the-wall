@@ -6,19 +6,28 @@ import { Button } from "@/components/Button";
 import { colors, markColors } from "@/theme";
 
 const POINTS = [
-  { k: "A wall, not a feed", d: "Your wall is a living scrapbook — meaningful memories, not a chat that scrolls away." },
-  { k: "Friends leave Marks", d: "Stickies, roasts, secrets, photos, awards, polls — little notes pinned to your wall." },
-  { k: "Worth revisiting", d: "Every Mark is something you'll want to look back on months or years later." },
+  {
+    k: "Your wall is receive-first",
+    d: "The best part of your Wall is what other people leave for you — memories, notes and moments worth keeping.",
+  },
+  {
+    k: "Leave Marks on people you care about",
+    d: "Write a note, share a photo, record a voice message or leave a short video on someone else's Wall.",
+  },
+  {
+    k: "Some moments can be private",
+    d: "Use Anonymous when the Wall allows it, or Secret for a private text Mark meant only for its recipient.",
+  },
 ];
 
-/** Conceptual onboarding: "What is a Wall?" */
+/** Conceptual onboarding: explain the current MVP interaction model honestly. */
 export default function About() {
   const router = useRouter();
   return (
     <Screen dockInset={false}>
       <View style={{ paddingTop: 24, gap: 8 }}>
         <Text variant="label" color={colors.outline}>
-          // WHAT IS A WALL?
+          HOW THE WALL WORKS
         </Text>
         <Text variant="display" style={{ fontSize: 32 }}>
           People help write your story.
@@ -32,7 +41,7 @@ export default function About() {
               style={{
                 width: 34,
                 height: 34,
-                borderRadius: 6,
+                borderRadius: 17,
                 backgroundColor: markColors.brandYellow,
                 borderWidth: 2,
                 borderColor: colors.ink,
@@ -52,7 +61,7 @@ export default function About() {
         ))}
       </View>
 
-      <Button label="Next" variant="primary" onPress={() => router.push("/interests")} />
+      <Button label="Set up my Wall" variant="primary" onPress={() => router.push("/profile-setup")} />
     </Screen>
   );
 }
