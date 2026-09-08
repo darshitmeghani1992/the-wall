@@ -70,6 +70,9 @@ if [ "$GUARD_HIT" -ne 0 ]; then
 fi
 echo "   PASS (no migration toggles RLS / ALTERs storage.objects)"
 
+echo "── contract: 59_media_writer_contract (Node static invariants)"
+node --test "$HERE/59_media_writer_contract.test.mjs"
+
 echo "── load: 00_bootstrap (Supabase-compat shim)"
 psql_test -f "$HERE/00_bootstrap.sql" >/dev/null
 echo "── load: 0001_init.sql"
@@ -116,6 +119,8 @@ echo "── load: 0021_media_worker_credentials.sql"
 psql_test -f "$MIG/0021_media_worker_credentials.sql" >/dev/null
 echo "── load: 0022_media_operations.sql"
 psql_test -f "$MIG/0022_media_operations.sql" >/dev/null
+echo "── load: 0023_mark_writer_contract.sql"
+psql_test -f "$MIG/0023_mark_writer_contract.sql" >/dev/null
 echo "── load: 01_seed.sql"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
 
@@ -124,7 +129,7 @@ echo "════════════════════════�
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
 for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 55_approved_writers 56_personal_contribution_contract 50_storage \
-            51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations \
+            51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 85_moderation 90_profile_links \
             95_account_lifecycle; do
   psql_test -f "$HERE/$area.sql"
@@ -147,10 +152,19 @@ echo ""
 echo "── assertion: 58_media_operations_races (two physical sessions)"
 bash "$HERE/58_media_operations_races.sh"
 
+echo ""
+echo "── assertion: 59_media_writer_races (two physical sessions)"
+bash "$HERE/59_media_writer_races.sh"
+
+echo ""
+echo "── assertion: 59_mark_creation_cutover (gate + post-cutover boundary)"
+bash "$HERE/59_mark_creation_cutover.sh"
+
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ✔ ALL ASSERTIONS PASSED"
 echo "   SEC-001 (AC-S1…AC-S10 + moderator-read + storage)"
 echo "   FP-C2  (secret isolation + F1 lifecycle, membership gating, 5"
 echo "           notification triggers, profile links)"
 echo "   MEDIA-C1.1 (credential fence + key lifecycle + atomic callback receipts)"
+echo "   MEDIA-C1.3 (writer cancellation + caption/status contract + final cutover)"
 echo "══════════════════════════════════════════════════════════════════════"
