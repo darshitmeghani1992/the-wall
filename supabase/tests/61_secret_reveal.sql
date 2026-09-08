@@ -192,12 +192,18 @@ begin
   if result <> '{"status":"invalid"}'::jsonb then
     raise exception '61 FAIL: canonical writer did not reject Secret media precisely: %',result;
   end if;
+end $$;
+reset role;
+-- The app action above stays authenticated. Only the trusted test owner reads
+-- the private workflow table to prove the rejected request left no side effect.
+do $$
+begin
   if exists(select 1 from mark_creation_requests
-             where actor_id=auth.uid() and request_id='61000000-0000-4000-8000-000000000004') then
+             where actor_id='11111111-1111-1111-1111-111111111111'
+               and request_id='61000000-0000-4000-8000-000000000004') then
     raise exception '61 FAIL: invalid Secret media persisted a request row';
   end if;
 end $$;
-reset role;
 do $$
 declare rejected boolean := false;
 begin
