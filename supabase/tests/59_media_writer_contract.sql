@@ -68,8 +68,10 @@ do $$ declare a jsonb; b jsonb; c jsonb; replay jsonb; mismatch jsonb; begin
   if exists(select 1 from marks where id=(a->>'mark_id')::uuid and (payload is not null or media_url is not null)) then
     raise exception '59 FAIL: caption leaked into legacy media fields';
   end if;
+  -- Replay changes only caption-edge whitespace; every other fingerprint
+  -- field, including rotation, is byte-for-byte identical to the first call.
   replay:=create_mark('59000000-0000-4000-8000-000000000021','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'photo',E'\tfull frame\n',null,false,false,2,array['59000000-0000-4000-8000-000000000001'::uuid]);
+    'photo',E'\tfull frame\n',null,false,false,0,array['59000000-0000-4000-8000-000000000001'::uuid]);
   mismatch:=create_mark('59000000-0000-4000-8000-000000000021','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'photo','different',null,false,false,0,array['59000000-0000-4000-8000-000000000001'::uuid]);
   if replay->>'status'<>'existing' or replay->>'mark_id'<>a->>'mark_id'
