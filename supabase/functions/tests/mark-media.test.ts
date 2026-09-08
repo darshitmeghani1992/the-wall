@@ -91,10 +91,10 @@ function scriptedFetch(steps: Array<(call: FetchCall) => Response | Promise<Resp
   }) as typeof fetch;
 }
 
-function handler(fetchImplementation: typeof fetch) {
+function handler(fetchImplementation: typeof fetch, now = () => new Date("2026-09-03T12:00:00.000Z")) {
   return createMarkMediaHandler({
     fetch: fetchImplementation,
-    now: () => new Date("2026-09-03T12:00:00.000Z"),
+    now,
     config: CONFIG,
   });
 }
@@ -144,8 +144,117 @@ test("read re-verifies JWT, binds actor to resolver, signs exact path, and suppr
   equal(body.expires_at, "2026-09-03T12:01:00.000Z", "explicit manifest expiry");
   equal(body.items.length, 1, "one media item");
   assert(body.items[0].url.includes("?token=opaque"), "signed URL is returned");
+  equal(Object.keys(body).sort().join(","), "expires_at,items,status", "manifest has exact public keys");
+  equal(
+    Object.keys(body.items[0]).sort().join(","),
+    "duration_ms,height,media_type,mime_type,position,preview_url,url,width",
+    "item has exact public keys",
+  );
+  equal(body.items[0].preview_url, null, "absent preview is explicit null");
+  equal(body.items[0].duration_ms, null, "photo duration is explicit null");
   assert(!JSON.stringify(body).includes('"storage_path"'), "raw storage path field is suppressed");
+  assert(!JSON.stringify(body).includes('"byte_size"'), "byte size is suppressed");
+  assert(!JSON.stringify(body).includes('"sha256"'), "checksum is suppressed");
   equal(calls.length, 3, "only expected calls occur");
+});
+
+test("five photos preserve resolver order and the first-sign expiry across sequential delay", async () => {
+  let nowMs = Date.parse("2026-09-03T12:00:00.000Z");
+  const rows = Array.from({ length: 5 }, (_, position) => ({
+    ...resolvedRow(
+      `validated/${String(position + 1).repeat(8)}-${String(position + 1).repeat(4)}-4${String(position + 1).repeat(3)}-8${String(position + 1).repeat(3)}-${String(position + 1).repeat(12)}/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/full.jpg`,
+    ),
+    position,
+  }));
+  const steps: ((call: FetchCall) => Response)[] = [
+    () => json({ id: USER_ID }),
+    () => json(rows),
+    ...rows.map((row, index) => () => {
+      nowMs += 9_000;
+      return json({
+        signedURL: `/object/sign/mark-media/${row.storage_path}?token=${index}`,
+        expires_at: "2000-01-01T00:00:00Z",
+      });
+    }),
+  ];
+  const response = await handler(scriptedFetch(steps, []), () => new Date(nowMs))(
+    readRequest({ mark_id: MARK_ID, request_id: REQUEST_ID }),
+  );
+  equal(response.status, 200, "exact 15-second remaining boundary succeeds");
+  const body = await response.json();
+  equal(body.expires_at, "2026-09-03T12:01:00.000Z", "expiry is anchored before first signer call");
+  equal(body.items.map((item: { position: number }) => item.position).join(","), "0,1,2,3,4", "order preserved");
+});
+
+test("manifest fails closed when sequential signing leaves less than 15 seconds", async () => {
+  let nowMs = Date.parse("2026-09-03T12:00:00.000Z");
+  const row = resolvedRow();
+  const response = await handler(scriptedFetch([
+    () => json({ id: USER_ID }),
+    () => json([row]),
+    () => {
+      nowMs += 45_001;
+      return json({ signedURL: `/object/sign/mark-media/${row.storage_path}?token=late` });
+    },
+  ], []), () => new Date(nowMs))(readRequest({ mark_id: MARK_ID, request_id: REQUEST_ID }));
+  await assertUnavailable(response);
+});
+
+test("voice success returns every nullable field explicitly", async () => {
+  const voice = {
+    ...resolvedRow("validated/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/full.m4a"),
+    media_type: "voice",
+    mime_type: "audio/mp4",
+    width: null,
+    height: null,
+    duration_ms: 60_000,
+  };
+  const response = await handler(scriptedFetch([
+    () => json({ id: USER_ID }),
+    () => json([voice]),
+    () => json({ signedURL: `/object/sign/mark-media/${voice.storage_path}?token=voice` }),
+  ], []))(readRequest({ mark_id: MARK_ID, request_id: REQUEST_ID }));
+  equal(response.status, 200, "voice manifest status");
+  const body = await response.json();
+  equal(body.items[0].preview_url, null, "voice preview is explicit null");
+  equal(body.items[0].width, null, "voice width is explicit null");
+  equal(body.items[0].height, null, "voice height is explicit null");
+  equal(body.items[0].duration_ms, 60_000, "voice duration is retained");
+});
+
+test("invalid cardinality, order, keys, and kind metadata fail before signing", async () => {
+  const voice = {
+    ...resolvedRow("validated/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/full.m4a"),
+    media_type: "voice",
+    preview_path: null,
+    mime_type: "audio/mp4",
+    width: null,
+    height: null,
+    duration_ms: 1_000,
+  };
+  const invalidResults = [
+    Array.from({ length: 6 }, (_, position) => ({ ...resolvedRow(), position })),
+    [resolvedRow(), { ...resolvedRow(), position: 2 }],
+    [resolvedRow(), { ...voice, position: 1 }],
+    [{ ...resolvedRow(), unexpected: true }],
+    [{ ...resolvedRow(), duration_ms: 1 }],
+    [{ ...voice, width: 1 }],
+    [{
+      ...resolvedRow("validated/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/full.mp4"),
+      media_type: "video",
+      mime_type: "image/jpeg",
+      duration_ms: 1_000,
+    }],
+  ];
+  for (const invalidRows of invalidResults) {
+    const calls: FetchCall[] = [];
+    const response = await handler(scriptedFetch([
+      () => json({ id: USER_ID }),
+      () => json(invalidRows),
+    ], calls))(readRequest({ mark_id: MARK_ID, request_id: REQUEST_ID }));
+    await assertUnavailable(response);
+    equal(calls.length, 2, "invalid resolver result never reaches Storage signer");
+  }
 });
 
 test("missing, invalid JWT, resolver denial, and signing failure are indistinguishable", async () => {
@@ -204,6 +313,13 @@ test("malformed input and malicious resolver paths fail before Storage signing",
   );
   await assertUnavailable(malformed);
   equal(malformedCalls.length, 1, "extra fields never reach privileged resolver");
+
+  const uppercaseCalls: FetchCall[] = [];
+  const uppercase = await handler(scriptedFetch([() => json({ id: USER_ID })], uppercaseCalls))(
+    readRequest({ mark_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".toUpperCase(), request_id: REQUEST_ID }),
+  );
+  await assertUnavailable(uppercase);
+  equal(uppercaseCalls.length, 1, "non-canonical UUID never reaches privileged resolver");
 
   const maliciousCalls: FetchCall[] = [];
   const malicious = await handler(scriptedFetch([

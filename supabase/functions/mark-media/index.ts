@@ -280,32 +280,39 @@ async function handleRead(request: Request, dependencies: HandlerDependencies): 
     const rows = await resolveMedia(actor.id, payload.mark_id, payload.request_id, dependencies);
     if (!rows) return unavailableResponse(404);
 
-    const items: SignedMediaItem[] = [];
+    // Validate every trusted path before starting the short signing window. This
+    // keeps t_first_sign_request immediately adjacent to the first signer call.
     for (const row of rows) {
       assertCanonicalStoragePath(row.storage_path, "validated");
+      if (row.preview_path) assertCanonicalStoragePath(row.preview_path, "validated");
+    }
+
+    const firstSignRequestAt = dependencies.now();
+    const contractExpiry = new Date(firstSignRequestAt.getTime() + MANIFEST_TTL_SECONDS * 1000);
+    const items: SignedMediaItem[] = [];
+    for (const row of rows) {
       const url = await signReadPath(row.storage_path, dependencies);
-      let previewUrl: string | undefined;
-      if (row.preview_path) {
-        assertCanonicalStoragePath(row.preview_path, "validated");
-        previewUrl = await signReadPath(row.preview_path, dependencies);
-      }
+      const previewUrl = row.preview_path ? await signReadPath(row.preview_path, dependencies) : null;
       items.push({
         position: row.position,
         media_type: row.media_type,
         url,
-        ...(previewUrl ? { preview_url: previewUrl } : {}),
+        preview_url: previewUrl,
         mime_type: row.mime_type,
-        byte_size: row.byte_size,
-        ...(row.width === null ? {} : { width: row.width }),
-        ...(row.height === null ? {} : { height: row.height }),
-        ...(row.duration_ms === null ? {} : { duration_ms: row.duration_ms }),
-        sha256: row.sha256,
+        width: row.width,
+        height: row.height,
+        duration_ms: row.duration_ms,
       });
+    }
+
+    const finalValidationAt = dependencies.now();
+    if (contractExpiry.getTime() - finalValidationAt.getTime() < 15_000) {
+      return unavailableResponse(404);
     }
 
     const response: ReadManifest = {
       status: "ready",
-      expires_at: new Date(dependencies.now().getTime() + MANIFEST_TTL_SECONDS * 1000).toISOString(),
+      expires_at: contractExpiry.toISOString(),
       items,
     };
     return jsonResponse(response);
