@@ -1,6 +1,6 @@
 # ADR-012: Private, staged, server-validated Mark media
 
-**Status:** Accepted — worker-credential and reader/operations amendments independently Two-Key approved
+**Status:** Accepted base — C4 writer correction addendum proposed, pending independent Two-Key review
 **Date:** 2026-08-27
 **Fast Lane:** High-Risk / Architectural
 **Supersedes:** ADR-006 and D-6 **for Mark media only**. The public `attachments` bucket remains authoritative for public avatars.
@@ -268,7 +268,7 @@ duration is a contract change.
 
 ### 5. One atomic Mark creation contract
 
-`create_mark(...)` is the sole canonical creation path after migration `0023`. It derives the actor
+`create_mark(...)` is the sole canonical creation path after migration `0024`. It derives the actor
 from `auth.uid()`, rechecks account and current contribution authorization, validates the complete
 request, locks every referenced upload row, and commits the following in one PostgreSQL transaction:
 
@@ -283,6 +283,15 @@ uploads. Voice/Video require exactly one matching validated upload. Media + `sec
 Legacy `marks.media_url` and `marks.payload` are always null for new rows. Duration, dimensions,
 format, paths, and ordering come from locked server rows, never client JSON.
 
+The C4 writer addendum permits optional captions on non-Secret Photo and Video Marks and optional
+text on non-Secret Voice Marks. `p_text` is normalized exactly once as
+`nullif(btrim(p_text), '')`; PostgreSQL `char_length` of the normalized value must be at most 500.
+The normalized value is stored only in `marks.text` and included in the idempotency fingerprint.
+It is never copied into `marks.payload`, object metadata, a filename, a job envelope, or a log.
+Text Marks still require non-null normalized text. A media request with `secret=true` is rejected as
+`invalid` before upload lookup, locking, consumption, Mark insertion, provenance, or Alert work, so
+caption support does not create a Secret-media path.
+
 The RPC accepts a client-generated `request_id` and stores a versioned SHA-256 fingerprint over
 canonical server-normalized meaningful input: version, Wall, type, exactly inserted normalized
 text, color, Anonymous/Secret flags, and ordered upload IDs. Rotation is server-derived and
@@ -291,6 +300,53 @@ locked. Same-input pending calls wait and re-evaluate, completed calls return th
 mismatched version/hash fails, and a post-delete tombstone returns `deleted` without recreating.
 The request row, Mark, media, upload consumption, provenance, and Alert share one transaction, so a
 failure rolls back even the pending request. Uploads are locked in UUID order.
+
+Migration `0023_mark_writer_contract.sql` applies the C4 correction before the final cutover while
+all media controls remain default-off. It keeps the existing `create_mark` SQL signature, removes
+the obsolete rejection of normalized media text, and does not advertise `rate_limited`: creation
+does not implement a separate rate limiter, while reservation remains the rate-limited boundary.
+The RPC result union is exactly `created`, `existing`, `deleted`, `unavailable`, `invalid`,
+`media_not_ready`, or `request_id_reused`.
+
+The same migration adds the actor-bound, idempotent function
+`cancel_media_upload(p_upload_id uuid) returns jsonb`. It authenticates before reading protected
+state, takes the media actor lock, the owned upload-row lock, and then the attributable quota-row
+lock in that order. Missing, foreign, and consumed uploads all return the same
+`{"status":"unavailable"}`. A first request against `initiated`, `uploaded`, `validated`,
+`failed`, or `expired` records `cancel_requested_at`, closes future client transition/creation,
+queues every known exact source/canonical/preview/attempt path with its existing deletion fence,
+sets internal `state='expired'`, and returns `{"status":"cancelled"}` only after
+`cancelled_at` is durable. A live
+`processing` lease records the request but cannot be invalidated beneath its worker; it returns
+`{"status":"cancelling"}`. Worker finalization observes the locked cancellation flag, refuses to
+publish a validated result, queues exact outputs, sets `state='expired'` plus `cancelled_at`, and
+completes cancellation. An expired-lease
+operations pass may do the same. Exact retries return the same `cancelling` or `cancelled` result.
+There is no client Storage delete grant, wildcard deletion, path parameter, or arbitrary-actor
+form of this RPC.
+
+Cancellation removes the row from the active-reservation count immediately, but never refunds the
+historical hourly/daily reservation count. Declared/actual byte charge and an open upload/TUS slot
+remain charged until fresh exact-object missing evidence is recorded after all applicable upload,
+signed-PUT, and attempt lease fences. Cleanup evidence, not the client response, releases quota.
+An already-authorized in-flight upload therefore cannot escape accounting or resurrect readable
+media. The status RPC omits consumed, missing, and inaccessible IDs identically. For an owned row it
+returns the derived public states `initiated`, `uploaded`, `processing`, `validated`, `failed`,
+`expired`, `cancelling`, or `cancelled`; it never emits internal `consumed`.
+
+Worker failure input is normalized at the service-only finalize boundary to the persisted allow-list
+`UNSUPPORTED_FORMAT`, `TOO_LARGE`, `TOO_LONG`, `INVALID_MEDIA`, or `PROCESSING_FAILED`. Unknown,
+malformed, infrastructure, subprocess, parser, and raw diagnostic values persist only as
+`PROCESSING_FAILED`; raw detail remains in bounded private operational telemetry, never in the
+workflow row. The public status RPC may return an `error_code` only for `state="failed"` and only
+from that same five-value allow-list. Operational lifecycle values such as subject deletion remain
+private and map to `unavailable`/omission rather than expanding the client contract.
+
+All state-changing races linearize on the upload row. Worker claim excludes non-null
+`cancel_requested_at`; finalize rechecks it while holding the same row lock. If creation consumes
+first, cancellation returns generic unavailable and cannot enqueue canonical Mark objects. If
+cancellation records first, creation's validated-upload predicate fails. Active-reservation quota
+queries likewise exclude `cancel_requested_at`, while charge release remains evidence-gated.
 
 ### 6. Default-off controls, atomic quota, and durable deletion
 
@@ -331,15 +387,20 @@ deprecated `owner`, and service-key-created objects have no owner. See
 Migration `0021_media_worker_credentials.sql` additively corrects the worker-credential protocol
 using the approved contract in FP-MEDIA-001; it does not perform the Mark-creation cutover.
 Migration `0022_media_operations.sql` then adds the independently bound dispatcher, scheduler, and
-exact-object cleanup control plane without enabling media kinds or performing the cutover. Only
+exact-object cleanup control plane without enabling media kinds or performing the cutover. It can
+be implemented and reviewed independently of the C4 addendum because it consumes the existing
+generic exact-object outbox and lease protocol; its scheduler authentication, OCI acknowledgement,
+ambiguity, reclaim, and stale-callback rules do not change. Migration
+`0023_mark_writer_contract.sql` adds the caption, cancellation, status-redaction, and failure-code
+contracts above without enabling a kind. Only
 after hosted staging, a reconciled `media_legacy_reconciliation` singleton, processor verification,
 client minimum-version enforcement, and adversarial tests pass does
-`0023_mark_creation_cutover.sql`; the migration aborts if that gate is incomplete. A legacy worker
+`0024_mark_creation_cutover.sql`; the migration aborts if that gate is incomplete. A legacy worker
 may process inventory while user reservation/upload/create switches remain off. Public media
 creation cannot be enabled before reconciliation. Reconciliation requires a fresh unauthenticated
 denial proof for **every** inventoried legacy URL, including quarantined or missing-source entries;
-any reachable quarantine blocks creation, `0023`, and the privacy claim unless the Founder
-separately accepts a documented residual privacy exception. `0023` then:
+any reachable quarantine blocks creation, `0024`, and the privacy claim unless the Founder
+separately accepts a documented residual privacy exception. `0024` then:
 
 - revoke direct authenticated `INSERT` on `marks`;
 - revoke all app writes on `mark_media`, job/ledger tables, and legacy Mark Storage paths;
@@ -402,7 +463,7 @@ and streaming complexity. The approved MVP accepts the documented short signed-U
 
 ## Reversibility
 
-The schema and client cutover are two-way doors until `0023`. After public originals are deleted,
+The schema and client cutover are two-way doors until `0024`. After public originals are deleted,
 the privacy direction is intentionally one-way: rollback may disable the feature, but may not
 republish content. The OCI processor hosting provider remains replaceable.
 

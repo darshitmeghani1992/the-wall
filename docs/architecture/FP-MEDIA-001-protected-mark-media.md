@@ -1,6 +1,6 @@
 # FP-MEDIA-001: Protected private Mark media
 
-**Status:** Approved — including independently Two-Key-approved worker credential protocol v2
+**Status:** Approved base — C4 writer correction addendum proposed, pending independent Two-Key review
 **Decision:** [ADR-012](./ADR-012-protected-mark-media.md)
 **Authority:** `THE_WALL_MASTER_BUILD_SPEC_v1.1.md` §§21–25, 62, 67–69, 81, 100, 108, 119–121; `P0_SECURITY_CONTRACT_PLAN.md` Package C
 **Repository base:** `ab5539592e405c23cee49dbf02aeff1aa7e0dd0e`
@@ -19,7 +19,8 @@ short-lived signed URLs after current Mark access is rechecked.
 Migration `0020` adds the foundation without removing the safe text compatibility writer.
 `0021_media_worker_credentials.sql` additively binds the approved worker protocol v2. Migration
 `0022_media_operations.sql` adds the bound scheduled dispatcher and exact-object cleanup control
-plane. Migration `0023_mark_creation_cutover.sql` is the final cutover after the client, processor,
+plane. Migration `0023_mark_writer_contract.sql` adds the independently reviewed C4 writer
+corrections without enabling media. Migration `0024_mark_creation_cutover.sql` is the final cutover after the client, processor,
 hosted Storage, legacy migration, and tests pass. Rollback disables media; it never republishes
 private objects.
 
@@ -31,7 +32,7 @@ private objects.
 | Complexity | Complex: database + RLS + Storage + client + external decoder + migration |
 | Rough effort | 8–12 focused AI implementation/review sessions plus device/hosted verification |
 | Files affected | Approximately 25–40 across migrations, functions, worker, client, tests, CI, docs |
-| Database impact | Additive `0020` + worker correction `0021` + operations `0022`, later contract-cutover `0023`; no destructive table drop |
+| Database impact | Additive `0020` + worker correction `0021` + operations `0022` + writer correction `0023`, later cutover `0024`; no destructive table drop |
 | Dependency risk | Medium/High: TUS client, pinned image/AV toolchain, one OCI runtime |
 | Operational risk | High: user private media, service credentials, cleanup, legacy public data |
 | Regulated-domain flag | Personal/private user media and potentially identifying metadata |
@@ -438,10 +439,10 @@ quarantined count, missing count, remaining non-null legacy URL count, exact pub
 fresh-denial proofs, and completed timestamp/actor. Completion requires counts to reconcile, zero
 unquarantined `media_url`, and fresh uncached unauthenticated denial evidence for **every inventoried
 legacy URL**, including each migrated, missing, or quarantined entry. A quarantined URL that remains
-reachable blocks completion, media creation, `0023`, and the privacy claim. The only exception is a
+reachable blocks completion, media creation, `0024`, and the privacy claim. The only exception is a
 separate Founder acceptance of a specifically documented residual privacy exception; it is not an
 automatic quarantine waiver. The kind-control setter refuses user `creation_enabled=true` until complete;
-`0023` asserts the same and aborts if false. Legacy processing alone may be enabled while user
+`0024` asserts the same and aborts if false. Legacy processing alone may be enabled while user
 reservation, upload transition, and creation stay disabled.
 
 ### Current Supabase claims used by this design
@@ -499,6 +500,7 @@ returned only by an actor-bound function. All transitions are protected function
 | `lease_expires_at` | `timestamptz` | Retry eligibility after worker loss |
 | `attempt_count` | `smallint` | Maximum 5 attempts |
 | `error_code` | `text` | Machine-safe internal reason; no raw parser output |
+| `cancel_requested_at/cancelled_at` | `timestamptz NULL` | Actor cancellation request and durable terminal evidence; neither authorizes quota refund by itself |
 | `expires_at` | `timestamptz` | Staging/validated draft expiry |
 | `consumed_mark_id` | `uuid NULL FK marks ON DELETE SET NULL` | Set only by `create_mark`; unique while live |
 | `consumed_mark_tombstone_id` | `uuid NULL` | Immutable after consumption; survives Mark deletion |
@@ -515,6 +517,8 @@ Required constraints/indexes:
 - unique non-null `consumed_mark_id` and `validated_path`;
 - checks for state/metadata consistency (e.g. `validated` requires trusted path/hash/type);
 - partial indexes on `(state, lease_expires_at)` for job claim and `(state, expires_at)` for cleanup;
+- partial index on `(cancel_requested_at, cancelled_at, lease_expires_at)` for requested
+  cancellation completion without scanning unrelated uploads;
 - index `(uploader_id, created_at desc)` and `(wall_id, created_at desc)` for rate/ownership checks;
 - DB duration checks: Voice `1..60000`, Video `1..30000`; photo duration null;
 - photo dimensions positive, edge `<=8192`, product `<=25000000`;
@@ -667,24 +671,97 @@ makes the row claimable. Repeated calls return current safe status. It never mar
 
 ### `get_media_upload_status(p_upload_ids uuid[])`
 
-Actor-bound, maximum five IDs, returns only the caller's safe fields:
+Binding SQL signature:
+
+```sql
+public.get_media_upload_status(p_upload_ids uuid[]) returns jsonb
+```
+
+Actor-bound, maximum five IDs, returns only the caller's safe fields. Missing, inaccessible, and
+`consumed` rows are all omitted; `consumed` is never a public state:
 
 ```text
-[{ upload_id, state: "initiated|uploaded|processing|validated|failed|expired",
+[{ upload_id, state: "initiated|uploaded|processing|validated|failed|expired|cancelling|cancelled",
    error_code?: "UNSUPPORTED_FORMAT|TOO_LARGE|TOO_LONG|INVALID_MEDIA|PROCESSING_FAILED" }]
 ```
 
-Never return storage paths, raw parser messages, another actor, existence/block reasons, or worker
-lease data. Missing/inaccessible IDs are omitted or reported identically as `unavailable`.
+`cancelling` is derived from non-null `cancel_requested_at` with null `cancelled_at`; `cancelled` is
+derived from non-null `cancelled_at`. Never return storage paths, raw parser messages, another
+actor, existence/block reasons, worker lease data, or an internal lifecycle/error value. The
+optional `error_code` exists only for public `failed` and is projected through the exact five-value
+allow-list above; any other stored operational value is omitted.
+
+### `cancel_media_upload(p_upload_id uuid)`
+
+Binding SQL signature:
+
+```sql
+public.cancel_media_upload(p_upload_id uuid) returns jsonb
+```
+
+```text
+input:
+  p_upload_id uuid
+output:
+  { status: "cancelling" | "cancelled" }
+or generic { status: "unavailable" }
+```
+
+The function is `SECURITY DEFINER`, derives its actor only from `auth.uid()`, and authenticates
+before any workflow read. Lock order is the existing actor advisory lock, the owned upload row,
+then its UTC-day quota row. A foreign, missing, or `consumed` ID returns the identical generic
+`unavailable`; the function never reveals whether a Mark consumed the upload.
+
+For an owned `initiated`, `uploaded`, `validated`, `failed`, or `expired` row, it atomically records
+`cancel_requested_at`, prevents future Storage transition/worker claim/creation, and enqueues every
+known exact source/canonical/preview/current-attempt path with the existing applicable upload,
+signed-PUT, and lease `not_before` fences. It records `cancelled_at` and returns `cancelled` only
+after setting internal `state='expired'` and making workflow cancellation durable; object deletion
+may remain queued. A live `processing`
+lease records the request and returns `cancelling`. The locked worker finalize path must then refuse
+validation, enqueue its exact outputs, set `state='expired'` plus `cancelled_at`, and acknowledge
+safely; if the lease expires first, the operations reclaimer performs that terminal transition without
+starting another processor attempt. Same-actor retries return the current derived result.
+If a live worker callback wins after cancellation was requested, its existing callback receipt and
+the cancellation terminal transition commit in the same transaction; an exact lost-response retry
+acknowledges that receipt without validating media or changing cleanup evidence.
+
+Cancellation removes the row from the active-reservation count immediately. Historical rolling
+hour/day reservation counts are never refunded. Reserved/actual byte charges and an open
+upload/TUS-session charge remain until a fresh exact missing proof is recorded after every relevant
+credential/session/lease fence; only cleanup evidence releases them. The client has no direct
+Storage delete/list/update grant. This RPC accepts no actor, path, bucket, prefix, or wildcard.
+
+Worker claim and retry predicates exclude non-null `cancel_requested_at`; worker finalization
+rechecks it while holding the upload row. Active-reservation count queries also exclude that flag.
+Creation, cancellation, and finalization linearize on the same upload lock: consume-first makes
+cancellation generic unavailable, while cancel-first makes the upload ineligible for creation.
+Cancellation never enqueues or deletes canonical objects already related to a consumed Mark.
 
 ### `create_mark(...)`
+
+Binding SQL signature (unchanged from `0020`):
+
+```sql
+public.create_mark(
+  p_request_id uuid,
+  p_wall_id uuid,
+  p_type mark_type,
+  p_text text,
+  p_color text,
+  p_anonymous boolean,
+  p_secret boolean,
+  p_rotation real,
+  p_upload_ids uuid[]
+) returns jsonb
+```
 
 ```text
 input:
   p_request_id uuid
   p_wall_id uuid
   p_type mark_type                    // text | photo | voice | video
-  p_text text?                        // trim; whitespace-only becomes null; <=500 chars
+  p_text text?                        // btrim; whitespace-only becomes null; char_length <=500
   p_color text?                       // only approved text color token or null
   p_anonymous boolean
   p_secret boolean
@@ -692,8 +769,9 @@ input:
   p_upload_ids uuid[]                 // ordered; [] for text
 output:
   { status: "created" | "existing", mark_id: uuid, mark_status: mark_status }
+or { status: "deleted", mark_id: uuid }
 errors:
-  generic unavailable, invalid, media_not_ready, request_id_reused, rate_limited
+  generic unavailable, invalid, media_not_ready, request_id_reused
 ```
 
 Rules:
@@ -701,13 +779,62 @@ Rules:
 - derive actor only from `auth.uid()`; require active account and current `can_contribute`;
 - lock target Wall and all upload rows in deterministic UUID order;
 - Text: zero uploads, non-empty text; Secret text continues through existing extract trigger;
-- Photo: 1–5 unique validated Photo uploads, position equals input array order;
-- Voice/Video: exactly one matching validated upload;
-- any media + Secret: reject without revealing upload state;
+- Photo: 1–5 unique validated Photo uploads, position equals input array order, optional normalized
+  caption in `marks.text`;
+- Voice/Video: exactly one matching validated upload, optional normalized text/caption in
+  `marks.text`;
+- normalize `p_text` exactly once as `nullif(btrim(p_text), '')`; reject normalized
+  `char_length>500`; include that exact value in the versioned request fingerprint;
+- never copy media text into `marks.payload`, object metadata, a filename, a worker envelope, or a
+  log;
+- any media + Secret: reject as `invalid` before upload lookup/locking/consumption or any Mark,
+  provenance, Secret payload, or Alert side effect;
 - all uploads belong to actor and Wall, are unexpired, unconsumed, and have current trusted metadata;
 - canonical rows set `marks.media_url=NULL` and `marks.payload=NULL`;
 - existing triggers remain responsible for Anonymous provenance, status, Secret text, and Alert;
 - every side effect is one DB transaction; one failure means zero visible partial state.
+
+Creation does not implement or advertise a separate `rate_limited` result. Reservation limits
+bound media intake, and existing contribution/account rules bound creation. Adding a creation rate
+limit later requires a separately versioned contract, atomic ledger, client handling, and
+adversarial review; documentation must not advertise an unimplemented status.
+
+### Worker failure-code persistence and projection
+
+The service-only failure/finalize boundary accepts and, on terminal worker failure, persists only
+`UNSUPPORTED_FORMAT`, `TOO_LARGE`, `TOO_LONG`, `INVALID_MEDIA`, or `PROCESSING_FAILED` as worker
+failure codes. Any unknown code, malformed value, parser/subprocess detail, timeout detail, or
+infrastructure diagnostic is normalized to `PROCESSING_FAILED` before workflow persistence. Raw
+detail may appear only in bounded private operational telemetry under the logging rules below.
+Existing internal lifecycle reasons such as subject deletion are not worker failure codes and are
+never projected by app RPCs. `get_media_upload_status` emits an error only for public `failed` and
+only from the five-value allow-list.
+
+Migration `0023` adds private
+`normalize_media_failure_code(p_error_code text) returns text`, returning the exact input only for
+those five uppercase values and `PROCESSING_FAILED` otherwise. It is used by the existing private
+`canonical_media_validation_result(p_outcome text,p_result jsonb) returns jsonb` and the unchanged
+service-only
+`finalize_media_validation_attempt(uuid,uuid,text,text,text,jsonb) returns boolean` before hashing,
+receipt comparison, or persistence. `PUBLIC`, `anon`, and `authenticated` receive no execute grant
+on any of these functions. The obsolete standalone `fail_media_validation(uuid,uuid,text)` remains
+revoked from `service_role`; it is not restored as a second failure path.
+
+`PUBLIC`, `anon`, and `authenticated` are revoked from every service helper/finalizer. The exact
+grant surface is: `authenticated` may execute `begin_media_upload(uuid,mark_type,uuid,text,bigint)`,
+`mark_media_uploaded(uuid)`, `get_media_upload_status(uuid[])`,
+`cancel_media_upload(uuid)`, and
+`create_mark(uuid,uuid,mark_type,text,text,boolean,boolean,real,uuid[])`; `anon`/`PUBLIC` may execute
+none. Cancellation does not grant table or Storage DML.
+
+Backward compatibility is deliberate. `create_mark` keeps its SQL signature, so the default-off C4
+client can adopt captions without a second RPC name. Existing text-only RPC callers retain the same
+normalization and result behavior. `cancel_media_upload` and the derived cancellation states are
+new; an older client that never calls cancel cannot encounter them. Consumed uploads were never a
+valid draft status and are now omitted fail-closed. Before `0024`, the temporary migration-0018
+text writer remains available. Rollback of `0023` is only an additive reviewed forward migration:
+disable all media switches first, preserve private objects/evidence, and do not restore arbitrary
+worker codes, consumed status exposure, public URLs, direct media writes, or evidence-free refunds.
 
 ### Service-only `resolve_mark_media_for_signing(...)` + Edge `POST /functions/v1/mark-media/read`
 
@@ -922,7 +1049,7 @@ work stays in the OCI processor. Supabase Cron run history remains operational e
 ## Legacy public-media migration and proof
 
 No hosted count is assumed. Run the following on a frozen media-write boundary (already achieved by
-`0018`) before `0023`:
+`0018`) before `0024`:
 
 1. **Inventory:** export every canonical Photo/Voice/Video Mark with non-null `media_url`, parse only
    the exact expected `attachments/marks/*` URL shape, and inventory the corresponding Storage
@@ -950,7 +1077,7 @@ No hosted count is assumed. Run the following on a frozen media-write boundary (
 10. **Completion gate:** counts must reconcile: inventory = migrated + explicitly quarantined;
     zero non-quarantined canonical media Mark has `media_url`; **every inventoried legacy URL,
     including quarantined and missing entries**, has fresh unauthenticated denial evidence. Any
-    reachable quarantine blocks media creation, `0023`, and the privacy claim unless the Founder
+    reachable quarantine blocks media creation, `0024`, and the privacy claim unless the Founder
     separately accepts a documented residual privacy exception for that exact URL/risk.
 
 Rollback before public deletion pauses migration and keeps C5a on protected relations only;
@@ -991,6 +1118,26 @@ processing, link, authorized-read, and unauthorized-denial proof succeed.
   no redirects, and no pre-lease-expiry retry after ambiguous delivery.
 - Keep every media-kind switch off and preserve the safe text compatibility writer.
 
+This phase is independently implementable before or after the C4 writer correction. It consumes
+the existing generic exact-object outbox and attempt/lease protocol. The writer addendum adds
+cancel-originated exact cleanup records but does not alter scheduler authentication, the OCI
+request/acknowledgement contract, ambiguity handling, claim/reclaim, or stale-callback denial.
+
+### Phase 1.3 — `0023_mark_writer_contract.sql`
+
+- Keep the existing `create_mark(uuid,uuid,mark_type,text,text,boolean,boolean,real,uuid[])`
+  signature and atomically replace its body so normalized optional media captions/text are accepted,
+  stored only in `marks.text`, and fingerprinted exactly.
+- Add `cancel_requested_at`/`cancelled_at`, the supporting partial index, cancellation-aware worker
+  finalization/claim behavior, and
+  `cancel_media_upload(uuid)` with the exact lock, cleanup, quota, grant, and response contract.
+- Replace `get_media_upload_status(uuid[])` so consumed/missing/inaccessible rows are always
+  omitted and cancellation states/error codes are projected only through the bound allow-lists.
+- Normalize worker failure persistence to the five bound codes; do not alter the C3.1 operations
+  transport or lease contract.
+- Keep all media switches off and direct text compatibility intact. This migration is additive and
+  independently rollbackable by a new forward migration; never edit `0020`/`0021` in place.
+
 ### Phase 2 — processor and hosted staging
 
 - Build the OCI processor and Supabase orchestration Edge Function.
@@ -1013,7 +1160,7 @@ processing, link, authorized-read, and unauthorized-denial proof succeed.
 - Run the ledgered inventory/copy/process/link/delete/purge/proof sequence above.
 - Resolve/quarantine every exception; do not silently hide content.
 
-### Phase 5 — `0023_mark_creation_cutover.sql`
+### Phase 5 — `0024_mark_creation_cutover.sql`
 
 - Assert the legacy reconciliation singleton is complete and abort otherwise.
 - Revoke direct app `marks` insert and all app media/job writes.
@@ -1033,11 +1180,12 @@ Names are binding unless an independent review finds a repository collision.
 | C1.1 worker credential DB correction | Backend | `supabase/migrations/0021_media_worker_credentials.sql`, `supabase/tests/57_media_worker_credentials.sql`, `supabase/tests/57_media_worker_credentials_races.sh`, update `run_tests.sh` | C1 + approved protocol v2 | 2h+30s fence, DB-linearized keys, atomic receipts/finalize, fault/race/idempotency suite green |
 | C2 Edge orchestration/read | Backend/DevOps | `supabase/functions/mark-media/index.ts`, `supabase/functions/mark-media-worker/index.ts`, `_shared/{media-contract,worker-envelope,url-policy}.ts`, `supabase/functions/tests/{mark-media,mark-media-worker}.test.ts`, `supabase/config.toml` | C1.1 | JWT read route, custom-auth worker route, no-store signer, Ed25519 vector, SSRF/replay tests verified |
 | C3 trusted worker | Backend/DevOps | `workers/media-processor/{Dockerfile,package.json,package-lock.json,tsconfig.json}`, `src/{server,photo,audio,video,limits,contract,url-policy}.ts`, `test/**`, `deploy/{seccomp.json,container-policy.yaml}` | C0 + C1.1 | hostile corpus, envelope/SSRF, golden outputs, pinned SBOM/CVE, resource caps green |
-| C4 client writer | Frontend | `app/create.tsx`, `src/lib/upload.ts`, `src/lib/marks.ts`, new `src/lib/mark-media.ts`, `src/lib/types.ts`, `package.json`, `package-lock.json` | C1/C2 | 5-photo order/retry, AV progress, draft preservation |
+| C1.3 writer contract correction | Backend | `supabase/migrations/0023_mark_writer_contract.sql`, expand media DB/race tests | C1.1 + this addendum approval; C3.1 not required | captions, cancel/cleanup/quota races, consumed omission, failure allow-list, exact grants green |
+| C4 client writer | Frontend | `app/create.tsx`, `src/lib/upload.ts`, `src/lib/marks.ts`, new `src/lib/mark-media-writer.ts`, `src/lib/types.ts`, `package.json`, `package-lock.json` | C1.3/C2 | 5-photo order/retry, AV progress, draft preservation |
 | C5 client reader | Frontend | `src/components/marks/MarkView.tsx`, `src/components/marks/MarkDetailModal.tsx`, new `src/hooks/use-mark-media.ts` | C1/C2 | full-frame photo, URL refresh, AV playback, access error |
 | C6 legacy tooling | Backend/DevOps | `scripts/media/{inventory,migrate,reconcile,verify-public-denial}.ts`, `docs/runbooks/MARK_MEDIA.md` | C1/C3 | singleton complete, reconciled counts, no unproved deletion |
 | C3.1 operations control plane | Backend/DevOps | `supabase/migrations/0022_media_operations.sql`, `supabase/functions/mark-media-ops/index.ts`, operations tests and runbook | C1.1/C2/C3 | auth-before-parse; exact OCI dispatch/ack; lease-safe ambiguity; exact cleanup retries/stale denial |
-| C7 final cutover | Backend | `supabase/migrations/0023_mark_creation_cutover.sql`, expand 51/52, update old-client tests | C4/C6/C3.1 | old/direct paths fail; RPC all types green |
+| C7 final cutover | Backend | `supabase/migrations/0024_mark_creation_cutover.sql`, expand 51/52, update old-client tests | C4/C6/C3.1 | old/direct paths fail; RPC all types green |
 | C8 independent verification | Reviewer + QA + Security | exact commit, CI, hosted staging, iOS/Android evidence | C1–C7 | Two-Key, full suite, device + hosted Pass |
 | C9 operational docs | Documentation/DevOps | `docs/BUILD_STATUS.md`, `docs/handoffs/CURRENT.md`, `docs/runbooks/MARK_MEDIA.md`, `docs/DECISIONS.md` | C8 | zero stale public-media claims |
 
@@ -1054,10 +1202,15 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - inactive/suspended/unrelated/blocked/owner-self Personal actor cannot reserve or create;
 - accepted Shared owner/member works; pending/removed/public non-member fails;
 - arbitrary path, other upload ID, other Wall, expired row, wrong kind, reused upload fail;
-- direct app DML to `mark_media`, workflow/ledger tables, and new `marks` after `0023` fails;
-- text/media legacy fields and payload injection fail at `0018`, `0020`, and `0023`;
+- direct app DML to `mark_media`, workflow/ledger tables, and new `marks` after `0024` fails;
+- text/media legacy fields and payload injection fail at `0018`, `0020`, `0023`, and `0024`;
 - exact 0/1/5/6 photo and 0/1/2 AV cardinalities;
-- Secret text succeeds; Secret media fails with no object relation or Alert;
+- media null/whitespace caption normalizes to null; leading/trailing whitespace is trimmed; exactly
+  500 characters succeeds and 501 fails; accepted caption is stored only in `marks.text` and the
+  exact normalized value participates in idempotency;
+- Secret text succeeds; every Secret media request, including one with a caption and valid foreign
+  or owned upload IDs, fails before upload lookup with no consumption, object relation, provenance,
+  Secret payload, or Alert;
 - idempotent same retry returns one Mark/Alert; version/hash mismatch fails;
 - concurrent same-key/same-input returns one result; same-key/different-input fails; same upload
   under different keys lets one consume; induced rollback leaves no pending row; post-delete retry
@@ -1065,6 +1218,21 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - atomic quota tests race reservations just below/at/above every count/byte threshold; actual-byte
   reconciliation, over-limit deletion, incomplete 24-hour TUS charge, and session expiry are proven;
 - contribution/block revoked between reserve/upload/validation/create is honored;
+- cancellation for every state is actor-bound and idempotent; missing/foreign/consumed are
+  indistinguishable; a live processing lease returns cancelling and cannot publish validation;
+  cancellation racing finalize/consume linearizes at the upload lock, never deletes consumed
+  canonical media, and enqueues only exact known paths;
+- cancellation immediately stops active-count eligibility but does not refund historical counts,
+  byte charge, or open TUS/session charge until fresh exact missing evidence after every fence;
+- status batches omit consumed, missing, and foreign IDs identically, preserve request order for
+  visible rows, derive cancelling/cancelled correctly, and never project a non-allow-listed code;
+- forged/unknown/lowercase/oversized worker failure codes persist as `PROCESSING_FAILED`; each of
+  the five accepted codes round-trips exactly; raw parser/subprocess diagnostics never persist or
+  reach an app result;
+- `create_mark` response-contract tests prove `rate_limited` is absent while reservation continues
+  to return it at its atomic quota boundaries;
+- catalog grant tests prove only the five bound media-writer authenticated RPC signatures are app-executable and
+  cancellation adds no table, Storage, service-helper, or arbitrary-actor privilege;
 - worker old attempt, forged attempt, expired lease, double complete, failure rollback;
 - binding refuses an output fence captured before the final signed-upload API return, a missing
   fence, and any attempt to shrink an existing fence; dispatch before durable binding fails;
@@ -1131,7 +1299,7 @@ reviewable and rollback-safe. C1 and C3 may proceed in parallel only after C0 ap
 - cleanup idempotency, dead-letter visibility, metrics/alert thresholds, recovery runbook.
 - legacy singleton cannot complete on count mismatch, unquarantined URL, missing deletion evidence,
   or missing fresh denial proof for any inventoried URL including quarantine; any reachable
-  quarantine blocks kind creation, `0023`, and privacy claim absent a separate documented Founder
+  quarantine blocks kind creation, `0024`, and privacy claim absent a separate documented Founder
   residual-risk exception.
 
 ## Observability and alerting
@@ -1144,7 +1312,7 @@ Emit structured safe metrics/logs:
 - failure code and retry/dead-letter counts;
 - lease expiry/stale callback count;
 - staging/validated orphan count and bytes;
-- create_mark outcome/idempotent replay/rate-limit count;
+- create_mark outcome/idempotent replay count; cancellation requested/pending/completed latency;
 - signed-manifest outcome without URL/path values;
 - legacy ledger totals and remaining public URLs.
 
@@ -1161,8 +1329,10 @@ true Anonymous authors, block state, or private Wall names.
 
 ## Rollback and incident response
 
-- **Before `0023`:** disable media flags; text compatibility remains. Keep private objects/private.
-- **After `0023`:** disable media flags and keep RPC text creation. Do not restore direct inserts;
+- **Before `0024`:** disable media flags; text compatibility remains. Keep private objects/private.
+  If `0023` itself is faulty, deploy a reviewed additive forward correction; do not edit applied
+  migrations, expose paths, refund quota without evidence, or weaken worker/operations leases.
+- **After `0024`:** disable media flags and keep RPC text creation. Do not restore direct inserts;
   forward-fix the RPC or deploy a narrowly reviewed text-only RPC compatibility migration.
 - **Processor incident:** stop dispatch, let leases expire, preserve sources, rotate worker callback
   secret, delete attempt outputs only from ledger/state evidence.
@@ -1201,6 +1371,14 @@ true Anonymous authors, block state, or private Wall names.
 ## Build readiness assessment
 
 **Status: READY for local C1.1/C2/C3 implementation; NOT READY for hosted or production enablement.**
+
+The proposed C1.3/`0023` writer-contract correction is **NOT READY for Backend implementation**
+until an independent Security/Reviewer approves the exact ADR/FP diff. It changes private-media
+creation semantics, worker finalization, cancellation races, quota accounting, and app-visible
+status. After approval it remains a separate High-Risk Backend unit with exact-version Reviewer and
+QA/Security verification. C3.1 operations remains independently implementable under its already
+approved contract and need not wait for C1.3; it must not silently absorb or reinterpret this
+addendum.
 
 The worker credential protocol v2 and its exactness addendum were independently Two-Key approved on
 2026-09-03. C1.1 may now add the database correction in
