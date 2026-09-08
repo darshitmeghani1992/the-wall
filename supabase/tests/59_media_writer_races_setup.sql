@@ -10,7 +10,9 @@ returns void language plpgsql set search_path=pg_catalog,public as $$
 declare v_deadline timestamptz:=clock_timestamp()+interval '30 seconds';
 begin
   loop
-    return when exists(select 1 from media59_race_latches where name=p_name);
+    if exists(select 1 from media59_race_latches where name=p_name) then
+      return;
+    end if;
     if clock_timestamp()>=v_deadline then
       raise exception '59 RACE FAIL: latch timeout %',p_name;
     end if;
