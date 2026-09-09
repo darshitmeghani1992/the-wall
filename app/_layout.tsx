@@ -4,11 +4,6 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "@/lib/auth";
 import { colors } from "@/theme";
 
-/**
- * Root navigator. The (tabs) group holds the persistent bottom-dock experience;
- * (onboarding) is the signed-out / first-run flow; everything else is pushed on
- * top as focused product journeys.
- */
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
@@ -24,6 +19,8 @@ export default function RootLayout() {
           <Stack.Screen name="create" options={{ presentation: "modal" }} />
           <Stack.Screen name="people-picker" options={{ presentation: "modal" }} />
           <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
+          <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+          <Stack.Screen name="account-status" />
           <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
           <Stack.Screen name="social/[kind]" />
           <Stack.Screen name="person/[id]" />
