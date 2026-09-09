@@ -16,8 +16,6 @@ export default function HomeScreen() {
   const firstName = profile?.display_name?.split(" ")[0] ?? "there";
   const [unread, setUnread] = useState(0);
 
-  // Refresh the unread badge whenever Home regains focus. Legitimately stays 0
-  // until the C2 triggers start populating the notifications table.
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -41,7 +39,7 @@ export default function HomeScreen() {
         <Pressable
           onPress={() => router.push("/notifications")}
           accessibilityRole="button"
-          accessibilityLabel={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
+          accessibilityLabel={unread > 0 ? `Alerts, ${unread} unread` : "Alerts"}
           hitSlop={8}
           style={{ minHeight: 44, minWidth: 44, alignItems: "flex-end", justifyContent: "center" }}
         >
