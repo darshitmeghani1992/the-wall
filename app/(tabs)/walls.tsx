@@ -7,21 +7,18 @@ import { Button } from "@/components/Button";
 import { InviteCrew } from "@/components/InviteCrew";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
-import { getOwnedSharedWalls } from "@/lib/walls";
+import { getJoinedSharedWalls, getOwnedSharedWalls } from "@/lib/walls";
 import { supabase } from "@/lib/supabase";
 import type { Wall } from "@/lib/types";
 import { colors, markColors, radius, shadow } from "@/theme";
 
-/**
- * Walls hub — "MY STORY" (the Personal Wall) plus an "OUR STORY · V3" teaser.
- * Loads the user's wall + its mark count; a brand-new wall shows InviteCrew.
- */
 export default function WallsScreen() {
   const router = useRouter();
   const { session, profile } = useAuth();
   const [wall, setWall] = useState<Wall | null>(null);
   const [markCount, setMarkCount] = useState(0);
-  const [sharedWalls, setSharedWalls] = useState<Wall[]>([]);
+  const [ownedSharedWalls, setOwnedSharedWalls] = useState<Wall[]>([]);
+  const [joinedSharedWalls, setJoinedSharedWalls] = useState<Wall[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -29,13 +26,16 @@ export default function WallsScreen() {
       let active = true;
       (async () => {
         if (!session?.user) return;
-        const [w, owned] = await Promise.all([
+        setLoading(true);
+        const [w, owned, joined] = await Promise.all([
           getPersonalWall(session.user.id),
           getOwnedSharedWalls(session.user.id),
+          getJoinedSharedWalls(session.user.id),
         ]);
         if (!active) return;
         setWall(w);
-        setSharedWalls(owned);
+        setOwnedSharedWalls(owned);
+        setJoinedSharedWalls(joined.filter((item) => item.owner_id !== session.user.id));
         if (w) {
           const { count } = await supabase
             .from("marks")
@@ -44,98 +44,72 @@ export default function WallsScreen() {
             .eq("status", "active");
           if (active) setMarkCount(count ?? 0);
         }
-        setLoading(false);
+        if (active) setLoading(false);
       })();
-      return () => {
-        active = false;
-      };
+      return () => { active = false; };
     }, [session?.user?.id]),
   );
 
+  function SharedWallCard({ sharedWall, owned }: { sharedWall: Wall; owned: boolean }) {
+    return (
+      <Pressable onPress={() => router.push(`/shared/${sharedWall.id}`)} style={{ marginTop: 12 }}>
+        <View style={{ borderWidth: 2, borderColor: colors.ink, borderRadius: radius.card, padding: 16, backgroundColor: colors.card }}>
+          <Text variant="headline">{sharedWall.name}</Text>
+          <Text variant="label" color={colors.outline} style={{ marginTop: 6 }}>
+            {sharedWall.visibility.toUpperCase()} · {owned ? "YOU STARTED THIS" : "MEMBER"}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  }
+
   return (
     <Screen>
-      <Text variant="display" style={{ marginVertical: 20 }}>
-        Your Walls
-      </Text>
+      <Text variant="display" style={{ marginVertical: 20 }}>Your Walls</Text>
 
-      <Text variant="label" color={colors.outline}>
-        MY STORY
-      </Text>
+      <Text variant="label" color={colors.outline}>MY STORY</Text>
       <View style={{ height: 10 }} />
 
-      {loading ? (
-        <ActivityIndicator color={markColors.brandYellow} />
-      ) : (
+      {loading ? <ActivityIndicator color={markColors.brandYellow} /> : (
         <>
-          {/* Personal wall card → My Wall (Phase 2 hero screen) */}
           <Pressable onPress={() => router.push("/wall")}>
-            <View
-              style={[
-                {
-                  backgroundColor: markColors.brandYellow,
-                  borderRadius: radius.card,
-                  borderWidth: 2,
-                  borderColor: colors.ink,
-                  padding: 18,
-                },
-                shadow.cta,
-              ]}
-            >
-              <Text variant="display" style={{ fontSize: 24 }}>
-                {wall?.name ?? `${profile?.display_name ?? "My"}'s Wall`}
-              </Text>
+            <View style={[{ backgroundColor: markColors.brandYellow, borderRadius: radius.card, borderWidth: 2, borderColor: colors.ink, padding: 18 }, shadow.cta]}>
+              <Text variant="display" style={{ fontSize: 24 }}>{wall?.name ?? `${profile?.display_name ?? "My"}'s Wall`}</Text>
               <Text variant="label" color={colors.ink} style={{ marginTop: 6 }}>
                 {markCount} MARKS · {profile?.handle ? `@${profile.handle}` : "PERSONAL"}
               </Text>
             </View>
           </Pressable>
-
-          {markCount === 0 ? (
-            <View style={{ marginTop: 18 }}>
-              <InviteCrew handle={profile?.handle} />
-            </View>
-          ) : null}
+          {markCount === 0 ? <View style={{ marginTop: 18 }}><InviteCrew handle={profile?.handle} /></View> : null}
         </>
       )}
 
-      {/* OUR STORY — real, public Shared Walls (private/members are C2). */}
       <View style={{ marginTop: 30 }}>
-        <Text variant="label" color={colors.outline}>
-          OUR STORY · SHARED WALLS
-        </Text>
+        <Text variant="label" color={colors.outline}>OUR STORY · SHARED WALLS</Text>
 
-        {sharedWalls.map((sw) => (
-          <Pressable key={sw.id} onPress={() => router.push(`/shared/${sw.id}`)} style={{ marginTop: 12 }}>
-            <View
-              style={{
-                borderWidth: 2,
-                borderColor: colors.ink,
-                borderRadius: radius.card,
-                padding: 16,
-                backgroundColor: colors.card,
-              }}
-            >
-              <Text variant="headline">{sw.name}</Text>
-              <Text variant="label" color={colors.outline} style={{ marginTop: 6 }}>
-                PUBLIC · SHARED
-              </Text>
-            </View>
-          </Pressable>
-        ))}
+        {ownedSharedWalls.length ? (
+          <View style={{ marginTop: 12 }}>
+            <Text variant="label" color={colors.onSurfaceVariant}>STARTED BY YOU</Text>
+            {ownedSharedWalls.map((sw) => <SharedWallCard key={sw.id} sharedWall={sw} owned />)}
+          </View>
+        ) : null}
 
-        {sharedWalls.length === 0 ? (
+        {joinedSharedWalls.length ? (
+          <View style={{ marginTop: 20 }}>
+            <Text variant="label" color={colors.onSurfaceVariant}>YOU'RE A MEMBER</Text>
+            {joinedSharedWalls.map((sw) => <SharedWallCard key={sw.id} sharedWall={sw} owned={false} />)}
+          </View>
+        ) : null}
+
+        {!ownedSharedWalls.length && !joinedSharedWalls.length ? (
           <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 12, marginBottom: 4 }}>
-            Start a wall your whole crew can write on — a trip, a class, a group of friends.
+            Start a wall for a trip, class, team or group — or accept an invite from Alerts.
           </Text>
         ) : null}
 
-        <View style={{ marginTop: 14 }}>
+        <View style={{ marginTop: 18 }}>
           <Button label="Start a Shared Wall" variant="yellow" onPress={() => router.push("/shared/create")} />
         </View>
-
-        <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginTop: 12 }}>
-          Public Shared Walls only for now — private, members-only walls are coming soon.
-        </Text>
       </View>
     </Screen>
   );
