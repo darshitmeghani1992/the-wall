@@ -32,6 +32,9 @@ export default function RootLayout() {
           <Stack.Screen name="people-picker" options={{ presentation: "modal" }} />
           <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
           <Stack.Screen name="status" options={{ presentation: "modal" }} />
+          <Stack.Screen name="help" options={{ presentation: "modal" }} />
+          <Stack.Screen name="account-recovery" />
+          <Stack.Screen name="account-unavailable" />
           <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
           <Stack.Screen name="shared/create" options={{ presentation: "modal" }} />
           <Stack.Screen name="shared/[id]" />

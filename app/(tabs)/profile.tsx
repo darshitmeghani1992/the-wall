@@ -63,6 +63,7 @@ export default function ProfileScreen() {
       <View style={{ gap: 12 }}>
         <Button label="Share my Wall" variant="yellow" onPress={() => shareMyWall(profile?.handle)} />
         <Button label="Edit profile" variant="ghost" onPress={() => router.push("/profile-edit")} />
+        <Button label="Help" variant="ghost" onPress={() => router.push("/help")} />
         <Button label="Sign out" variant="primary" onPress={signOut} />
       </View>
     </Screen>

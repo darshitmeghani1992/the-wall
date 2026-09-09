@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -17,6 +18,8 @@ import type { Profile } from "./types";
 import { allocateMediaSessionGeneration, protectedMediaCache } from "./mark-media";
 import { shouldResetProtectedResumeState } from "./mark-media-writer";
 import { resetProtectedMediaUploads } from "./upload";
+import { getCurrentAccountRoute } from "./account";
+import { AccountRouteFence, type AccountRoute, type AccountRouteToken } from "./onboarding-contract";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -28,12 +31,13 @@ type AuthState = {
   sessionGeneration: number;
   mediaAppActive: boolean;
   profile: Profile | null;
-  /** Signed in but hasn't completed profile setup yet. */
-  needsProfile: boolean;
+  /** Actor-bound bootstrap result. Null only while signed out or unresolved. */
+  accountRoute: AccountRoute | null;
   signInWithEmail: (email: string) => Promise<void>;
   verifyEmailOtp: (email: string, token: string) => Promise<void>;
   signInWithOAuth: (provider: "google" | "apple") => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshAccountRoute: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -52,42 +56,100 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionGeneration, setSessionGeneration] = useState(allocateMediaSessionGeneration);
   const [mediaAppActive, setMediaAppActive] = useState(AppState.currentState === "active");
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [accountRoute, setAccountRoute] = useState<AccountRoute | null>(null);
   const authSubjectRef = useRef<string | null | undefined>(undefined);
+  const routeFence = useRef(new AccountRouteFence());
 
-  async function loadProfile(s: Session | null) {
+  const loadAccountState = useCallback(async (
+    s: Session | null,
+    existingToken?: AccountRouteToken,
+  ) => {
+    const subject = s?.user.id ?? null;
+    const token = existingToken ?? routeFence.current.beginIfSubjectCurrent(
+      subject,
+      authSubjectRef.current ?? null,
+    );
+    if (!token) return;
+    if (!routeFence.current.isCurrent(token, authSubjectRef.current ?? null)) return;
     if (!s?.user) {
+      setAccountRoute(null);
       setProfile(null);
       return;
     }
-    setProfile(await getProfile(s.user.id));
-  }
+    let route: AccountRoute;
+    try {
+      route = await getCurrentAccountRoute();
+    } catch (cause) {
+      if (routeFence.current.isCurrent(token, authSubjectRef.current ?? null)) {
+        setAccountRoute("unavailable");
+        setProfile(null);
+      }
+      throw cause;
+    }
+    if (!routeFence.current.isCurrent(token, authSubjectRef.current ?? null)) return;
+
+    let nextProfile: Profile | null = null;
+    if (route === "onboarding" || route === "walkthrough" || route === "ready") {
+      nextProfile = await getProfile(s.user.id);
+      if (!routeFence.current.isCurrent(token, authSubjectRef.current ?? null)) return;
+    }
+    setAccountRoute(route);
+    setProfile(nextProfile);
+  }, []);
 
   useEffect(() => {
     let active = true;
+    const currentRouteFence = routeFence.current;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
-      if (authSubjectRef.current === undefined) authSubjectRef.current = data.session?.user.id ?? null;
+      const initialSubject = data.session?.user.id ?? null;
+      if (authSubjectRef.current === undefined) authSubjectRef.current = initialSubject;
+      else if (authSubjectRef.current !== initialSubject) return;
+      const initialToken = currentRouteFence.begin(initialSubject);
       setSession(data.session);
-      await loadProfile(data.session);
-      setLoading(false);
+      try {
+        await loadAccountState(data.session, initialToken);
+      } catch {
+        // `loadAccountState` applies unavailable only if this request is still current.
+      } finally {
+        if (active && currentRouteFence.isCurrent(initialToken, authSubjectRef.current ?? null)) {
+          setLoading(false);
+        }
+      }
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
       const nextSubject = s?.user.id ?? null;
-      if (shouldResetProtectedResumeState(event, authSubjectRef.current, nextSubject)) {
-        await resetProtectedMediaUploads();
-      }
+      const previousSubject = authSubjectRef.current;
+      // Fence the old identity before any awaited cleanup can yield back to a stale load.
       authSubjectRef.current = nextSubject;
+      const eventToken = currentRouteFence.begin(nextSubject);
       protectedMediaCache.clearAll();
       setSessionGeneration(allocateMediaSessionGeneration());
       setSession(s);
-      await loadProfile(s);
+      setAccountRoute(null);
+      setProfile(null);
+      setLoading(true);
+      if (shouldResetProtectedResumeState(event, previousSubject, nextSubject)) {
+        try { await resetProtectedMediaUploads(); } catch { /* Identity is already fenced locally. */ }
+      }
+      if (!currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) return;
+      try {
+        await loadAccountState(s, eventToken);
+      } catch {
+        // `loadAccountState` applies unavailable only if this request is still current.
+      } finally {
+        if (currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) {
+          setLoading(false);
+        }
+      }
     });
     return () => {
       active = false;
+      currentRouteFence.invalidate(null);
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadAccountState]);
 
   // One process-wide lifecycle boundary avoids one listener per rendered Mark.
   useEffect(() => {
@@ -134,14 +196,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function refreshProfile() {
-    await loadProfile(session);
-  }
+  const refreshProfile = useCallback(async () => {
+    await loadAccountState(session);
+  }, [loadAccountState, session]);
+
+  const refreshAccountRoute = useCallback(async () => {
+    await loadAccountState(session);
+  }, [loadAccountState, session]);
 
   async function signOut() {
     protectedMediaCache.clearAll();
     try { await resetProtectedMediaUploads(); } catch { /* Supabase sign-out must still proceed. */ }
     await supabase.auth.signOut();
+    routeFence.current.invalidate(null);
+    setAccountRoute(null);
     setProfile(null);
   }
 
@@ -152,14 +220,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionGeneration,
       mediaAppActive,
       profile,
-      needsProfile: Boolean(session?.user) && !profile,
+      accountRoute,
       signInWithEmail,
       verifyEmailOtp,
       signInWithOAuth,
       refreshProfile,
+      refreshAccountRoute,
       signOut,
     }),
-    [loading, session, sessionGeneration, mediaAppActive, profile],
+    [loading, session, sessionGeneration, mediaAppActive, profile, accountRoute, refreshProfile, refreshAccountRoute],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

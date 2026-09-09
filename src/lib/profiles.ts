@@ -3,11 +3,12 @@ import type { Profile, Wall } from "./types";
 
 /** Fetch the signed-in user's profile row, or null if they haven't set one up. */
 export async function getProfile(userId: string): Promise<Profile | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", userId)
     .maybeSingle();
+  if (error) throw error;
   return (data as Profile) ?? null;
 }
 
@@ -38,6 +39,8 @@ export type ProfileUpdate = {
   website?: string | null;
 };
 
+export type PersonalWallSetup = Pick<Wall, "visibility" | "contribution_policy" | "allow_anonymous">;
+
 /**
  * Update the signed-in user's own profile row. Relies on the existing
  * `profiles update self` RLS policy — no schema change. Returns the fresh row.
@@ -52,16 +55,6 @@ export async function updateProfile(userId: string, patch: ProfileUpdate): Promi
     .single();
   if (error) throw error;
   return data as Profile;
-}
-
-/** Is a handle free? Case-insensitive. */
-export async function isHandleAvailable(handle: string): Promise<boolean> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("id")
-    .ilike("handle", handle)
-    .maybeSingle();
-  return !data;
 }
 
 export type NewProfile = {
@@ -88,6 +81,34 @@ export async function createProfile(p: NewProfile): Promise<Profile> {
       avatar_url: p.avatar_url ?? null,
       interests: p.interests ?? [],
     })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Profile;
+}
+
+/** Persist the Wall choices after the profile/trigger exists; `.single()` rejects silent zero-row writes. */
+export async function updatePersonalWallSetup(
+  userId: string,
+  setup: PersonalWallSetup,
+): Promise<Wall> {
+  const { data, error } = await supabase
+    .from("walls")
+    .update(setup)
+    .eq("owner_id", userId)
+    .eq("type", "personal")
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Wall;
+}
+
+/** Final ordered write. This must run only after profile and Personal Wall settings succeed. */
+export async function markOnboardingComplete(userId: string): Promise<Profile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ onboarding_completed: true })
+    .eq("id", userId)
     .select("*")
     .single();
   if (error) throw error;

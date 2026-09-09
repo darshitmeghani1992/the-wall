@@ -34,7 +34,7 @@ export default function HandleLink() {
   const router = useRouter();
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const clean = String(handle ?? "").replace(/^@/, "");
-  const { loading, session, needsProfile } = useAuth();
+  const { loading, session, accountRoute } = useAuth();
   const [notFound, setNotFound] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
 
@@ -43,7 +43,7 @@ export default function HandleLink() {
     (async () => {
       if (loading) return;
       // Not ready to resolve yet — stash the target and let the gate come back here.
-      if (!session || needsProfile) {
+      if (!session || accountRoute !== "ready") {
         setPendingLink(`/u/${clean}`);
         return;
       }
@@ -60,12 +60,12 @@ export default function HandleLink() {
     return () => {
       active = false;
     };
-  }, [loading, session, needsProfile, clean]);
+  }, [loading, session, accountRoute, clean]);
 
   if (loading) return <Spinner />;
   // Signed out / mid-onboarding: send through the gate; pending target is stashed.
   if (!session) return <Redirect href="/welcome" />;
-  if (needsProfile) return <Redirect href="/profile-setup" />;
+  if (accountRoute !== "ready") return <Redirect href="/" />;
   if (target) return <Redirect href={target} />;
 
   if (notFound) {

@@ -36,6 +36,8 @@ export interface Profile {
   // existing Marks still show their author, but discovery/interaction is gated.
   account_status: "active" | "deactivated" | "suspended";
   deactivated_at: string | null;
+  onboarding_completed: boolean;
+  walkthrough_completed_at: string | null;
   /** Protected moderation capability (§53). Never settable by the client. */
   is_admin: boolean;
   created_at: string;
