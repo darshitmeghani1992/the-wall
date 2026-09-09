@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
 import type { Profile, Wall } from "./types";
+import { requireExactCount } from "./result-contract";
 
 /** Shared Wall client data over the shipped walls, membership, and P0 RLS contracts. */
 
@@ -89,6 +90,22 @@ export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
 export async function getWall(wallId: string): Promise<Wall | null> {
   const { data } = await supabase.from("walls").select("*").eq("id", wallId).maybeSingle();
   return (data as Wall) ?? null;
+}
+
+/**
+ * Resolve another person's Personal Wall without turning a transport failure
+ * into a false "private" state. A successful zero-row RLS response remains
+ * null, deliberately conflating private and missing; actual query errors throw.
+ */
+export async function getReadablePersonalWall(ownerId: string): Promise<Wall | null> {
+  const { data, error } = await supabase
+    .from("walls")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("type", "personal")
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Wall | null) ?? null;
 }
 
 /** Auth-bound, non-enumerating capability result from the shipped P0 RPC. */
@@ -187,6 +204,22 @@ export async function getAccessibleSharedWalls(userId: string): Promise<Wall[]> 
   return [...owned, ...joined]
     .filter((wall, index, walls) => walls.findIndex((candidate) => candidate.id === wall.id) === index)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/**
+ * Count only public Shared Walls owned by another person. Private Walls are
+ * excluded even when the current viewer is independently entitled to see one;
+ * this profile statistic is a public catalogue count, not a relationship view.
+ */
+export async function getPublicSharedWallCount(ownerId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("walls")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", ownerId)
+    .eq("type", "shared")
+    .eq("visibility", "public");
+  if (error) throw error;
+  return requireExactCount(count, "The public Wall count wasn't available.");
 }
 
 /**

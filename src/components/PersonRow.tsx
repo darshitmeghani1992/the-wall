@@ -6,24 +6,27 @@ import { Text } from "./Text";
 
 export function PersonRow({
   profile,
+  detail,
   action,
+  secondaryAction,
   disabled,
+  secondaryDisabled,
   onAction,
+  onSecondaryAction,
   onPress,
 }: {
   profile: Profile;
+  detail?: string;
   action?: string;
+  secondaryAction?: string;
   disabled?: boolean;
+  secondaryDisabled?: boolean;
   onAction?: () => void;
+  onSecondaryAction?: () => void;
   onPress?: () => void;
 }) {
-  return (
-    <Pressable
-      accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={onPress ? `Open @${profile.handle}'s Wall` : undefined}
-      onPress={onPress}
-      style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}
-    >
+  const identity = (
+    <>
       <View
         style={{
           width: 50,
@@ -45,33 +48,68 @@ export function PersonRow({
       </View>
       <View style={{ flex: 1 }}>
         <Text variant="headline" numberOfLines={1}>{profile.display_name}</Text>
-        <Text variant="body" color={colors.outline}>@{profile.handle}</Text>
+        <Text variant="body" color={colors.outline} numberOfLines={1}>
+          @{profile.handle}{detail ? ` · ${detail}` : ""}
+        </Text>
       </View>
-      {action ? (
+    </>
+  );
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}>
+      {onPress ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${action} @${profile.handle}`}
-          disabled={disabled || !onAction}
-          onPress={(event) => {
-            event.stopPropagation();
-            onAction?.();
-          }}
-          style={{
-            minHeight: 44,
-            minWidth: 78,
-            paddingHorizontal: 12,
-            borderRadius: radius.card,
-            borderWidth: action === "Friends" || action === "Sent" ? 1 : 2,
-            borderColor: colors.ink,
-            backgroundColor: action === "Accept" ? markColors.brandYellow : colors.card,
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: disabled ? 0.5 : 1,
-          }}
+          accessibilityLabel={`Open @${profile.handle}'s Wall`}
+          onPress={onPress}
+          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12, minHeight: 50 }}
         >
-          <Text variant="label">{action}</Text>
+          {identity}
         </Pressable>
+      ) : (
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12, minHeight: 50 }}>
+          {identity}
+        </View>
+      )}
+      {action || secondaryAction ? (
+        <View style={{ alignItems: "flex-end", gap: 6 }}>
+          {action ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${action} @${profile.handle}`}
+              accessibilityState={{ disabled: disabled || !onAction }}
+              disabled={disabled || !onAction}
+              onPress={onAction}
+              style={{
+                minHeight: 44,
+                minWidth: 78,
+                paddingHorizontal: 12,
+                borderRadius: radius.card,
+                borderWidth: action === "Friends" || action === "Sent" ? 1 : 2,
+                borderColor: colors.ink,
+                backgroundColor: action === "Accept" ? markColors.brandYellow : colors.card,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: disabled ? 0.5 : 1,
+              }}
+            >
+              <Text variant="label">{action}</Text>
+            </Pressable>
+          ) : null}
+          {secondaryAction ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${secondaryAction} @${profile.handle}`}
+              accessibilityState={{ disabled: secondaryDisabled || !onSecondaryAction }}
+              disabled={secondaryDisabled || !onSecondaryAction}
+              onPress={onSecondaryAction}
+              style={{ minHeight: 44, paddingHorizontal: 8, justifyContent: "center", opacity: secondaryDisabled ? 0.5 : 1 }}
+            >
+              <Text variant="label" color={colors.outline}>{secondaryAction.toUpperCase()}</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
-    </Pressable>
+    </View>
   );
 }
