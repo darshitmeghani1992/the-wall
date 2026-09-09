@@ -16,7 +16,7 @@ import { supabase } from "./supabase";
 import { getProfile } from "./profiles";
 import type { Profile } from "./types";
 import { allocateMediaSessionGeneration, protectedMediaCache } from "./mark-media";
-import { shouldResetProtectedResumeState } from "./mark-media-writer";
+import { authEventEffects } from "./mark-media-writer";
 import { resetProtectedMediaUploads } from "./upload";
 import { getCurrentAccountRoute } from "./account";
 import { AccountRouteFence, type AccountRoute, type AccountRouteToken } from "./onboarding-contract";
@@ -121,19 +121,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
       const nextSubject = s?.user.id ?? null;
       const previousSubject = authSubjectRef.current;
+      const effects = authEventEffects(event, previousSubject, nextSubject);
+
+      // Refreshing the same person's token/user metadata cannot disturb an active
+      // protected upload or flash the account gate. The session object alone changes.
+      if (effects.mode === "session_only") {
+        setSession(s);
+        return;
+      }
+
       // Fence the old identity before any awaited cleanup can yield back to a stale load.
       authSubjectRef.current = nextSubject;
       const eventToken = currentRouteFence.begin(nextSubject);
-      protectedMediaCache.clearAll();
-      setSessionGeneration(allocateMediaSessionGeneration());
+      if (effects.clearProtectedMedia) protectedMediaCache.clearAll();
+      if (effects.rotateMediaGeneration) setSessionGeneration(allocateMediaSessionGeneration());
       setSession(s);
-      setAccountRoute(null);
-      setProfile(null);
-      setLoading(true);
-      if (shouldResetProtectedResumeState(event, previousSubject, nextSubject)) {
+      if (effects.clearAccountState) {
+        setAccountRoute(null);
+        setProfile(null);
+      }
+      if (effects.showRouteLoading) setLoading(true);
+      if (effects.resetProtectedResume) {
         try { await resetProtectedMediaUploads(); } catch { /* Identity is already fenced locally. */ }
       }
       if (!currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) return;
+      if (!effects.refreshAccountState) return;
       try {
         await loadAccountState(s, eventToken);
       } catch {

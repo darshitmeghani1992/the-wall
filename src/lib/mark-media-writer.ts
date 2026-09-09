@@ -209,6 +209,61 @@ export function shouldResetProtectedResumeState(
   return previousSubject !== undefined && previousSubject !== null && previousSubject !== nextSubject;
 }
 
+export type AuthEventEffects = {
+  mode: "session_only" | "refresh_account" | "identity_boundary";
+  rotateMediaGeneration: boolean;
+  clearProtectedMedia: boolean;
+  clearAccountState: boolean;
+  showRouteLoading: boolean;
+  refreshAccountState: boolean;
+  resetProtectedResume: boolean;
+};
+
+/**
+ * One production contract for the auth/media seam. Routine same-subject token/user refreshes
+ * must not interrupt an active upload; identity boundaries retain the complete isolation reset.
+ */
+export function authEventEffects(
+  event: string,
+  previousSubject: string | null | undefined,
+  nextSubject: string | null,
+): AuthEventEffects {
+  const sameAuthenticatedSubject = previousSubject !== undefined
+    && previousSubject !== null
+    && previousSubject === nextSubject;
+  if (sameAuthenticatedSubject && (event === "TOKEN_REFRESHED" || event === "USER_UPDATED")) {
+    return {
+      mode: "session_only",
+      rotateMediaGeneration: false,
+      clearProtectedMedia: false,
+      clearAccountState: false,
+      showRouteLoading: false,
+      refreshAccountState: false,
+      resetProtectedResume: false,
+    };
+  }
+  if (sameAuthenticatedSubject) {
+    return {
+      mode: "refresh_account",
+      rotateMediaGeneration: false,
+      clearProtectedMedia: false,
+      clearAccountState: false,
+      showRouteLoading: false,
+      refreshAccountState: true,
+      resetProtectedResume: false,
+    };
+  }
+  return {
+    mode: "identity_boundary",
+    rotateMediaGeneration: true,
+    clearProtectedMedia: true,
+    clearAccountState: true,
+    showRouteLoading: true,
+    refreshAccountState: true,
+    resetProtectedResume: shouldResetProtectedResumeState(event, previousSubject, nextSubject),
+  };
+}
+
 /** TUS resume URLs must be an exact, opaque child of the validated endpoint. */
 export function isAllowedProtectedResumeUrl(value: unknown, endpoint: string): value is string {
   if (typeof value !== "string") return false;

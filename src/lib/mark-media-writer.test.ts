@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { advanceMediaDraft, cancelMediaDraft, createMediaMark, createMediaMarkGuarded, createMediaWriterDraft, isAllowedProtectedResumeUrl, MediaWriterError, parseCreateMediaMark, parseMediaCancellation, parseMediaReservation, parseMediaStatuses, parseMediaUploaded, parseProtectedResumeIndex, prepareMediaMarkRequest, protectedResumeEntryMatches, removeProtectedResumeScope, shouldResetProtectedResumeState, type MediaWriterDraft } from "./mark-media-writer.ts";
+import { advanceMediaDraft, authEventEffects, cancelMediaDraft, createMediaMark, createMediaMarkGuarded, createMediaWriterDraft, isAllowedProtectedResumeUrl, MediaWriterError, parseCreateMediaMark, parseMediaCancellation, parseMediaReservation, parseMediaStatuses, parseMediaUploaded, parseProtectedResumeIndex, prepareMediaMarkRequest, protectedResumeEntryMatches, removeProtectedResumeScope, shouldResetProtectedResumeState, type MediaWriterDraft } from "./mark-media-writer.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { TextSubmissionLock } from "./mark-writer-contract.ts";
 
@@ -32,6 +32,29 @@ async function main() {
   assert.equal(shouldResetProtectedResumeState("SIGNED_IN", undefined, WALL), false);
   assert.equal(shouldResetProtectedResumeState("SIGNED_IN", WALL, CLIENT), true);
   assert.equal(shouldResetProtectedResumeState("SIGNED_OUT", WALL, null), true);
+  for (const event of ["TOKEN_REFRESHED", "USER_UPDATED"]) {
+    assert.deepEqual(authEventEffects(event, WALL, WALL), {
+      mode: "session_only",
+      rotateMediaGeneration: false,
+      clearProtectedMedia: false,
+      clearAccountState: false,
+      showRouteLoading: false,
+      refreshAccountState: false,
+      resetProtectedResume: false,
+    }, `${event} preserves generation, resume, cache, account state, and routing for the same actor`);
+  }
+  for (const [event, previous, next] of [["SIGNED_IN", WALL, CLIENT], ["SIGNED_OUT", WALL, null]] as const) {
+    const effects = authEventEffects(event, previous, next);
+    assert.equal(effects.mode, "identity_boundary");
+    assert.equal(effects.rotateMediaGeneration, true);
+    assert.equal(effects.clearProtectedMedia, true);
+    assert.equal(effects.clearAccountState, true);
+    assert.equal(effects.showRouteLoading, true);
+    assert.equal(effects.refreshAccountState, true);
+    assert.equal(effects.resetProtectedResume, true);
+  }
+  assert.match(authSource, /const effects = authEventEffects\(event, previousSubject, nextSubject\);[\s\S]*if \(effects\.mode === "session_only"\) \{\s*setSession\(s\);\s*return;/,
+    "the production auth listener wires same-subject refreshes to a session-only early return");
   const reservationRaw = { status: "ready", upload_id: UPLOAD, bucket: "mark-media", path: `staging/${WALL}/${UPLOAD}/source`, expires_at: EXPIRY };
   assert.deepEqual(parseMediaReservation(reservationRaw, WALL, 0), {
     status: "ready", uploadId: UPLOAD, bucket: "mark-media", path: reservationRaw.path, expiresAt: EXPIRY,
