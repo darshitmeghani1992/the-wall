@@ -8,7 +8,7 @@
 - Engineering production-ready MVP estimate: **approximately 55.5%**.
 - Feature implementation estimate: **approximately 65%**.
 - **AIOS-certified current progress: pending.** The 55.5% figure is an engineering-progress estimate, not an AIOS certification claim.
-- Certification target before this evidence correction: exact commit `18e5fbec3dbdfb9e4f9e5c5f53e60ddc5fac39c1` on `codex/resume-mvp-sep8`.
+- Current functional certification evidence head: exact commit `f1a22a19c21cf9b6b46b69054fc4e39d801e697c` on `codex/resume-mvp-sep8` (draft PR #21, CI-only). This handoff-only documentation update does not change application behavior.
 - Full AIOS certification still requires an independent Reviewer session followed by independent QA on the exact reviewed version. The authoring session cannot self-certify under the Reviewer Charter.
 - Production/release readiness remains materially lower because hosted Supabase, physical-device QA,
   accessibility, universal links/store fallback, and release builds are not yet fully verified.
@@ -18,12 +18,16 @@
 
 ## Verification at this checkpoint
 
-- Fresh author-side verification on exact commit `18e5fbec3dbdfb9e4f9e5c5f53e60ddc5fac39c1`: `npm run typecheck` passes.
+- Fresh author-side verification on the current functional code: `npm run typecheck` passes.
 - Full-repository `npm run lint` completes with **0 errors and 12 warnings**. Earlier wording that said four warnings was incomplete and is superseded by this result.
 - Expo production export previously passed for **iOS** and **Android** at the same functional branch head.
+- GitHub Actions **CI run 123** on exact commit `f1a22a19c21cf9b6b46b69054fc4e39d801e697c` completed successfully on draft PR #21.
+  - `Type-check & lint`: **SUCCESS**.
+  - `DB security suite (SEC-001 + FP-C2)`: **SUCCESS**.
+  - The DB job executed `bash supabase/tests/run_tests.sh` against a PostgreSQL 16 service successfully.
 - The repository has no `npm test` script; do not claim an npm unit-test suite was run from that command.
 - The SQL security suite is present under `supabase/tests/`, including blocking, reactions, anonymity, media, approved-writer, contribution, notifications, moderation and account-lifecycle coverage.
-- The current Mac verification environment has no local `psql`, Docker, or Supabase CLI available, so the SQL suite was **not re-executed in this checkpoint**. Prior independently verified P0/security evidence remains preserved but must not be silently extended to newer Sep 9 application changes.
+- The current Mac verification environment has no local `psql`, Docker, or Supabase CLI, but the SQL suite was re-executed successfully in GitHub Actions CI on the exact draft-PR head above.
 - Independent AIOS Reviewer/QA certification of the Sep 9 additions is still pending. Codex Replay failed to connect; the local Claude runner is incompatible/unauthenticated. Codex Security is being pursued as a partial independent security review but does not replace full Reviewer + QA certification.
 - Physical iOS/Android interaction QA and hosted Supabase interoperability are still open.
 
@@ -80,14 +84,15 @@ The total is intentionally conservative and is **not AIOS-certified yet**. Sourc
 ## AIOS certification state
 
 - **Prior exact-version approvals remain valid only for the versions they originally reviewed.**
-- Sep 9 additions listed above are currently **implemented / author-verified**, not fully AIOS-certified.
+- Sep 9 additions listed above are currently **implemented / author-verified with green CI**, not fully AIOS-certified.
 - Required gate: independent Reviewer issues APPROVE on one exact commit → independent QA executes acceptance behavior on that same approved version (or a version re-reviewed after any fix) → only then recalculate and label current progress AIOS-certified.
 - Any application-code change after Reviewer APPROVE invalidates that approval until re-review.
+- Draft PR #21 exists solely to provide mechanical CI/review evidence. It must not be merged or used to deploy without the appropriate Founder gate.
 
 ## Active critical path from ~55% toward beta readiness
 
 1. Complete independent AIOS Reviewer → QA certification of the current Sep 9 additions.
-2. Run the protected-media database/runtime suites against clean PostgreSQL and reconcile all failures.
+2. Run/extend the protected-media runtime and race suites as required and reconcile all failures.
 3. Verify protected-media API/worker and signed reads against hosted Supabase without weakening the reviewed contract.
 4. Finish and device-test the integrated text/photo/voice/video composer and protected media playback on physical iOS/Android.
 5. Finish remaining Personal-Wall owner controls, approved-writer management and edge/error states.
@@ -100,11 +105,11 @@ The total is intentionally conservative and is **not AIOS-certified yet**. Sourc
 
 ## Verification boundary
 
-**Verified now (author-side):** current source typechecks; full-repo lint has zero errors and 12 warnings; iOS and Android Expo exports succeeded at the current functional branch head; the newly implemented social, Shared-Wall, account and safety paths are source-integrated against existing backend contracts.
+**Verified now (mechanically):** current source typechecks; full-repo lint has zero errors; iOS and Android Expo exports succeeded at the current functional branch head; GitHub Actions CI run 123 passed both Type-check/Lint and the PostgreSQL 16 DB security suite on exact commit `f1a22a19c21cf9b6b46b69054fc4e39d801e697c`.
 
-**Independently verified from prior exact versions:** previously recorded P0 authorization/security and protected-media source-review evidence only. Do not extend those approvals to newer code without exact-version review.
+**Independently verified from prior exact versions:** previously recorded P0 authorization/security and protected-media source-review evidence only. Do not extend those Reviewer approvals to newer code without exact-version review.
 
-**Still pending:** independent Reviewer/QA on the Sep 9 additions, SQL-suite re-execution on a suitable database runtime, hosted Supabase migrations/runtime, physical-device interaction and media QA, accessibility, push delivery, HTTPS universal/app links, production cleanup jobs, release signing/distribution and public-release approval.
+**Still pending:** independent Reviewer/QA on the Sep 9 additions, hosted Supabase migrations/runtime, physical-device interaction and media QA, accessibility, push delivery, HTTPS universal/app links, production cleanup jobs, release signing/distribution and public-release approval.
 
 ## Founder / production gates
 
