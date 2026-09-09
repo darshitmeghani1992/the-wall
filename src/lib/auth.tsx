@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -14,6 +15,8 @@ import { supabase } from "./supabase";
 import { getProfile } from "./profiles";
 import type { Profile } from "./types";
 import { allocateMediaSessionGeneration, protectedMediaCache } from "./mark-media";
+import { shouldResetProtectedResumeState } from "./mark-media-writer";
+import { resetProtectedMediaUploads } from "./upload";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -49,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionGeneration, setSessionGeneration] = useState(allocateMediaSessionGeneration);
   const [mediaAppActive, setMediaAppActive] = useState(AppState.currentState === "active");
   const [profile, setProfile] = useState<Profile | null>(null);
+  const authSubjectRef = useRef<string | null | undefined>(undefined);
 
   async function loadProfile(s: Session | null) {
     if (!s?.user) {
@@ -62,12 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
+      if (authSubjectRef.current === undefined) authSubjectRef.current = data.session?.user.id ?? null;
       setSession(data.session);
       await loadProfile(data.session);
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
+      const nextSubject = s?.user.id ?? null;
+      if (shouldResetProtectedResumeState(event, authSubjectRef.current, nextSubject)) {
+        await resetProtectedMediaUploads();
+      }
+      authSubjectRef.current = nextSubject;
       protectedMediaCache.clearAll();
       setSessionGeneration(allocateMediaSessionGeneration());
       setSession(s);
@@ -130,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     protectedMediaCache.clearAll();
+    try { await resetProtectedMediaUploads(); } catch { /* Supabase sign-out must still proceed. */ }
     await supabase.auth.signOut();
     setProfile(null);
   }
