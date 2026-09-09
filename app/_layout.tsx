@@ -28,6 +28,7 @@ export default function RootLayout() {
           <Stack.Screen name="shared/create" options={{ presentation: "modal" }} />
           <Stack.Screen name="shared/[id]" />
           <Stack.Screen name="u/[handle]" />
+          <Stack.Screen name="s/[id]" />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>
