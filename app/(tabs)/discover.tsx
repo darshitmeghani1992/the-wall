@@ -119,7 +119,7 @@ export default function PeopleScreen() {
                 profile={profile}
                 action={label}
                 disabled={busyId === profile.id || relationship === "outgoing" || relationship === "friends"}
-                onPress={relationship === "friends" ? () => openWall(profile.id) : undefined}
+                onPress={() => openWall(profile.id)}
                 onAction={relationship === "none"
                   ? () => perform(profile.id, () => sendFriendRequest(userId!, profile.id))
                   : relationship === "incoming"
@@ -144,6 +144,7 @@ export default function PeopleScreen() {
                     profile={profile}
                     action="Accept"
                     disabled={busyId === profile.id}
+                    onPress={() => openWall(profile.id)}
                     onAction={() => perform(profile.id, () => acceptFriendRequest(userId!, profile.id))}
                   />
                   <Pressable
