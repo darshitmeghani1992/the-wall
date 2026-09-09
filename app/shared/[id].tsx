@@ -11,7 +11,16 @@ import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { useAuth } from "@/lib/auth";
 import { searchPeople, type PersonRelationship } from "@/lib/friendships";
-import { getWall, getWallMembers, inviteToWall, removeWallMember, type WallMemberWithProfile } from "@/lib/walls";
+import {
+  deleteSharedWall,
+  getWall,
+  getWallMembers,
+  inviteToWall,
+  leaveSharedWall,
+  removeWallMember,
+  transferSharedWallOwnership,
+  type WallMemberWithProfile,
+} from "@/lib/walls";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { getProfile } from "@/lib/profiles";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
@@ -33,12 +42,14 @@ export default function SharedWallScreen() {
   const [memberResults, setMemberResults] = useState<PersonRelationship[]>([]);
   const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
   const [memberSearching, setMemberSearching] = useState(false);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
 
   const isOwner = Boolean(wall && session?.user.id === wall.owner_id);
+  const isAcceptedMember = members.some((member) => member.user_id === session?.user.id && member.status === "accepted");
 
   const refreshMembers = useCallback(async (wallId: string) => {
     try {
@@ -86,7 +97,7 @@ export default function SharedWallScreen() {
   });
 
   const { summaries, toggle } = useWallReactions(marks, session?.user.id);
-  const canLeaveMark = Boolean(wall) && wall?.contribution_policy !== "nobody" || Boolean(wall?.visibility === "private");
+  const canLeaveMark = Boolean(wall) && (isOwner || wall?.visibility === "public" || isAcceptedMember);
 
   async function searchMembers() {
     if (!session?.user.id || !memberQuery.trim()) return;
@@ -137,6 +148,95 @@ export default function SharedWallScreen() {
     ]);
   }
 
+  function confirmTransfer(member: WallMemberWithProfile) {
+    if (!wall || !member.profile || member.status !== "accepted") return;
+    const nextOwner = member.profile;
+    Alert.alert(
+      "Transfer ownership?",
+      `${nextOwner.display_name} will become the owner. You'll remain an accepted member, and only they will be able to manage or delete this Wall.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Transfer",
+          onPress: async () => {
+            setMemberBusyId(member.user_id);
+            try {
+              await transferSharedWallOwnership(wall.id, member.user_id);
+              setWall({ ...wall, owner_id: member.user_id });
+              setOwner(nextOwner);
+              await refreshMembers(wall.id);
+            } catch (cause: any) {
+              Alert.alert("Couldn't transfer ownership", cause?.message ?? "Please try again.");
+            } finally {
+              setMemberBusyId(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function manageMember(member: WallMemberWithProfile) {
+    if (member.status !== "accepted") {
+      confirmRemove(member);
+      return;
+    }
+    const name = member.profile?.display_name ?? "Member";
+    Alert.alert(name, "Manage this member's access.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Make owner", onPress: () => confirmTransfer(member) },
+      { text: "Remove", style: "destructive", onPress: () => confirmRemove(member) },
+    ]);
+  }
+
+  function confirmLeave() {
+    if (!wall) return;
+    Alert.alert("Leave this Shared Wall?", "You'll lose access if the Wall is private. The owner can invite you again later.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Leave",
+        style: "destructive",
+        onPress: async () => {
+          setLifecycleBusy(true);
+          try {
+            await leaveSharedWall(wall.id);
+            router.replace("/(tabs)/walls");
+          } catch (cause: any) {
+            Alert.alert("Couldn't leave", cause?.message ?? "Please try again.");
+          } finally {
+            setLifecycleBusy(false);
+          }
+        },
+      },
+    ]);
+  }
+
+  function confirmDelete() {
+    if (!wall) return;
+    Alert.alert(
+      "Delete this Shared Wall?",
+      `"${wall.name}" and its Marks will be permanently deleted. This can't be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Wall",
+          style: "destructive",
+          onPress: async () => {
+            setLifecycleBusy(true);
+            try {
+              await deleteSharedWall(wall.id);
+              router.replace("/(tabs)/walls");
+            } catch (cause: any) {
+              Alert.alert("Couldn't delete the Wall", cause?.message ?? "Please try again.");
+            } finally {
+              setLifecycleBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
 
   return (
@@ -165,9 +265,11 @@ export default function SharedWallScreen() {
               <Button label={`Leave a Mark on ${wall.name}`} variant="yellow" onPress={() => router.push(`/create?sharedWallId=${wall.id}&wallName=${encodeURIComponent(wall.name)}`)} />
             ) : null}
             {wall.visibility === "public" ? (
-              <Button label="Invite" variant="primary" onPress={() => inviteToSharedWall(wall.id, wall.name)} />
+              <>
+                <Button label="Invite" variant="primary" onPress={() => inviteToSharedWall(wall.id, wall.name)} />
+                <Button label="Share ↗" variant="ghost" onPress={() => shareSharedWall(wall.id, wall.name)} />
+              </>
             ) : null}
-            <Button label="Share ↗" variant="ghost" onPress={() => shareSharedWall(wall.id, wall.name)} />
           </View>
 
           {isOwner && wall.visibility === "private" ? (
@@ -212,14 +314,28 @@ export default function SharedWallScreen() {
                     <PersonRow
                       key={member.user_id}
                       profile={member.profile}
-                      action={member.status === "accepted" ? "Remove" : "Revoke"}
+                      action={member.status === "accepted" ? "Manage" : "Revoke"}
                       disabled={memberBusyId === member.user_id}
                       onPress={() => router.push(`/person/${member.user_id}`)}
-                      onAction={() => confirmRemove(member)}
+                      onAction={() => manageMember(member)}
                     />
                   ) : null)}
                 </View>
               ) : null}
+            </View>
+          ) : null}
+
+          {(isOwner || isAcceptedMember) ? (
+            <View style={{ borderTopWidth: 1, borderTopColor: colors.outlineVariant, paddingTop: 14, marginBottom: 20 }}>
+              {isOwner ? (
+                <Pressable disabled={lifecycleBusy} onPress={confirmDelete} style={{ minHeight: 44, justifyContent: "center" }}>
+                  <Text variant="label" color={colors.error}>DELETE SHARED WALL</Text>
+                </Pressable>
+              ) : (
+                <Pressable disabled={lifecycleBusy} onPress={confirmLeave} style={{ minHeight: 44, justifyContent: "center" }}>
+                  <Text variant="label" color={colors.error}>LEAVE SHARED WALL</Text>
+                </Pressable>
+              )}
             </View>
           ) : null}
 
