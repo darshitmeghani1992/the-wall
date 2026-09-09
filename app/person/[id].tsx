@@ -127,12 +127,23 @@ export default function PersonWall() {
             </View>
           </View>
 
-          <View
-            accessibilityLabel={`${followersCount} followers, ${followingCount} following`}
-            style={{ flexDirection: "row", gap: 20, marginBottom: 18, paddingLeft: 70 }}
-          >
-            <Text variant="label" color={colors.onSurfaceVariant}>{followersCount} FOLLOWERS</Text>
-            <Text variant="label" color={colors.onSurfaceVariant}>{followingCount} FOLLOWING</Text>
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 18, paddingLeft: 62 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${followersCount} followers. Open @${profile.handle}'s followers.`}
+              onPress={() => router.push(`/social/followers?userId=${profile.id}`)}
+              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}
+            >
+              <Text variant="label" color={colors.onSurfaceVariant}>{followersCount} FOLLOWERS</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${followingCount} following. Open who @${profile.handle} follows.`}
+              onPress={() => router.push(`/social/following?userId=${profile.id}`)}
+              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}
+            >
+              <Text variant="label" color={colors.onSurfaceVariant}>{followingCount} FOLLOWING</Text>
+            </Pressable>
           </View>
 
           {profile.bio ? (
