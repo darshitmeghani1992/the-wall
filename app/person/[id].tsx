@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
@@ -11,6 +11,7 @@ import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getRelationship, type RelationshipState } from "@/lib/friendships";
+import { blockUser, isUserBlockedByMe, unblockUser } from "@/lib/blocks";
 import { getFollowCounts, isFollowing, followUser, unfollowUser } from "@/lib/follows";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
@@ -33,6 +34,8 @@ export default function PersonWall() {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [safetyBusy, setSafetyBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
@@ -48,12 +51,13 @@ export default function PersonWall() {
       }
       setLoading(true);
       try {
-        const [person, personalWall, state, followState, counts] = await Promise.all([
+        const [person, personalWall, state, followState, counts, blocked] = await Promise.all([
           getProfile(id),
           getPersonalWall(id),
           getRelationship(session.user.id, id),
           isFollowing(session.user.id, id),
           getFollowCounts(id),
+          isUserBlockedByMe(id),
         ]);
         if (!active) return;
         setProfile(person);
@@ -62,6 +66,7 @@ export default function PersonWall() {
         setFollowing(followState);
         setFollowersCount(counts.followers);
         setFollowingCount(counts.following);
+        setBlockedByMe(blocked);
         if (personalWall) setMarks(await getWallMarks(personalWall.id));
       } catch (cause: any) {
         if (active) setError(cause?.message ?? "Couldn't open this Wall.");
@@ -80,9 +85,49 @@ export default function PersonWall() {
   const { summaries, toggle } = useWallReactions(marks, session?.user.id);
 
   const canLeaveMark = useMemo(
-    () => relationship === "friends" && Boolean(wall) && wall?.contribution_policy !== "nobody",
-    [relationship, wall],
+    () => !blockedByMe && relationship === "friends" && Boolean(wall) && wall?.contribution_policy !== "nobody",
+    [blockedByMe, relationship, wall],
   );
+
+  async function toggleBlock() {
+    if (!profile || safetyBusy) return;
+    if (!blockedByMe) {
+      Alert.alert(
+        "Block this person?",
+        `@${profile.handle} will no longer be able to interact with you, and your existing social connection will be removed.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Block",
+            style: "destructive",
+            onPress: async () => {
+              setSafetyBusy(true);
+              try {
+                await blockUser(profile.id);
+                setBlockedByMe(true);
+                setFollowing(false);
+                setRelationship("none");
+              } catch (cause: any) {
+                Alert.alert("Couldn't block them", cause?.message ?? "Please try again.");
+              } finally {
+                setSafetyBusy(false);
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+    setSafetyBusy(true);
+    try {
+      await unblockUser(profile.id);
+      setBlockedByMe(false);
+    } catch (cause: any) {
+      Alert.alert("Couldn't unblock them", cause?.message ?? "Please try again.");
+    } finally {
+      setSafetyBusy(false);
+    }
+  }
 
   async function toggleFollow() {
     if (!profile || followBusy) return;
@@ -128,78 +173,30 @@ export default function PersonWall() {
           </View>
 
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 18, paddingLeft: 62 }}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${followersCount} followers. Open @${profile.handle}'s followers.`}
-              onPress={() => router.push(`/social/followers?userId=${profile.id}`)}
-              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}
-            >
+            <Pressable accessibilityRole="button" accessibilityLabel={`${followersCount} followers. Open @${profile.handle}'s followers.`} onPress={() => router.push(`/social/followers?userId=${profile.id}`)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
               <Text variant="label" color={colors.onSurfaceVariant}>{followersCount} FOLLOWERS</Text>
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${followingCount} following. Open who @${profile.handle} follows.`}
-              onPress={() => router.push(`/social/following?userId=${profile.id}`)}
-              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}
-            >
+            <Pressable accessibilityRole="button" accessibilityLabel={`${followingCount} following. Open who @${profile.handle} follows.`} onPress={() => router.push(`/social/following?userId=${profile.id}`)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
               <Text variant="label" color={colors.onSurfaceVariant}>{followingCount} FOLLOWING</Text>
             </Pressable>
           </View>
 
-          {profile.bio ? (
-            <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: -6, marginBottom: 18 }}>
-              {profile.bio}
-            </Text>
-          ) : null}
-          <View style={{ marginBottom: 18 }}>
-            <SocialLinks profile={profile} />
-          </View>
+          {profile.bio ? <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: -6, marginBottom: 18 }}>{profile.bio}</Text> : null}
+          <View style={{ marginBottom: 18 }}><SocialLinks profile={profile} /></View>
 
           <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginBottom: canLeaveMark ? 24 : 12 }}>
-            {canLeaveMark ? (
-              <Button
-                label={`Leave a Mark for @${profile.handle}`}
-                variant="yellow"
-                onPress={() => router.push(`/create?wallId=${wall.id}&recipientId=${profile.id}&handle=${encodeURIComponent(profile.handle)}`)}
-              />
-            ) : null}
-            <Button
-              label="Share ↗"
-              variant="primary"
-              onPress={() => sharePersonWall(profile.handle, profile.display_name)}
-            />
-            {wall.visibility === "public" ? (
-              <Button
-                label={following ? "Following ✓" : "Follow"}
-                variant={following ? "ghost" : "primary"}
-                loading={followBusy}
-                onPress={toggleFollow}
-              />
-            ) : null}
+            {canLeaveMark ? <Button label={`Leave a Mark for @${profile.handle}`} variant="yellow" onPress={() => router.push(`/create?wallId=${wall.id}&recipientId=${profile.id}&handle=${encodeURIComponent(profile.handle)}`)} /> : null}
+            {!blockedByMe ? <Button label="Share ↗" variant="primary" onPress={() => sharePersonWall(profile.handle, profile.display_name)} /> : null}
+            {!blockedByMe && wall.visibility === "public" ? <Button label={following ? "Following ✓" : "Follow"} variant={following ? "ghost" : "primary"} loading={followBusy} onPress={toggleFollow} /> : null}
+            <Button label="Report" variant="ghost" onPress={() => router.push(`/report-user/${profile.id}`)} />
+            <Button label={blockedByMe ? "Unblock" : "Block"} variant="ghost" loading={safetyBusy} onPress={toggleBlock} />
           </View>
-          {!canLeaveMark ? (
-            <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>
-              {relationship === "friends" ? "This Wall isn't accepting Marks right now." : "Become friends to leave a Mark here."}
-            </Text>
-          ) : null}
+          {!canLeaveMark ? <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>{blockedByMe ? "You blocked this person. Unblock them to interact again." : relationship === "friends" ? "This Wall isn't accepting Marks right now." : "Become friends to leave a Mark here."}</Text> : null}
 
           {marks.length ? (
-            <Masonry
-              data={marks}
-              keyFor={(mark) => mark.id}
-              estimate={estimateMarkHeight}
-              renderItem={(mark, index) => (
-                <MarkView
-                  mark={mark}
-                  enter={dropIds.current.has(mark.id) ? "drop" : "settle"}
-                  enterIndex={index}
-                  highlight={mark.id === justCreatedId}
-                  reactions={summaries[mark.id]}
-                  onToggleReaction={(emoji) => toggle(mark.id, emoji)}
-                  onOpenDetail={() => setSelectedMark(mark)}
-                />
-              )}
-            />
+            <Masonry data={marks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
+              <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
+            )} />
           ) : (
             <View style={{ paddingVertical: 36, alignItems: "center" }}>
               <Text variant="headline">No Marks yet</Text>
