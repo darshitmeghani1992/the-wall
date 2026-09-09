@@ -34,6 +34,7 @@ export async function searchPeople(userId: string, handle: string): Promise<Pers
       .select("*")
       .ilike("handle", `%${query}%`)
       .neq("id", userId)
+      .eq("account_status", "active") // §82 — deactivated accounts aren't discoverable
       .order("handle")
       .limit(20),
     getRelationships(userId),

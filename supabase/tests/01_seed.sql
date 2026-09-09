@@ -64,10 +64,10 @@ insert into blocks (blocker_id, blocked_id) values
 insert into marks (id, wall_id, author_id, type, text, anonymous, status) values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-   '11111111-1111-1111-1111-111111111111','sticky','active mark', false, 'active'),
+   '11111111-1111-1111-1111-111111111111','text','active mark', false, 'active'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-   '11111111-1111-1111-1111-111111111111','sticky','pending mark', false, 'pending');
+   '11111111-1111-1111-1111-111111111111','text','pending mark', false, 'pending');
 
 -- ── [C2] Batch-C fixtures (additive; existing fixtures above unchanged) ──────
 -- Private SHARED wall owned by O. visibility 'private' + contribution 'nobody'
@@ -89,6 +89,7 @@ values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
 -- Membership on W_PS: B accepted (view/contribute fixture), F pending (accept /
 -- invite-notification fixture). O needs no membership row (owner via walls.owner_id).
 insert into wall_members (wall_id, user_id, role, status) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','member','accepted'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','22222222-2222-2222-2222-222222222222','member','accepted'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','77777777-7777-7777-7777-777777777777','member','pending');
 

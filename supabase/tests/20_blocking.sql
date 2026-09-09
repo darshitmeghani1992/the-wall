@@ -14,7 +14,7 @@ begin
   begin
     insert into marks (wall_id, author_id, type, text)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            '33333333-3333-3333-3333-333333333333','sticky','sneaky');
+            '33333333-3333-3333-3333-333333333333','text','sneaky');
   exception when others then denied := true;  -- can_contribute() false → RLS WITH CHECK fails
   end;
   if not denied then raise exception 'AC-S4 FAIL: blocked user contributed a mark'; end if;
@@ -25,8 +25,7 @@ ROLLBACK;
 -- ── AC-S5: interaction eligibility for a blocked pair → all DENIED ───────────
 -- Part 1: block overrides an accepted friendship + contribution eligibility.
 BEGIN;
-set local role authenticated;
-set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O
+reset role; -- protected contract-level verification; app cannot call these predicates
 do $$
 begin
   if are_friends('44444444-4444-4444-4444-444444444444',
