@@ -22,11 +22,6 @@ export interface WallMember {
 export type WallMemberWithProfile = WallMember & { profile: Profile | null };
 export type PendingInvite = WallMember & { wall: Wall | null };
 
-/**
- * Create a Shared Wall owned by the signed-in user. Public walls accept Marks
- * from anyone who can view them; private walls are member-gated by the verified
- * wall_members / can_view_wall / can_contribute contracts in migrations 0005/0009.
- */
 export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
   const { data: authData } = await supabase.auth.getUser();
   const uid = authData.user?.id;
@@ -75,6 +70,28 @@ export async function getOwnedSharedWalls(userId: string): Promise<Wall[]> {
   return (data ?? []) as Wall[];
 }
 
+export async function getJoinedSharedWalls(userId: string): Promise<Wall[]> {
+  const { data: memberships, error: membershipError } = await supabase
+    .from("wall_members")
+    .select("wall_id, created_at")
+    .eq("user_id", userId)
+    .eq("status", "accepted")
+    .order("created_at", { ascending: false });
+  if (membershipError) throw membershipError;
+  const ids = (memberships ?? []).map((row) => row.wall_id);
+  if (!ids.length) return [];
+
+  const { data, error } = await supabase
+    .from("walls")
+    .select("*")
+    .in("id", ids)
+    .eq("type", "shared");
+  if (error) throw error;
+
+  const byId = new Map(((data ?? []) as Wall[]).map((wall) => [wall.id, wall]));
+  return ids.map((id) => byId.get(id)).filter((wall): wall is Wall => Boolean(wall));
+}
+
 export async function getWallMembers(wallId: string): Promise<WallMemberWithProfile[]> {
   const { data, error } = await supabase
     .from("wall_members")
@@ -119,6 +136,26 @@ export async function leaveSharedWall(wallId: string): Promise<void> {
   if (!uid) throw new Error("You need to be signed in to leave a Shared Wall.");
   await removeWallMember(wallId, uid);
   track("Shared Wall Left", { wall_id: wallId });
+}
+
+export async function transferSharedWallOwnership(wallId: string, targetUserId: string): Promise<void> {
+  const { data, error } = await supabase.rpc("transfer_shared_wall_ownership", {
+    p_wall_id: wallId,
+    p_target_user_id: targetUserId,
+  });
+  if (error) throw error;
+  if (data !== true) throw new Error("Ownership can only be transferred to an active accepted member.");
+  track("Shared Wall Ownership Transferred", { wall_id: wallId, target_user_id: targetUserId });
+}
+
+export async function deleteSharedWall(wallId: string): Promise<void> {
+  const { error } = await supabase
+    .from("walls")
+    .delete()
+    .eq("id", wallId)
+    .eq("type", "shared");
+  if (error) throw error;
+  track("Shared Wall Deleted", { wall_id: wallId });
 }
 
 export async function acceptWallMembership(wallId: string): Promise<void> {
