@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
+import { Input } from "@/components/Input";
+import { PersonRow } from "@/components/PersonRow";
 import { Masonry } from "@/components/Masonry";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { useAuth } from "@/lib/auth";
-import { getWall } from "@/lib/walls";
+import { searchPeople, type PersonRelationship } from "@/lib/friendships";
+import { getWall, getWallMembers, inviteToWall, removeWallMember, type WallMemberWithProfile } from "@/lib/walls";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { getProfile } from "@/lib/profiles";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
@@ -17,16 +20,6 @@ import { inviteToSharedWall, shareSharedWall } from "@/lib/share";
 import type { Profile, Wall } from "@/lib/types";
 import { colors, markColors, radius } from "@/theme";
 
-/**
- * Shared Wall view — the PUBLIC slice. Reuses the Masonry + MarkView wall surface
- * with staggered realtime arrivals and reactions. Shows the wall name, its owner,
- * its Marks, and the Invite / Share / "Leave a Mark on {name}" CTAs.
- *
- * The "can leave a Mark" check here is UX convenience only — the REAL boundary is
- * the server's `can_contribute` RLS on the marks INSERT. Member rosters, private
- * access, and member counts/avatars are C2 (need `wall_members`), so this screen
- * shows none of them rather than faking membership.
- */
 export default function SharedWallScreen() {
   const router = useRouter();
   const { id, justCreated } = useLocalSearchParams<{ id: string; justCreated?: string }>();
@@ -35,10 +28,25 @@ export default function SharedWallScreen() {
   const [wall, setWall] = useState<Wall | null>(null);
   const [owner, setOwner] = useState<Profile | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
+  const [members, setMembers] = useState<WallMemberWithProfile[]>([]);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberResults, setMemberResults] = useState<PersonRelationship[]>([]);
+  const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
+  const [memberSearching, setMemberSearching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
+
+  const isOwner = Boolean(wall && session?.user.id === wall.owner_id);
+
+  const refreshMembers = useCallback(async (wallId: string) => {
+    try {
+      setMembers(await getWallMembers(wallId));
+    } catch {
+      setMembers([]);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -54,126 +62,191 @@ export default function SharedWallScreen() {
           return;
         }
         setWall(w);
-        const [ownerProfile, ms] = await Promise.all([getProfile(w.owner_id), getWallMarks(w.id)]);
+        const [ownerProfile, ms, roster] = await Promise.all([
+          getProfile(w.owner_id),
+          getWallMarks(w.id),
+          getWallMembers(w.id).catch(() => []),
+        ]);
         if (!active) return;
         setOwner(ownerProfile);
         setMarks(ms);
+        setMembers(roster);
       } catch (cause: any) {
         if (active) setError(cause?.message ?? "Couldn't open this Shared Wall.");
       } finally {
         if (active) setLoading(false);
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [id]);
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
-    setMarks((cur) => (cur.some((m) => m.id === mark.id) ? cur : [mark, ...cur]));
+    setMarks((current) => (current.some((item) => item.id === mark.id) ? current : [mark, ...current]));
   });
 
   const { summaries, toggle } = useWallReactions(marks, session?.user.id);
+  const canLeaveMark = Boolean(wall) && wall?.contribution_policy !== "nobody" || Boolean(wall?.visibility === "private");
 
-  const canLeaveMark = Boolean(wall) && wall?.contribution_policy !== "nobody";
-  const isOwner = Boolean(wall && session?.user.id === wall.owner_id);
-
-  if (loading) {
-    return (
-      <Screen>
-        <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} />
-      </Screen>
-    );
+  async function searchMembers() {
+    if (!session?.user.id || !memberQuery.trim()) return;
+    setMemberSearching(true);
+    try {
+      setMemberResults(await searchPeople(session.user.id, memberQuery));
+    } catch (cause: any) {
+      Alert.alert("Couldn't search", cause?.message ?? "Please try again.");
+    } finally {
+      setMemberSearching(false);
+    }
   }
+
+  async function invitePerson(personId: string) {
+    if (!wall) return;
+    setMemberBusyId(personId);
+    try {
+      await inviteToWall(wall.id, personId);
+      await refreshMembers(wall.id);
+      setMemberResults((current) => current.filter((item) => item.profile.id !== personId));
+    } catch (cause: any) {
+      Alert.alert("Couldn't invite them", cause?.message ?? "They may already have an invite.");
+    } finally {
+      setMemberBusyId(null);
+    }
+  }
+
+  function confirmRemove(member: WallMemberWithProfile) {
+    if (!wall) return;
+    const name = member.profile?.display_name ?? "this member";
+    Alert.alert("Remove member?", `${name} will lose access to this Shared Wall.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          setMemberBusyId(member.user_id);
+          try {
+            await removeWallMember(wall.id, member.user_id);
+            await refreshMembers(wall.id);
+          } catch (cause: any) {
+            Alert.alert("Couldn't remove them", cause?.message ?? "Please try again.");
+          } finally {
+            setMemberBusyId(null);
+          }
+        },
+      },
+    ]);
+  }
+
+  if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
 
   return (
     <Screen>
-      <Pressable
-        onPress={() => router.back()}
-        hitSlop={10}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-        style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}
-      >
-        <Text variant="label" color={colors.outline}>
-          ‹ BACK
-        </Text>
+      <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back" style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}>
+        <Text variant="label" color={colors.outline}>‹ BACK</Text>
       </Pressable>
 
       {error || !wall ? (
-        <Text variant="body" color={colors.error} style={{ marginTop: 12 }}>
-          {error ?? "This Shared Wall isn't available."}
-        </Text>
+        <Text variant="body" color={colors.error} style={{ marginTop: 12 }}>{error ?? "This Shared Wall isn't available."}</Text>
       ) : (
         <>
-          <View
-            style={{
-              backgroundColor: colors.ink,
-              padding: 10,
-              borderRadius: radius.card,
-              marginTop: 8,
-              marginBottom: 16,
-            }}
-          >
+          <View style={{ backgroundColor: colors.ink, padding: 10, borderRadius: radius.card, marginTop: 8, marginBottom: 16 }}>
             <Text variant="label" color={markColors.brandYellow} style={{ textAlign: "center" }}>
-              SHARED WALL · PUBLIC
+              SHARED WALL · {wall.visibility.toUpperCase()}
             </Text>
           </View>
 
-          <Text variant="display" style={{ fontSize: 26 }}>
-            {wall.name}
-          </Text>
+          <Text variant="display" style={{ fontSize: 26 }}>{wall.name}</Text>
           <Text variant="body" color={colors.outline} style={{ marginTop: 4 }}>
-            {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} marks
+            {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} marks · {members.filter((m) => m.status === "accepted").length} members
           </Text>
 
           <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginTop: 16, marginBottom: 16 }}>
             {canLeaveMark ? (
-              <Button
-                label={`Leave a Mark on ${wall.name}`}
-                variant="yellow"
-                onPress={() =>
-                  router.push(`/create?sharedWallId=${wall.id}&wallName=${encodeURIComponent(wall.name)}`)
-                }
-              />
+              <Button label={`Leave a Mark on ${wall.name}`} variant="yellow" onPress={() => router.push(`/create?sharedWallId=${wall.id}&wallName=${encodeURIComponent(wall.name)}`)} />
             ) : null}
-            <Button label="Invite" variant="primary" onPress={() => inviteToSharedWall(wall.id, wall.name)} />
+            {wall.visibility === "public" ? (
+              <Button label="Invite" variant="primary" onPress={() => inviteToSharedWall(wall.id, wall.name)} />
+            ) : null}
             <Button label="Share ↗" variant="ghost" onPress={() => shareSharedWall(wall.id, wall.name)} />
           </View>
 
-          {isOwner ? (
-            <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginBottom: 18 }}>
-              Anyone with the link can view and add to this public Shared Wall. Private walls and member
-              controls are coming soon.
-            </Text>
+          {isOwner && wall.visibility === "private" ? (
+            <View style={{ borderWidth: 2, borderColor: colors.ink, borderRadius: radius.card, padding: 14, marginBottom: 22 }}>
+              <Text variant="headline">Members</Text>
+              <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 3, marginBottom: 12 }}>
+                Search by handle. Access begins only after the person accepts the invite.
+              </Text>
+              <Input
+                prefix="@"
+                value={memberQuery}
+                onChangeText={setMemberQuery}
+                onSubmitEditing={searchMembers}
+                placeholder="handle"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              <Pressable onPress={searchMembers} disabled={!memberQuery.trim() || memberSearching} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
+                {memberSearching ? <ActivityIndicator color={markColors.brandYellow} /> : <Text variant="label">SEARCH TO INVITE</Text>}
+              </Pressable>
+
+              {memberResults.map(({ profile }) => {
+                const existing = members.find((m) => m.user_id === profile.id);
+                const action = existing ? (existing.status === "accepted" ? "Member" : "Invited") : "Invite";
+                return (
+                  <PersonRow
+                    key={profile.id}
+                    profile={profile}
+                    action={action}
+                    disabled={memberBusyId === profile.id || Boolean(existing)}
+                    onPress={() => router.push(`/person/${profile.id}`)}
+                    onAction={existing ? undefined : () => invitePerson(profile.id)}
+                  />
+                );
+              })}
+
+              {members.length ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text variant="label" color={colors.outline}>CURRENT ACCESS</Text>
+                  {members.map((member) => member.profile ? (
+                    <PersonRow
+                      key={member.user_id}
+                      profile={member.profile}
+                      action={member.status === "accepted" ? "Remove" : "Revoke"}
+                      disabled={memberBusyId === member.user_id}
+                      onPress={() => router.push(`/person/${member.user_id}`)}
+                      onAction={() => confirmRemove(member)}
+                    />
+                  ) : null)}
+                </View>
+              ) : null}
+            </View>
           ) : null}
 
           {marks.length ? (
             <Masonry
               data={marks}
-              keyFor={(m) => m.id}
+              keyFor={(mark) => mark.id}
               estimate={estimateMarkHeight}
-              renderItem={(m, index) => (
+              renderItem={(mark, index) => (
                 <MarkView
-                  mark={m}
-                  enter={dropIds.current.has(m.id) ? "drop" : "settle"}
+                  mark={mark}
+                  enter={dropIds.current.has(mark.id) ? "drop" : "settle"}
                   enterIndex={index}
-                  highlight={m.id === justCreatedId}
-                  reactions={summaries[m.id]}
-                  onToggleReaction={(emoji) => toggle(m.id, emoji)}
-                  onOpenDetail={() => setSelectedMark(m)}
+                  highlight={mark.id === justCreatedId}
+                  reactions={summaries[mark.id]}
+                  onToggleReaction={(emoji) => toggle(mark.id, emoji)}
+                  onOpenDetail={() => setSelectedMark(mark)}
                 />
               )}
             />
           ) : (
             <View style={{ paddingVertical: 36, alignItems: "center" }}>
               <Text variant="headline">No Marks yet</Text>
-              <Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>
-                Be the first to leave a Mark on {wall.name}.
-              </Text>
+              <Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>Be the first to leave a Mark on {wall.name}.</Text>
             </View>
           )}
+
           <MarkDetailModal
             mark={selectedMark}
             viewerId={session?.user.id}
