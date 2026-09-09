@@ -73,7 +73,7 @@ export default function Walkthrough() {
         ))}
       </View>
 
-      <Button label="Open my Wall" variant="yellow" onPress={() => router.replace("/home")} />
+      <Button label="Open my Wall" variant="yellow" onPress={() => router.replace("/wall")} />
     </Screen>
   );
 }
