@@ -15,6 +15,7 @@ import { colors, markColors, radius, shadow } from "@/theme";
 export default function WallsScreen() {
   const router = useRouter();
   const { session, profile } = useAuth();
+  const userId = session?.user.id;
   const [wall, setWall] = useState<Wall | null>(null);
   const [markCount, setMarkCount] = useState(0);
   const [ownedSharedWalls, setOwnedSharedWalls] = useState<Wall[]>([]);
@@ -25,17 +26,17 @@ export default function WallsScreen() {
     useCallback(() => {
       let active = true;
       (async () => {
-        if (!session?.user) return;
+        if (!userId) return;
         setLoading(true);
         const [w, owned, joined] = await Promise.all([
-          getPersonalWall(session.user.id),
-          getOwnedSharedWalls(session.user.id),
-          getJoinedSharedWalls(session.user.id),
+          getPersonalWall(userId),
+          getOwnedSharedWalls(userId),
+          getJoinedSharedWalls(userId),
         ]);
         if (!active) return;
         setWall(w);
         setOwnedSharedWalls(owned);
-        setJoinedSharedWalls(joined.filter((item) => item.owner_id !== session.user.id));
+        setJoinedSharedWalls(joined.filter((item) => item.owner_id !== userId));
         if (w) {
           const { count } = await supabase
             .from("marks")
@@ -47,7 +48,7 @@ export default function WallsScreen() {
         if (active) setLoading(false);
       })();
       return () => { active = false; };
-    }, [session?.user?.id]),
+    }, [userId]),
   );
 
   function SharedWallCard({ sharedWall, owned }: { sharedWall: Wall; owned: boolean }) {
