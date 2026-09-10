@@ -98,9 +98,11 @@ do $$ declare o_wall uuid; begin
     raise exception '55 FAIL: approved writer capability is false';
   end if;
 end $$;
-insert into marks (id,wall_id,author_id,type,text)
-  select '55000000-0000-0000-0000-000000000001',id,auth.uid(),'text','approved writer control'
-    from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+do $$ declare o_wall uuid; result jsonb; begin
+ select id into strict o_wall from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
+ result:=create_mark('55000000-0000-4000-8000-000000000001',o_wall,'text','approved writer control',null,false,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '55 FAIL: approved writer creation returned %',result; end if;
+end $$;
 
 -- O removes exactly G's approval.
 set local "test.uid" = '44444444-4444-4444-4444-444444444444'; -- O
@@ -114,17 +116,13 @@ end $$;
 
 -- G's auth-bound capability and real write are both revoked.
 set local "test.uid" = '88888888-8888-8888-8888-888888888888'; -- G
-do $$ declare o_wall uuid; rejected boolean:=false; begin
+do $$ declare o_wall uuid; result jsonb; begin
   select id into o_wall from walls where owner_id='44444444-4444-4444-4444-444444444444' and type='personal';
   if current_user_can_contribute(o_wall) then
     raise exception '55 FAIL: removed writer capability remains true';
   end if;
-  begin
-    insert into marks (id,wall_id,author_id,type,text)
-      values ('55000000-0000-0000-0000-000000000002',o_wall,auth.uid(),'text','revoked writer attack');
-  exception when insufficient_privilege then rejected:=true;
-  end;
-  if not rejected then raise exception '55 FAIL: removed writer created a Mark'; end if;
+  result:=create_mark('55000000-0000-4000-8000-000000000002',o_wall,'text','revoked writer attack',null,false,false,0,'{}'::uuid[]);
+  if result->>'status'<>'unavailable' then raise exception '55 FAIL: removed writer creation returned %',result; end if;
 end $$;
 \echo '55 (owner-only + block + revoke)   : PASS  (only owner manages; no block; revocable)'
 ROLLBACK;

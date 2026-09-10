@@ -20,19 +20,20 @@
 
 -- ── Core isolation + F1 lifecycle (one transaction, role switches) ───────────
 BEGIN;
--- A posts a plain secret on O's public shared wall (W_O; contribution 'everyone'),
--- explicitly sending the content in `text` to prove the SERVER moves it.
+-- A posts a plain secret on O's public shared wall through create_mark to prove
+-- the server moves content off the base row.
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author)
-insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc60',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','super secret', false, true);
+do $$ declare result jsonb; begin
+ result:=create_mark('60000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','super secret',null,false,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '60 FAIL: secret creation returned %',result; end if;
+ perform set_config('test.mark60_secret',result->>'mark_id',true);
+end $$;
 
 -- Base row: text moved off at the write boundary.
 do $$
 begin
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
+  if (select text from marks where id = current_setting('test.mark60_secret')::uuid) is not null then
     raise exception '60 FAIL: secret base row text was not nulled';
   end if;
 end $$;
@@ -47,7 +48,7 @@ set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (not the o
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-cccccccccc60');
+  r := reveal_secret(current_setting('test.mark60_secret')::uuid);
   if (r->>'reason') <> 'not_authorized' or r ? 'content' then
     raise exception '60 FAIL: non-owner reveal_secret leaked content or was authorized: %', r;
   end if;
@@ -61,7 +62,7 @@ set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (wall owne
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-cccccccccc60');
+  r := reveal_secret(current_setting('test.mark60_secret')::uuid);
   if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'super secret' then
     raise exception '60 FAIL: wall owner could not reveal the secret content: %', r;
   end if;
@@ -74,7 +75,7 @@ set local role service_role;
 set local "test.uid" = '';
 do $$
 begin
-  if (select content from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc60')
+  if (select content from mark_secrets where mark_id = current_setting('test.mark60_secret')::uuid)
      is distinct from 'super secret' then
     raise exception '60 FAIL: moderation path could not read the secret content';
   end if;
@@ -106,11 +107,11 @@ do $$
 declare rejected boolean := false;
 begin
   begin
-    update marks set text = 'leak' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60';
+    update marks set text = 'leak' where id = current_setting('test.mark60_secret')::uuid;
   exception when check_violation then rejected := true;   -- marks_secret_text_null
   end;
   if not rejected then raise exception '60 FAIL: author UPDATE of secret text was not rejected'; end if;
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
+  if (select text from marks where id = current_setting('test.mark60_secret')::uuid) is not null then
     raise exception '60 FAIL: secret base text non-NULL after author UPDATE attempt';
   end if;
 end $$;
@@ -126,11 +127,11 @@ do $$
 declare rejected boolean := false;
 begin
   begin
-    update marks set text = 'leak' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60';
+    update marks set text = 'leak' where id = current_setting('test.mark60_secret')::uuid;
   exception when others then rejected := true;   -- MARK_CONTENT_AUTHOR_ONLY or check_violation
   end;
   if not rejected then raise exception '60 FAIL: owner UPDATE of secret text was not rejected'; end if;
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
+  if (select text from marks where id = current_setting('test.mark60_secret')::uuid) is not null then
     raise exception '60 FAIL: secret base text non-NULL after owner UPDATE attempt';
   end if;
 end $$;
@@ -155,16 +156,17 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc61',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','anon super secret', true, true);
+do $$ declare result jsonb; begin
+ result:=create_mark('60000000-0000-4000-8000-000000000002','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','anon super secret',null,true,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '60 FAIL: Anonymous Secret creation returned %',result; end if;
+ perform set_config('test.mark60_anon_secret',result->>'mark_id',true);
+end $$;
 do $$
 begin
-  if (select author_id from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc61') is not null then
+  if (select author_id from marks where id = current_setting('test.mark60_anon_secret')::uuid) is not null then
     raise exception '60 FAIL: anon+secret base row leaks author_id';
   end if;
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc61') is not null then
+  if (select text from marks where id = current_setting('test.mark60_anon_secret')::uuid) is not null then
     raise exception '60 FAIL: anon+secret base row leaks text';
   end if;
 end $$;
@@ -175,7 +177,7 @@ set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner)
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-cccccccccc61');
+  r := reveal_secret(current_setting('test.mark60_anon_secret')::uuid);
   if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'anon super secret' then
     raise exception '60 FAIL: owner could not reveal anon+secret content: %', r;
   end if;

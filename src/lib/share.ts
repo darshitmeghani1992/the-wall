@@ -91,13 +91,6 @@ export async function shareSharedWall(wallId: string, name: string): Promise<voi
   track("Wall Shared", { context: "shared" });
 }
 
-/** Invite people to a Shared Wall (growth intent), tracked distinctly. */
-export async function inviteToSharedWall(wallId: string, name: string): Promise<void> {
-  const link = sharedWallDeepLink(wallId);
-  await Share.share({ message: `Join our Shared Wall "${name}" on The Wall ✦ leave your Mark\n${link}` });
-  track("Shared Wall Invite Sent", { wall_id: wallId });
-}
-
 /** Can this Mark's content be reproduced in a share sheet? Secrets never can. */
 export function isMarkShareable(mark: MarkWithAuthor): boolean {
   if (mark.secret) return false; // recipient-only by intent

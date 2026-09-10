@@ -1,66 +1,49 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
-import type { Mark, MarkPayload, MarkType } from "./types";
+import type { Mark } from "./types";
+import type { MediaWriterRpc } from "./mark-media-writer";
+import {
+  executeTextMarkSubmission,
+  type CreateTextMarkResult,
+  type PreparedTextMarkSubmission,
+} from "./mark-writer-contract";
 
-/** The fields the Writer collects for a new mark. */
-export type MarkDraft = {
-  wallId: string;
-  type: MarkType;
-  text?: string | null;
-  color?: string | null;
-  anonymous?: boolean;
-  /** Secret MODE (orthogonal to type). The server extracts content into the
-   * RLS-gated side table and nulls the base text (migration 0004/0011). */
-  secret?: boolean;
-  mediaUrl?: string | null;
-  payload?: MarkPayload | null;
+/** Exact actor-bound C4 writer surface shipped by migrations 0023/0024. */
+export const protectedMediaWriterRpc: MediaWriterRpc = {
+  async begin(args) {
+    const { data, error } = await supabase.rpc("begin_media_upload", args);
+    if (error) throw error;
+    return data;
+  },
+  async uploaded(args) {
+    const { data, error } = await supabase.rpc("mark_media_uploaded", args);
+    if (error) throw error;
+    return data;
+  },
+  async status(args) {
+    const { data, error } = await supabase.rpc("get_media_upload_status", args);
+    if (error) throw error;
+    return data;
+  },
+  async cancel(args) {
+    const { data, error } = await supabase.rpc("cancel_media_upload", args);
+    if (error) throw error;
+    return data;
+  },
+  async create(args) {
+    const { data, error } = await supabase.rpc("create_mark", args);
+    if (error) throw error;
+    return data;
+  },
 };
 
-/**
- * Insert a new mark authored by the signed-in user. The DB trigger
- * `marks_set_defaults` sets its status (active, or pending when the wall
- * requires approval) and guards anonymity; realtime then drops it onto the wall.
- */
-export async function createMark(draft: MarkDraft): Promise<Mark> {
-  const { data: authData } = await supabase.auth.getUser();
-  const uid = authData.user?.id ?? null;
-  const rotation = Math.round((Math.random() * 5 - 2.5) * 10) / 10; // -2.5°..+2.5°
-
-  const { data, error } = await supabase
-    .from("marks")
-    .insert({
-      wall_id: draft.wallId,
-      // Server trigger `marks_null_anon` is the real enforcement (it NULLs
-      // author_id for anonymous marks); this just avoids sending it over the wire.
-      author_id: draft.anonymous ? null : uid,
-      type: draft.type,
-      text: draft.text ?? null,
-      color: draft.color ?? null,
-      anonymous: draft.anonymous ?? false,
-      // Secret is server-enforced: the BEFORE-INSERT trigger moves `text` into the
-      // RLS-gated mark_secrets side table and nulls it here when secret is true.
-      secret: draft.secret ?? false,
-      media_url: draft.mediaUrl ?? null,
-      payload: draft.payload ?? null,
-      rotation,
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-
-  const isAnonymous = draft.anonymous ?? false;
-  track("Mark Created", {
-    mark_type: draft.type,
-    is_anonymous: isAnonymous,
-    wall_id: draft.wallId,
+/** C4 text-only writer path. Media creation remains on its separately gated flow. */
+export async function createTextMark(submission: PreparedTextMarkSubmission): Promise<CreateTextMarkResult> {
+  return executeTextMarkSubmission(submission, async (args) => {
+    const { data, error } = await supabase.rpc("create_mark", args);
+    if (error) throw error;
+    return data;
   });
-  // Funnel sub-events for the privacy-flavored Mark choices. These are frontend
-  // intent signals only — they do NOT assert server-side privacy (true Secret
-  // privacy is a C2 RLS dependency; anonymity IS server-enforced by the F4
-  // triggers in 0002, so "Anonymous Mark Created" is truthful).
-  if (isAnonymous) track("Anonymous Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
-  if (draft.secret) track("Secret Mark Created", { mark_type: draft.type, wall_id: draft.wallId });
-  return data as Mark;
 }
 
 export type Author = {

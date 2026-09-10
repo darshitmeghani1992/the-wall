@@ -32,8 +32,8 @@ export default function Welcome() {
       </View>
 
       <View style={{ gap: 12, paddingBottom: 12 }}>
-        <Button label="Get started" variant="yellow" onPress={() => router.push("/about")} />
-        <Button label="I already have an account" variant="ghost" onPress={() => router.push("/sign-in")} />
+        <Button label="Get started" variant="yellow" onPress={() => router.push("/sign-in")} />
+        <Button label="Already have a Wall? Sign in" variant="ghost" onPress={() => router.push("/sign-in")} />
       </View>
     </Screen>
   );

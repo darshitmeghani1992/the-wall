@@ -6,18 +6,26 @@
 -- ── AC-S4: blocked user contributes a Mark to the other's wall → DENIED ──────
 -- O blocks C; C attempts to post to O's wall (contribution_policy 'everyone').
 BEGIN;
+reset role;
+do $$ declare wid uuid; begin
+  update walls set visibility='public', contribution_policy='everyone'
+    where owner_id='44444444-4444-4444-4444-444444444444' and type='personal'
+    returning id into strict wid;
+  perform set_config('test.wall20_blocked',wid::text,true);
+end $$;
 set local role authenticated;
 set local "test.uid" = '33333333-3333-3333-3333-333333333333';   -- C (blocked by O)
 do $$
-declare denied boolean := false;
+declare result jsonb;
 begin
-  begin
-    insert into marks (wall_id, author_id, type, text)
-    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            '33333333-3333-3333-3333-333333333333','text','sneaky');
-  exception when others then denied := true;  -- can_contribute() false → RLS WITH CHECK fails
-  end;
-  if not denied then raise exception 'AC-S4 FAIL: blocked user contributed a mark'; end if;
+  result := create_mark(
+    '20000000-0000-4000-8000-000000000001',
+    current_setting('test.wall20_blocked')::uuid,
+    'text', 'sneaky', null, false, false, 0, '{}'::uuid[]
+  );
+  if result->>'status' <> 'unavailable' then
+    raise exception 'AC-S4 FAIL: blocked contribution returned %', result;
+  end if;
 end $$;
 ROLLBACK;
 \echo 'AC-S4 (blocked contribution)       : PASS  (denied even on an ''everyone'' wall)'

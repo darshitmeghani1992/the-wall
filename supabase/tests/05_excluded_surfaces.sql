@@ -24,9 +24,14 @@ values ('05000000-0000-0000-0000-000000000001','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa
         '11111111-1111-1111-1111-111111111111','poll','legacy');
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';
-do $$ declare n int; rejected boolean := false; begin
+do $$ declare n int; rejected boolean := false; result jsonb; begin
   select count(*) into n from marks where id='05000000-0000-0000-0000-000000000001';
   if n <> 0 then raise exception '05 FAIL: retired Mark visible to app'; end if;
+  result:=create_mark('05000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','doodle','retired',null,false,false,0,'{}'::uuid[]);
+  if result <> '{"status":"invalid"}'::jsonb then
+    raise exception '05 FAIL: canonical writer accepted retired Mark type: %',result;
+  end if;
+  -- Retain a separate direct-write denial to prove the final cutover cannot be bypassed.
   begin
     insert into marks (wall_id,author_id,type,text)
       values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',auth.uid(),'doodle','retired');
@@ -36,7 +41,7 @@ end $$;
 ROLLBACK;
 \echo '05 (retired Mark types)            : PASS  (preserved for moderation; app-hidden)'
 
--- Compatibility phase: only text/null-media inserts survive.
+-- Final cutover: every authenticated direct Mark INSERT is denied atomically.
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111'; -- accepted W_O member
@@ -59,7 +64,7 @@ do $$ declare rejected_photo boolean:=false; rejected_url boolean:=false; reject
   end if;
 end $$;
 ROLLBACK;
-\echo '05 (legacy media Mark insert)      : PASS  (photo/url/payload fail atomically)'
+\echo '05 (legacy media Mark insert)      : PASS  (direct photo/url/payload fail atomically)'
 
 -- SECURITY DEFINER hygiene: protected helpers are fixed-path and not app-callable.
 do $$ declare bad int; begin

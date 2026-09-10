@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
+import { isAccountRoute, runForExpectedSubject, type AccountRoute } from "./onboarding-contract";
 
 /**
  * Account lifecycle (Master Spec §82). Deactivation is a recoverable 30-day
@@ -20,8 +21,48 @@ export async function deactivateAccount(): Promise<void> {
 }
 
 /** Reactivate the signed-in account (returning within the recovery window). */
-export async function reactivateAccount(): Promise<void> {
-  const { error } = await supabase.rpc("reactivate_account");
+export async function reactivateAccount(expectedUserId: string): Promise<void> {
+  await runForExpectedSubject(
+    expectedUserId,
+    async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id ?? null;
+    },
+    async () => {
+      const { error } = await supabase.rpc("reactivate_account");
+      if (error) throw error;
+      track("Account Reactivated");
+    },
+  );
+}
+
+/** Parameterless and actor-bound: callers cannot ask about another account. */
+export async function getCurrentAccountRoute(): Promise<AccountRoute> {
+  const { data, error } = await supabase.rpc("get_current_account_route");
   if (error) throw error;
-  track("Account Reactivated");
+  return isAccountRoute(data) ? data : "unavailable";
+}
+
+/** Normal completion and Skip both persist before navigation; Help replay never calls this. */
+export async function completeWalkthrough(expectedUserId: string): Promise<void> {
+  await runForExpectedSubject(
+    expectedUserId,
+    async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id ?? null;
+    },
+    async () => {
+      const completedAt = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({ walkthrough_completed_at: completedAt })
+        .eq("id", expectedUserId)
+        .select("id")
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error("Your walkthrough could not be saved.");
+    },
+  );
 }

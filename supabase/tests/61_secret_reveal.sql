@@ -16,14 +16,15 @@
 
 -- ── One-time reveal: first ok, second consumed (single transaction) ──────────
 BEGIN;
--- A (author) posts a secret on O's wall; the extract trigger moves content off
+-- A (author) posts a secret through create_mark; the writer moves content off
 -- the base row into mark_secrets with a default 1-hour expires_at, opened_at NULL.
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author)
-insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
-values ('cccccccc-cccc-cccc-cccc-ccccccccc611',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','one time only', false, true);
+do $$ declare result jsonb; begin
+ result:=create_mark('61000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','one time only',null,false,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '61 FAIL: one-time Secret creation returned %',result; end if;
+ perform set_config('test.mark61_once',result->>'mark_id',true);
+end $$;
 
 -- O (owner/recipient) reveals: first call wins.
 reset role;
@@ -32,7 +33,7 @@ set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-ccccccccc611');
+  r := reveal_secret(current_setting('test.mark61_once')::uuid);
   if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'one time only' then
     raise exception '61 FAIL: first reveal did not return content: %', r;
   end if;
@@ -45,7 +46,7 @@ set local role service_role;
 set local "test.uid" = '';
 do $$
 begin
-  if (select opened_at from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-ccccccccc611') is null then
+  if (select opened_at from mark_secrets where mark_id = current_setting('test.mark61_once')::uuid) is null then
     raise exception '61 FAIL: opened_at not recorded after first reveal';
   end if;
 end $$;
@@ -58,7 +59,7 @@ set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-ccccccccc611');
+  r := reveal_secret(current_setting('test.mark61_once')::uuid);
   if (r->>'ok') <> 'false' or (r->>'reason') <> 'consumed' or r ? 'content' then
     raise exception '61 FAIL: second reveal was not consumed/empty: %', r;
   end if;
@@ -68,7 +69,7 @@ end $$;
 -- Base marks.text is still NULL after the whole reveal dance.
 do $$
 begin
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-ccccccccc611') is not null then
+  if (select text from marks where id = current_setting('test.mark61_once')::uuid) is not null then
     raise exception '61 FAIL: base marks.text became non-NULL';
   end if;
 end $$;
@@ -79,17 +80,18 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
-values ('cccccccc-cccc-cccc-cccc-ccccccccc612',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','stale secret', false, true);
+do $$ declare result jsonb; begin
+ result:=create_mark('61000000-0000-4000-8000-000000000002','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','stale secret',null,false,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '61 FAIL: expiring Secret creation returned %',result; end if;
+ perform set_config('test.mark61_expired',result->>'mark_id',true);
+end $$;
 
 -- Backdate expiry into the past (as the superuser session role — no client role
 -- can UPDATE mark_secrets; this stands in for "the clock advanced past the
 -- 1-hour window").
 reset role;
 update mark_secrets set expires_at = now() - interval '1 minute'
-  where mark_id = 'cccccccc-cccc-cccc-cccc-ccccccccc612';
+  where mark_id = current_setting('test.mark61_expired')::uuid;
 
 -- O tries to reveal an expired secret → expired, no content.
 reset role;
@@ -98,7 +100,7 @@ set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-ccccccccc612');
+  r := reveal_secret(current_setting('test.mark61_expired')::uuid);
   if (r->>'ok') <> 'false' or (r->>'reason') <> 'expired' or r ? 'content' then
     raise exception '61 FAIL: expired secret did not report expired/empty: %', r;
   end if;
@@ -114,10 +116,10 @@ declare n integer;
 begin
   n := expire_secret_marks();
   if n < 1 then raise exception '61 FAIL: expire_secret_marks purged nothing (got %)', n; end if;
-  if exists (select 1 from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-ccccccccc612') then
+  if exists (select 1 from mark_secrets where mark_id = current_setting('test.mark61_expired')::uuid) then
     raise exception '61 FAIL: expired payload not purged';
   end if;
-  if (select status from marks where id = 'cccccccc-cccc-cccc-cccc-ccccccccc612') <> 'removed' then
+  if (select status from marks where id = current_setting('test.mark61_expired')::uuid) <> 'removed' then
     raise exception '61 FAIL: expired secret shell not removed from the wall';
   end if;
 end $$;
@@ -128,10 +130,11 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous, secret)
-values ('cccccccc-cccc-cccc-cccc-ccccccccc613',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','not for you', false, true);
+do $$ declare result jsonb; begin
+ result:=create_mark('61000000-0000-4000-8000-000000000003','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','not for you',null,false,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '61 FAIL: recipient-gated Secret creation returned %',result; end if;
+ perform set_config('test.mark61_gated',result->>'mark_id',true);
+end $$;
 
 -- B is authenticated but not the wall owner → not_authorized, no content, and the
 -- secret stays UNOPENED (a denied attempt must not consume it).
@@ -141,7 +144,7 @@ set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (not owner
 do $$
 declare r jsonb;
 begin
-  r := reveal_secret('cccccccc-cccc-cccc-cccc-ccccccccc613');
+  r := reveal_secret(current_setting('test.mark61_gated')::uuid);
   if (r->>'ok') <> 'false' or (r->>'reason') <> 'not_authorized' or r ? 'content' then
     raise exception '61 FAIL: non-recipient reveal was not denied/empty: %', r;
   end if;
@@ -151,7 +154,7 @@ set local role service_role;
 set local "test.uid" = '';
 do $$
 begin
-  if (select opened_at from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-ccccccccc613') is not null then
+  if (select opened_at from mark_secrets where mark_id = current_setting('test.mark61_gated')::uuid) is not null then
     raise exception '61 FAIL: a denied attempt consumed the secret (opened_at set)';
   end if;
 end $$;
@@ -177,29 +180,30 @@ end $$;
 ROLLBACK;
 
 -- ── Server rejects a Secret Mark carrying media (secret is text-only today) ───
--- Prove both layers: the authenticated compatibility boundary rejects all media,
--- while the underlying CHECK still prevents secret media for privileged writers.
+-- Prove both layers: the canonical writer rejects Secret media as invalid,
+-- while the underlying CHECK still prevents it for privileged writers.
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
 do $$
-declare rejected boolean := false; v_message text := '';
+declare result jsonb;
 begin
-  begin
-    insert into marks (id, wall_id, author_id, type, anonymous, secret, media_url)
-    values ('cccccccc-cccc-cccc-cccc-ccccccccc614',
-            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            '11111111-1111-1111-1111-111111111111','photo', false, true,
-            'https://example.test/secret.jpg');
-  exception when insufficient_privilege then
-    rejected := true;
-    get stacked diagnostics v_message = message_text;
-  end;
-  if not rejected or v_message <> 'MARK_MEDIA_UNAVAILABLE' then
-    raise exception '61 FAIL: app media boundary did not reject secret+media precisely: %', v_message;
+  result:=create_mark('61000000-0000-4000-8000-000000000004','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','photo',null,null,false,true,0,'{}'::uuid[]);
+  if result <> '{"status":"invalid"}'::jsonb then
+    raise exception '61 FAIL: canonical writer did not reject Secret media precisely: %',result;
   end if;
 end $$;
 reset role;
+-- The app action above stays authenticated. Only the trusted test owner reads
+-- the private workflow table to prove the rejected request left no side effect.
+do $$
+begin
+  if exists(select 1 from mark_creation_requests
+             where actor_id='11111111-1111-1111-1111-111111111111'
+               and request_id='61000000-0000-4000-8000-000000000004') then
+    raise exception '61 FAIL: invalid Secret media persisted a request row';
+  end if;
+end $$;
 do $$
 declare rejected boolean := false;
 begin

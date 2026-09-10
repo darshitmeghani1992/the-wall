@@ -105,23 +105,32 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid"='11111111-1111-1111-1111-111111111111';
-insert into marks(id,wall_id,author_id,type,text,anonymous) values
- ('45000000-0000-0000-0000-000000000061','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',auth.uid(),'text','named fresh',false),
- ('45000000-0000-0000-0000-000000000062','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',null,'text','anon fresh',true),
- ('45000000-0000-0000-0000-000000000063','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',auth.uid(),'text','named stale',false),
- ('45000000-0000-0000-0000-000000000064','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',null,'text','anon stale',true);
+do $$ declare r jsonb; begin
+ r:=create_mark('45000000-0000-4000-8000-000000000061','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','named fresh',null,false,false,0,'{}'::uuid[]);
+ if r->>'status'<>'created' then raise exception '45 FAIL: named fresh creation %',r; end if;
+ perform set_config('test.mark45_named_fresh',r->>'mark_id',true);
+ r:=create_mark('45000000-0000-4000-8000-000000000062','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','anon fresh',null,true,false,0,'{}'::uuid[]);
+ if r->>'status'<>'created' then raise exception '45 FAIL: anonymous fresh creation %',r; end if;
+ perform set_config('test.mark45_anon_fresh',r->>'mark_id',true);
+ r:=create_mark('45000000-0000-4000-8000-000000000063','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','named stale',null,false,false,0,'{}'::uuid[]);
+ if r->>'status'<>'created' then raise exception '45 FAIL: named stale creation %',r; end if;
+ perform set_config('test.mark45_named_stale',r->>'mark_id',true);
+ r:=create_mark('45000000-0000-4000-8000-000000000064','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','anon stale',null,true,false,0,'{}'::uuid[]);
+ if r->>'status'<>'created' then raise exception '45 FAIL: anonymous stale creation %',r; end if;
+ perform set_config('test.mark45_anon_stale',r->>'mark_id',true);
+end $$;
 reset role;
 update marks set created_at=now()-interval '11 minutes'
- where id in ('45000000-0000-0000-0000-000000000063','45000000-0000-0000-0000-000000000064');
+ where id in (current_setting('test.mark45_named_stale')::uuid,current_setting('test.mark45_anon_stale')::uuid);
 set local role authenticated;
 set local "test.uid"='11111111-1111-1111-1111-111111111111';
-delete from marks where id in ('45000000-0000-0000-0000-000000000061','45000000-0000-0000-0000-000000000062');
-delete from marks where id in ('45000000-0000-0000-0000-000000000063','45000000-0000-0000-0000-000000000064');
+delete from marks where id in (current_setting('test.mark45_named_fresh')::uuid,current_setting('test.mark45_anon_fresh')::uuid);
+delete from marks where id in (current_setting('test.mark45_named_stale')::uuid,current_setting('test.mark45_anon_stale')::uuid);
 reset role;
 do $$ begin
- if exists(select 1 from marks where id in ('45000000-0000-0000-0000-000000000061','45000000-0000-0000-0000-000000000062')) then
+ if exists(select 1 from marks where id in (current_setting('test.mark45_named_fresh')::uuid,current_setting('test.mark45_anon_fresh')::uuid)) then
    raise exception '45 FAIL: fresh named/anonymous true-sender delete failed'; end if;
- if (select count(*) from marks where id in ('45000000-0000-0000-0000-000000000063','45000000-0000-0000-0000-000000000064'))<>2 then
+ if (select count(*) from marks where id in (current_setting('test.mark45_named_stale')::uuid,current_setting('test.mark45_anon_stale')::uuid))<>2 then
    raise exception '45 FAIL: stale named/anonymous delete window bypassed'; end if;
 end $$;
 ROLLBACK;

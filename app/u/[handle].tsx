@@ -12,7 +12,7 @@ import { colors, markColors } from "@/theme";
 /**
  * Handle deep link — `thewall://u/<handle>` opens that person's Wall.
  *
- * Resolves a @handle to a profile, then routes to their Wall (or to /wall if the
+ * Resolves a @handle to a profile, then routes to their Wall (or My Wall if the
  * handle is the signed-in user's own). If the app is opened cold and signed out,
  * the intended target is stashed (pendingLink) and the auth gate returns here
  * after sign-in / onboarding — so the link isn't lost across auth.
@@ -34,7 +34,7 @@ export default function HandleLink() {
   const router = useRouter();
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const clean = String(handle ?? "").replace(/^@/, "");
-  const { loading, session, needsProfile } = useAuth();
+  const { loading, session, accountRoute } = useAuth();
   const [notFound, setNotFound] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
 
@@ -43,7 +43,7 @@ export default function HandleLink() {
     (async () => {
       if (loading) return;
       // Not ready to resolve yet — stash the target and let the gate come back here.
-      if (!session || needsProfile) {
+      if (!session || accountRoute !== "ready") {
         setPendingLink(`/u/${clean}`);
         return;
       }
@@ -53,19 +53,19 @@ export default function HandleLink() {
         setNotFound(true);
         return;
       }
-      setTarget(profile.id === session.user.id ? "/wall" : `/person/${profile.id}`);
+      setTarget(profile.id === session.user.id ? "/(tabs)/home" : `/person/${profile.id}`);
     })().catch(() => {
       if (active) setNotFound(true);
     });
     return () => {
       active = false;
     };
-  }, [loading, session, needsProfile, clean]);
+  }, [loading, session, accountRoute, clean]);
 
   if (loading) return <Spinner />;
   // Signed out / mid-onboarding: send through the gate; pending target is stashed.
   if (!session) return <Redirect href="/welcome" />;
-  if (needsProfile) return <Redirect href="/profile-setup" />;
+  if (accountRoute !== "ready") return <Redirect href="/" />;
   if (target) return <Redirect href={target} />;
 
   if (notFound) {
@@ -76,7 +76,7 @@ export default function HandleLink() {
           <Text variant="body" color={colors.outline} style={{ textAlign: "center" }}>
             That handle doesn't exist, or the link is out of date.
           </Text>
-          <Button label="Back to my Wall" variant="primary" onPress={() => router.replace("/home")} />
+          <Button label="Back to my Wall" variant="primary" onPress={() => router.replace("/(tabs)/home")} />
         </View>
       </Screen>
     );

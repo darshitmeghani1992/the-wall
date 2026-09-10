@@ -24,18 +24,19 @@
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc80',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','hi olivia');
+do $$ declare result jsonb; begin
+ result:=create_mark('80000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','hi olivia',null,false,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '80 FAIL: shared Mark creation returned %',result; end if;
+ perform set_config('test.mark80_shared',result->>'mark_id',true);
+end $$;
 reset role;
 do $$
 begin
-  if (select count(*) from notifications where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc80') <> 1 then
+  if (select count(*) from notifications where mark_id = current_setting('test.mark80_shared')::uuid) <> 1 then
     raise exception '80 FAIL: shared_wall_mark did not create exactly one notification';
   end if;
   if not exists (select 1 from notifications
-                 where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc80'
+                 where mark_id = current_setting('test.mark80_shared')::uuid
                    and user_id = '44444444-4444-4444-4444-444444444444'   -- O (owner)
                    and kind = 'shared_wall_mark'
                    and actor_id = '11111111-1111-1111-1111-111111111111') then  -- A
@@ -49,15 +50,17 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (friend of A)
-insert into marks (id, wall_id, author_id, type, text)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc81',
-        (select id from walls where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal'),
-        '88888888-8888-8888-8888-888888888888','text','hi alice');
+do $$ declare wid uuid; result jsonb; begin
+ select id into strict wid from walls where owner_id='11111111-1111-1111-1111-111111111111' and type='personal';
+ result:=create_mark('80000000-0000-4000-8000-000000000002',wid,'text','hi alice',null,false,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '80 FAIL: Personal Mark creation returned %',result; end if;
+ perform set_config('test.mark80_personal',result->>'mark_id',true);
+end $$;
 reset role;
 do $$
 begin
   if not exists (select 1 from notifications
-                 where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc81'
+                 where mark_id = current_setting('test.mark80_personal')::uuid
                    and user_id = '11111111-1111-1111-1111-111111111111'   -- A (owner)
                    and kind = 'mark_left'
                    and actor_id = '88888888-8888-8888-8888-888888888888') then  -- G
@@ -71,14 +74,15 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner posts on own wall)
-insert into marks (id, wall_id, author_id, type, text)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc82',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '44444444-4444-4444-4444-444444444444','text','my own wall');
+do $$ declare result jsonb; begin
+ result:=create_mark('80000000-0000-4000-8000-000000000003','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','my own wall',null,false,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '80 FAIL: Shared owner Mark creation returned %',result; end if;
+ perform set_config('test.mark80_self',result->>'mark_id',true);
+end $$;
 reset role;
 do $$
 begin
-  if (select count(*) from notifications where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc82') <> 0 then
+  if (select count(*) from notifications where mark_id = current_setting('test.mark80_self')::uuid) <> 0 then
     raise exception '80 FAIL: owner posting on own wall notified themselves';
   end if;
 end $$;
@@ -89,15 +93,17 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G posts ANON on A's wall
-insert into marks (id, wall_id, author_id, type, text, anonymous)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc83',
-        (select id from walls where owner_id = '11111111-1111-1111-1111-111111111111' and type = 'personal'),
-        '88888888-8888-8888-8888-888888888888','text','anon hi', true);
+do $$ declare wid uuid; result jsonb; begin
+ select id into strict wid from walls where owner_id='11111111-1111-1111-1111-111111111111' and type='personal';
+ result:=create_mark('80000000-0000-4000-8000-000000000004',wid,'text','anon hi',null,true,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '80 FAIL: Anonymous Personal Mark creation returned %',result; end if;
+ perform set_config('test.mark80_anon_personal',result->>'mark_id',true);
+end $$;
 reset role;
 do $$
 begin
   if not exists (select 1 from notifications
-                 where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc83'
+                 where mark_id = current_setting('test.mark80_anon_personal')::uuid
                    and user_id = '11111111-1111-1111-1111-111111111111'
                    and kind = 'mark_left'
                    and actor_id is null) then
@@ -152,25 +158,26 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A posts anon
-insert into marks (id, wall_id, author_id, type, text, anonymous)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc84',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','text','anon mark', true);
+do $$ declare result jsonb; begin
+ result:=create_mark('80000000-0000-4000-8000-000000000005','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','anon mark',null,true,false,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '80 FAIL: Anonymous Shared Mark creation returned %',result; end if;
+ perform set_config('test.mark80_anon_reaction',result->>'mark_id',true);
+end $$;
 reset role;
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G reacts
 insert into mark_reactions (mark_id, user_id, emoji)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc84','88888888-8888-8888-8888-888888888888','❤️');
+values (current_setting('test.mark80_anon_reaction')::uuid,'88888888-8888-8888-8888-888888888888','❤️');
 reset role;
 do $$
 begin
   -- base row must still hide the author (no de-anon)
-  if (select author_id from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc84') is not null then
+  if (select author_id from marks where id = current_setting('test.mark80_anon_reaction')::uuid) is not null then
     raise exception '80 FAIL: reaction path de-anonymized the base mark row';
   end if;
   -- the TRUE author (A, resolved from anonymous_mark_authors) is notified
   if not exists (select 1 from notifications
-                 where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc84'
+                 where mark_id = current_setting('test.mark80_anon_reaction')::uuid
                    and kind = 'reaction'
                    and user_id = '11111111-1111-1111-1111-111111111111'   -- A (true author)
                    and actor_id = '88888888-8888-8888-8888-888888888888') then  -- G
@@ -231,8 +238,13 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner invites)
-insert into wall_members (wall_id, user_id, role, status)
-values ('dddddddd-dddd-dddd-dddd-dddddddddddd','88888888-8888-8888-8888-888888888888','member','pending');
+do $$ declare r jsonb; begin
+  r:=invite_shared_wall_member('dddddddd-dddd-dddd-dddd-dddddddddddd',
+    '88888888-8888-8888-8888-888888888888');
+  if r->>'status'<>'invited' then
+    raise exception '80 FAIL: Shared-Wall invite RPC returned %',r;
+  end if;
+end $$;
 reset role;
 do $$
 begin

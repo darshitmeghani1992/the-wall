@@ -19,14 +19,19 @@ insert into wall_members values
 
 -- B leaves named + Anonymous Marks on G's friends-only Personal Wall.
 set local role authenticated; set local "test.uid"='22222222-2222-2222-2222-222222222222';
-insert into marks(id,wall_id,author_id,type,text) select
- '21000000-0000-0000-0000-000000000011',id,auth.uid(),'text','named' from walls
- where owner_id='88888888-8888-8888-8888-888888888888' and type='personal';
-insert into marks(id,wall_id,author_id,type,text,anonymous) select
- '21000000-0000-0000-0000-000000000012',id,auth.uid(),'text','anon',true from walls
- where owner_id='88888888-8888-8888-8888-888888888888' and type='personal';
+do $$ declare wid uuid; named_result jsonb; anon_result jsonb; begin
+ select id into strict wid from walls
+  where owner_id='88888888-8888-8888-8888-888888888888' and type='personal';
+ named_result := create_mark('21000000-0000-4000-8000-000000000011',wid,'text','named',null,false,false,0,'{}'::uuid[]);
+ anon_result := create_mark('21000000-0000-4000-8000-000000000012',wid,'text','anon',null,true,false,0,'{}'::uuid[]);
+ if named_result->>'status'<>'created' or anon_result->>'status'<>'created' then
+  raise exception '21 FAIL canonical Mark creation: named %, anonymous %',named_result,anon_result;
+ end if;
+ perform set_config('test.mark21_named',named_result->>'mark_id',true);
+ perform set_config('test.mark21_anon',anon_result->>'mark_id',true);
+end $$;
 set local "test.uid"='88888888-8888-8888-8888-888888888888';
-insert into mark_reactions values('21000000-0000-0000-0000-000000000011',auth.uid(),'❤️');
+insert into mark_reactions values(current_setting('test.mark21_named')::uuid,auth.uid(),'❤️');
 insert into blocks(blocker_id,blocked_id) values(auth.uid(),'22222222-2222-2222-2222-222222222222');
 
 reset role;
@@ -40,7 +45,7 @@ do $$ begin
    w.owner_id='22222222-2222-2222-2222-222222222222' and aw.user_id='88888888-8888-8888-8888-888888888888') then raise exception '21 FAIL approval cleanup'; end if;
  if exists(select 1 from wall_members where wall_id='21000000-0000-0000-0000-000000000001') then raise exception '21 FAIL pending invite cleanup'; end if;
  if not exists(select 1 from wall_members where wall_id='21000000-0000-0000-0000-000000000002' and status='accepted') then raise exception '21 FAIL accepted membership removed'; end if;
- if exists(select 1 from mark_reactions where mark_id='21000000-0000-0000-0000-000000000011') then raise exception '21 FAIL reaction cleanup'; end if;
+ if exists(select 1 from mark_reactions where mark_id=current_setting('test.mark21_named')::uuid) then raise exception '21 FAIL reaction cleanup'; end if;
  if exists(select 1 from notifications n left join notification_origins no on no.notification_id=n.id
    where (n.user_id='88888888-8888-8888-8888-888888888888' and coalesce(n.actor_id,no.true_actor_id)='22222222-2222-2222-2222-222222222222')
       or (n.user_id='22222222-2222-2222-2222-222222222222' and coalesce(n.actor_id,no.true_actor_id)='88888888-8888-8888-8888-888888888888')) then raise exception '21 FAIL Alert cleanup'; end if;
