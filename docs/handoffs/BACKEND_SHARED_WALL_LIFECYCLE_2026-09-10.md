@@ -17,6 +17,8 @@
     collision invariants.
   - Restricts direct Wall creation to active actors creating their own Shared Wall;
     the protected profile trigger remains the Personal-Wall creator.
+  - Uses an actor-bound zero-argument active-account helper in RLS, keeping the
+    arbitrary-actor `is_active_account(uuid)` predicate private from app roles.
   - Makes Shared-Wall membership, settings, ownership, and deletion lifecycle RPC-only.
   - Implements join, invite/response, removal, leave, settings, deletion, transfer,
     owner removal-list, and minimal private-invite-preview contracts.
@@ -50,6 +52,8 @@
 - **Verified:** every function introduced/replaced by 0026 declares
   `SECURITY DEFINER` and a fixed `pg_catalog, public` search path.
 - **Verified:** no migration toggles or alters platform-owned `storage.objects`.
+- **Verified:** 0026 RLS policies do not directly invoke a helper whose EXECUTE
+  privilege is revoked from `authenticated`.
 - **Believed-likely:** SQL syntax and runtime behavior match PostgreSQL/Supabase
   conventions already exercised by migrations 0018–0025.
 - **Not verified:** migration execution, RLS behavior, rollback, Alerts, media

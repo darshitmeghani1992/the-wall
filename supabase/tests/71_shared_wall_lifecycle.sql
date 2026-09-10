@@ -15,6 +15,12 @@ begin
              and tablename='shared_wall_member_removals') then
     raise exception '71 FAIL: private removal ledger has an RLS policy';
   end if;
+  if has_function_privilege('authenticated',
+       'public.is_active_account(uuid)','execute')
+     or not has_function_privilege('authenticated',
+       'public.current_user_is_active_account()','execute') then
+    raise exception '71 FAIL: active-account helper boundary incorrect';
+  end if;
 end $$;
 \echo '71 (private ledger + RPC-only DML) : PASS'
 
@@ -33,6 +39,23 @@ do $$ declare denied boolean:=false; begin
 end $$;
 rollback;
 \echo '71 (active shared-only creation)   : PASS'
+
+begin;
+update profiles set account_status='deactivated',deactivated_at=now()
+ where id='88888888-8888-8888-8888-888888888888';
+set local role authenticated;
+set local "test.uid"='88888888-8888-8888-8888-888888888888';
+do $$ declare denied boolean:=false; begin
+  if current_user_is_active_account() then
+    raise exception '71 FAIL: actor-bound helper reported inactive actor active'; end if;
+  begin
+    insert into walls(owner_id,type,name,visibility)
+      values(auth.uid(),'shared','inactive shared','private');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception '71 FAIL: inactive actor created Shared Wall'; end if;
+end $$;
+rollback;
+\echo '71 (inactive create denied)        : PASS'
 
 -- Exact invite preview: private Wall metadata is non-enumerating and minimal.
 begin;

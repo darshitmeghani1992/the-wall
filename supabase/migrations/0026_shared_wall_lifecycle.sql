@@ -161,6 +161,21 @@ revoke all on function public.enforce_shared_wall_owner_invariant()
   from public, anon, authenticated;
 
 -- ── Direct-write cutover ────────────────────────────────────────────────────
+-- RLS policies execute with the app role's function privileges. Keep the
+-- arbitrary-actor helper private and expose only this zero-argument self check.
+create or replace function public.current_user_is_active_account()
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null and public.is_active_account(auth.uid());
+$$;
+revoke all on function public.current_user_is_active_account()
+  from public,anon,authenticated;
+grant execute on function public.current_user_is_active_account() to authenticated;
+
 create or replace function public.guard_shared_wall_create()
 returns trigger
 language plpgsql
@@ -193,7 +208,7 @@ create policy "walls insert shared owner"
   with check (
     owner_id = auth.uid()
     and type = 'shared'
-    and public.is_active_account(auth.uid())
+    and public.current_user_is_active_account()
   );
 
 drop policy if exists "walls update owner" on public.walls;
@@ -203,12 +218,12 @@ create policy "walls update personal owner"
   using (
     type = 'personal'
     and owner_id = auth.uid()
-    and public.is_active_account(auth.uid())
+    and public.current_user_is_active_account()
   )
   with check (
     type = 'personal'
     and owner_id = auth.uid()
-    and public.is_active_account(auth.uid())
+    and public.current_user_is_active_account()
   );
 
 drop policy if exists "walls delete owner" on public.walls;
@@ -218,7 +233,7 @@ create policy "walls delete personal owner"
   using (
     type = 'personal'
     and owner_id = auth.uid()
-    and public.is_active_account(auth.uid())
+    and public.current_user_is_active_account()
   );
 
 -- Membership state has one server-side mutation surface after this point.
