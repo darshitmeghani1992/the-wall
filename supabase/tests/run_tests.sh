@@ -133,8 +133,12 @@ echo "── fixture: pre-0025 established account"
 psql_test -c "insert into auth.users (id,email) values ('99999999-9999-9999-9999-999999999999','established@test'); insert into profiles (id,handle,display_name) values ('99999999-9999-9999-9999-999999999999','established','Established');" >/dev/null
 echo "── load: 0025_activation_foundation.sql"
 psql_test -f "$MIG/0025_activation_foundation.sql" >/dev/null
-echo "── load: 01_seed.sql"
+echo "── load: 01_seed.sql (pre-lifecycle cutover fixtures)"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
+echo "── assertion: 70_wall_members (legacy direct-write contract before cutover)"
+psql_test -f "$HERE/70_wall_members.sql" >/dev/null
+echo "── load: 0026_shared_wall_lifecycle.sql"
+psql_test -f "$MIG/0026_shared_wall_lifecycle.sql" >/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
@@ -143,7 +147,7 @@ echo "════════════════════════�
 for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             58_activation_foundation \
-            60_secret_marks 61_secret_reveal 70_wall_members 80_notifications 85_moderation 90_profile_links \
+            60_secret_marks 61_secret_reveal 71_shared_wall_lifecycle 80_notifications 85_moderation 90_profile_links \
             95_account_lifecycle; do
   psql_test -f "$HERE/$area.sql"
   echo ""
@@ -172,6 +176,14 @@ bash "$HERE/59_media_writer_races.sh"
 echo ""
 echo "── assertion: 59_mark_creation_cutover (gate + post-cutover boundary)"
 bash "$HERE/59_mark_creation_cutover.sh"
+
+echo ""
+echo "── assertion: 71_shared_wall_upgrade (legacy reconciliation)"
+bash "$HERE/71_shared_wall_upgrade.sh"
+
+echo ""
+echo "── assertion: 72_shared_wall_races (two physical sessions)"
+bash "$HERE/72_shared_wall_races.sh"
 
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ✔ ALL ASSERTIONS PASSED"

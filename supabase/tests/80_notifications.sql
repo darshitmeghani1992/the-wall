@@ -238,8 +238,13 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner invites)
-insert into wall_members (wall_id, user_id, role, status)
-values ('dddddddd-dddd-dddd-dddd-dddddddddddd','88888888-8888-8888-8888-888888888888','member','pending');
+do $$ declare r jsonb; begin
+  r:=invite_shared_wall_member('dddddddd-dddd-dddd-dddd-dddddddddddd',
+    '88888888-8888-8888-8888-888888888888');
+  if r->>'status'<>'invited' then
+    raise exception '80 FAIL: Shared-Wall invite RPC returned %',r;
+  end if;
+end $$;
 reset role;
 do $$
 begin
