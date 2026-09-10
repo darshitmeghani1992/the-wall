@@ -1,134 +1,101 @@
 # CURRENT — Operational Handoff
 
-> Operational state, not canonical governance. Product authority remains
-> `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS authority remains `docs/aios/`.
+> Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
+> authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
-## Current state — 2026-09-03
+## Exact checkpoint — 2026-09-10
 
-- Overall production-ready MVP completion estimate: **42%**.
-- Feature implementation estimate: **approximately 52%**.
-- Production/release readiness estimate: **approximately 30%**.
-- These are weighted delivery estimates, not a claim that 42% of files or screens are done.
-- P0 authorization hardening is on draft PR #18 at `ab55395`; CI run 89 passed TypeScript,
-  lint, and all 135 PostgreSQL security assertions. It remains unmerged and undeployed.
-- Protected-media architecture and C1 database foundation are locally committed on
-  `codex/protected-media-foundation` at `6aa31bb`, based on `ab55395`.
-- Independent Two-Key source review approved C1 pending PostgreSQL runtime execution.
-- No protected-media migration has been applied to hosted Supabase or production.
+The-Wall is at a conservative **60% production-ready MVP milestone**.
 
-## C5a protected-media reader — review handoff (2026-09-08)
+| Evidence | Exact value |
+|---|---|
+| Remote milestone commit | `ac2d339` |
+| Local equivalent commit | `b536e1d` |
+| Exact tree | `08907e3aec30db9fa025b6cf38e867cccefd1667` |
+| Development branch | `codex/protected-media-foundation` |
+| Draft PR | `#19` |
+| CI | Run `127` (`34454622762`) — green |
+| Independent review | Backend **APPROVE**; Frontend **APPROVE** |
+| Independent QA | **PASS** for source + CI |
+| Delivery state | Draft, unmerged, undeployed |
 
-### Implementation State
+No hosted migration, production-data change, merge, deployment, or public release occurred.
 
-**Status: source approved by independent Frontend and Backend review; ready for QA, not Done.**
+## What the checkpoint contains
 
-- The current worktree contains the protected-reader request/response parser, bounded cache and
-  retry lifecycle, and protected Photo/Voice/Video presentation in `MarkView`.
-- The local Edge reader implements the bound `/functions/v1/mark-media/read` route and exact minimal
-  manifest. This is local implementation state, not evidence of a hosted Supabase deployment.
-- **Verified locally:** typecheck, lint, targeted client contract tests, and targeted Edge reader
-  tests pass.
-- **Verified by independent review:** the corrected exact C5a source closed cache resurrection,
-  legacy dot-segment handling, AV lifecycle registration, concurrent retry-budget, and O(N²)
-  lifecycle fan-out findings.
-  - Frontend Reviewer approved commit `2a8492db685f28a0a0ec6b8edb9df1bc8758219d`, exact digest
-    `b74e38cbf637f6c2165eab2b8c93359d82d10d5d7dfb342d2fa7a7e82caf5b89`.
-  - Backend Reviewer approved commit `32cd18520bb0ba54fba51f614aafba0ba6057667` with exact SHA-256:
-    `media-contract.ts` `1ea46779974e523484697d054bea3f293a6339d33c4a58eef7fa1a06835602e1`;
-    `mark-media/index.ts` `7e2297375cfe358437b6ca1a949a34ea13f1a430cd92cc23bcfaf12d0b763e4a`;
-    `mark-media.test.ts` `e61dcbb9131fe9cb59e6c74283134fc696dd1164be74d636da0d14e2e2d7f583`.
-- Public legacy `marks.media_url` fallback is disabled entirely. C5a consumes protected manifests
-  only; legacy media remains unavailable until safely migrated into linked private canonical media.
-- **Unverified:** hosted Supabase signing/RLS behavior, physical iOS and Android rendering/playback,
-  AV/background lifecycle on real devices, VoiceOver/TalkBack, network-expiry behavior, and actual
-  compact/large viewport behavior.
-- No merge, hosted migration, deployment, or production-data change has occurred.
-
-### Consumption Compliance Check
-
-**PASS for the reviewed local source; hosted consumption remains unverified.**
-
-| Consumed contract | Local implementation match | Deviation |
-|---|---|---|
-| `POST /functions/v1/mark-media/read` with exact lowercase `mark_id` + fresh `request_id` | Yes | None |
-| Exact `status`, `expires_at`, and ordered `items` DTO; no path/hash/byte/identity fields | Yes | None |
-| 400/401/403/404 and opaque native failure share one whole-manifest refresh budget | Yes | None in reviewed source |
-| Cache identity is subject + session generation + Mark; lifecycle clears volatile URLs | Yes | None in reviewed source |
-| Public legacy URL fallback | Yes | Disabled entirely, as required by the amended contract |
-
-This PASS is limited to exact local source and test evidence. The Backend contract remains
-undeployed to hosted Supabase, so live interoperability is unverified and requires QA.
-
-### Quality Bar Check
-
-**SOURCE CHECK PASSED; physical-device Quality Bar remains open.**
-
-- Implemented behavior preserves full-frame photos, ordered photo viewing, explicit loading and
-  unavailable states, native Voice/Video controls, and silent bounded recovery without exposing
-  private URLs or internal errors.
-- The interaction is designed to keep ordinary viewing low-friction while failing closed after one
-  refresh attempt.
-- Perceived loading quality, playback continuity, carousel gestures, accessibility, large-text
-  behavior, real viewport layout, and background/resume experience have not been observed on
-  physical iOS/Android. Independent device QA is required before C5a can be called Done.
-
-## Completed or strongly established
-
-- Founder-approved Master Build Spec, product rules, interaction reference, and developer handoff.
-- Expo/React Native application foundation, routing, theme, Supabase client, auth and onboarding
-  groundwork.
-- Personal Wall, person profile/Wall, Discover, composer, Shared-Wall and notification surfaces
-  exist, with completeness varying by journey.
-- Backend entities and authorization for friendships, follows, approved writers, Shared-Wall
-  membership, reactions, Anonymous/Secret Marks, moderation, blocking and account lifecycle.
-- P0 corrections for blocking, reaction access, member-only Shared-Wall posting, Personal-Wall
-  contribution rules, retired features and anonymity privacy.
-- Mark-detail frontend checkpoint: reactions, sharing, reporting, edit/delete and safety removal;
-  round varied pins and contained media framing.
-- Protected-media C1 source: private bucket boundary, reservations, quotas, ordered five-photo
-  model, cleanup outbox/evidence, worker lifecycle, kill switches and physical race harnesses.
-
-## Active critical path
-
-1. Upload `5579687` and `6aa31bb` to a separate draft CI branch after explicit external-source
-   authorization accepted by the execution platform.
-2. Run migration `0020`, all SQL regression tests and physical-session race suites 54/55 on
-   clean PostgreSQL in CI; fix every failure and repeat Reviewer + QA/Security.
-3. Build protected-media processor/API and storage cleanup worker (C2).
-4. Integrate signed private-media reads and the ordered multi-photo composer/viewer in Expo (C3).
-5. Complete and device-test onboarding, Status, My Wall navigation and first-use walkthrough.
-6. Complete Discover, friends/followers/approved writers and profile counts.
-7. Complete full Shared-Wall create/invite/join/manage/transfer/delete lifecycle.
-8. Complete Alerts routing, deep-link restoration/store fallback, settings, block/report,
-   moderation and account-deletion UI.
-9. Run accessibility, performance, offline/error, security/privacy and physical-device QA.
-10. Validate hosted Supabase/EAS, prepare TestFlight and Play internal builds, then obtain the
-    Founder ship gate before any public release.
-
-## Progress model
-
-| Workstream | Weight | Completion | Weighted contribution |
-|---|---:|---:|---:|
-| Product, UX contract and architecture | 10% | 100% | 10.0% |
-| App foundation, auth and onboarding | 10% | 60% | 6.0% |
-| Core backend and permission security | 20% | 75% | 15.0% |
-| Core Wall and Mark client journeys | 15% | 50% | 7.5% |
-| Friends, followers and Shared Walls | 15% | 40% | 6.0% |
-| Protected media end to end | 10% | 25% | 2.5% |
-| Alerts, settings, safety and deep links | 10% | 40% | 4.0% |
-| Device QA, accessibility, performance and release | 10% | 10% | 1.0% |
-| **Total production-ready MVP** | **100%** |  | **42.0%** |
+- Founder-approved product/UX contract and architecture, including the protected-media design.
+- Expo/React Native foundation, Supabase client, primary navigation, authentication groundwork,
+  corrected account routing, retry-safe setup, once-only walkthrough, and deferred-route handling.
+- Core database authorization for Personal/Shared Walls, friendships, follows, approved writers,
+  blocking, reactions, Anonymous/Secret handling, moderation, and account lifecycle.
+- Personal/Other Wall and Mark surfaces, Status, integrated composer, protected media display/write
+  clients, Mark actions, reactions, and safety operations, with remaining device/polish work.
+- Correct Discover people and relationship journey with privacy-safe counts, capability-driven
+  contribution, and fail-closed inaccessible states.
+- Protected-media source foundation: private canonical storage/read model, reservations, quotas,
+  ordered five-photo support, operations/cleanup controls, trusted-worker foundation, and client
+  reserve/upload/validate/create/cancel/retry behavior. Public attachment URLs are not the supported
+  Mark-media path.
+- Registered-user Shared Wall lifecycle: public search; Public/Private creation; Open Join ON/OFF;
+  member-only posting; invite/accept/decline; roster privacy; revoke/remove/invite-back; member
+  leave; atomic ownership transfer; strong-confirm deletion; and Shared-Wall Alert/deferred routes.
+- A removed member cannot immediately bypass the owner through Open Join. Open Join remains
+  available to other eligible users, and an owner may deliberately invite the removed user back.
+- Owner self-membership is forbidden: the owner is represented only by `walls.owner_id`; transfer
+  atomically makes the previous owner an accepted member.
 
 ## Verification boundary
 
-- **Verified:** P0 remote CI at `ab55395`; C1 exact source hashes and static shell/diff checks.
-- **Pending:** C1 PostgreSQL runtime, hosted Supabase behavior, processor and signed-read services,
-  physical iOS/Android rendering, accessibility, performance, push, universal links and release.
-- A screen existing in source does not count as complete until its backend contract, error states,
-  device behavior and acceptance tests pass.
+**Verified:** CI run `127` is green on exact tree `08907e3a...`; TypeScript, lint, and the complete
+PostgreSQL security regression suite pass in CI. Independently, local QA passed 11 client contract
+tests, Expo configuration validation, and both iOS and Android exports. Final independent Backend
+and Frontend reviews approved the exact candidate. Independent QA passed the source-and-CI
+checkpoint.
 
-## External gate currently required
+**Not verified:** hosted Supabase, real hosted accounts, Storage/Edge/worker interoperability,
+physical iOS/Android behavior, accessibility, performance, adverse networks, push notifications,
+universal links/store fallback, EAS/TestFlight/Play builds, production operations, and release.
 
-The execution platform requires explicit approval before uploading repository source to GitHub.
-Authorization is limited to the two local protected-media commits, a separate CI branch and a
-draft PR. It does not include merge, hosted migration or deployment.
+A source surface is not production-ready merely because it exists or passes CI. Protected media
+remains gated until hosted processing, signed reads, cleanup, legacy reconciliation, and real-device
+tests pass.
+
+## Conservative 60% model
+
+Implementation coverage records reviewed source breadth. Credited readiness applies an evidence
+discount for untested hosted/device/release boundaries and is the number used for overall progress.
+
+| Workstream | Weight | Implementation coverage | Credited readiness |
+|---|---:|---:|---:|
+| Product, UX contract and architecture | 10% | 100% | 10.0% |
+| Foundation, auth and onboarding | 10% | 75% | 6.0% |
+| Core backend and permission security | 20% | 90% | 15.0% |
+| Core Wall and Mark client journeys | 15% | 70% | 9.0% |
+| Friends, followers and Shared Walls | 15% | 80% | 10.0% |
+| Protected media end to end | 10% | 75% | 5.0% |
+| Alerts, settings, safety and deep links | 10% | 50% | 4.0% |
+| Device QA, accessibility, performance and release | 10% | 10% | 1.0% |
+| **Total** | **100%** |  | **60.0%** |
+
+The implementation percentages alone would yield 71.5 points. The 60% claim is intentionally lower
+because hosted, device, accessibility, performance, and release evidence is still missing.
+
+## Remaining 40% — recommended order
+
+1. Complete Settings, approved-writer management, blocked-user controls, reporting/moderation UI,
+   recoverable account deletion, and remaining Alerts destinations.
+2. Finish universal/deferred links, store fallback, install-intent restoration, and graceful stale
+   destinations across all supported object types.
+3. Complete remaining Wall/Mark empty/loading/offline states and visual/accessibility polish.
+4. Deploy the protected-media services to non-production hosted infrastructure, reconcile legacy
+   media, and verify Auth/RLS/Storage/worker/cleanup behavior with real accounts.
+5. Run full physical-device, accessibility, performance, lifecycle, offline/error, and adversarial
+   security/privacy testing; fix and repeat.
+6. Prepare TestFlight/Play internal builds, store/privacy/operations material, and the Founder
+   READY/NOT READY release report.
+
+## Resume instruction
+
+Keep draft PR `#19` unmerged and undeployed. Continue with the Settings + safety/account-lifecycle
+vertical slice under Product → Architecture → implementation → independent Review → QA. Stop only
+at a real Founder Gate.

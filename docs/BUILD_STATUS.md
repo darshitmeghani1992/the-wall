@@ -1,210 +1,162 @@
 # The-Wall Build Status
 
-> **CURRENT OPERATING NOTE — 2026-08-25:** Independent Product, Architect and QA audits
-> found P0 authorization/privacy conflicts that supersede the older “backend complete”
-> wording below. The app is **NOT READY** for external beta or production. Current critical
-> path: `docs/architecture/P0_SECURITY_CONTRACT_PLAN.md`. Current handoff:
-> `docs/handoffs/CURRENT.md`. The remainder of this file preserves the 2026-08-20 historical
-> slice evidence until it is fully reconciled; it must not be used as the current next-action list.
+> Restart anchor. On `Continue The-Wall build`: read
+> `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`, this file, `docs/DECISIONS.md`, and
+> `docs/handoffs/CURRENT.md`; inspect Git; run the applicable checks; resume from
+> **Next Actions**. Product authority remains the Master Build Spec. Governance authority remains
+> `docs/aios/`.
 
-> Restart anchor. On `Continue The-Wall build`: read `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`,
-> then this file, then `docs/DECISIONS.md`, inspect git, run the checks below, and
-> resume from **Next Actions**. Operational state only — canonical governance is `docs/aios/`.
+_Last updated: 2026-09-10._
 
-_Last updated: 2026-08-20 · branch `claude/kickoff-execution-chx2mh` (= `origin/main` at session start)._
+## Current milestone
 
-## Current Status — DB-verifiable MVP backend COMPLETE (all Two-Key verified)
-Nine vertical slices delivered this session, each through independent AIOS Two-Key
-(separate Reviewer + separate QA, both re-executing against a real Postgres 16),
-migrations `0010`–`0017`, on draft PR #17. The security suite is now **117 assertions**
-and runs in CI on every PR. Review caught and closed **real authorization bypasses**
-(incl. a self-promote-to-admin BLOCKER in Slice H). Remaining work is **frontend UI**
-(needs a device to QA) and the **hosted deploy** (Founder Gate) — see Next Actions.
+The project is at a conservative **60% production-ready MVP milestone**. This is a weighted
+source-and-CI readiness estimate, not a count of files/screens and not a release-readiness claim.
 
-Slices (all Reviewer APPROVE + QA PASS): Secret one-time reveal+expiry `7d36458` ·
-Mark-model+composer+Voice/Video `725d7ba` · Mark-lifecycle §32/§33 `e291269` ·
-Account deactivation §82 `3b58be7` · Followers §17/§66 `ddec951` · Approved Writers
-§15/§50 `41d7253` · Reactions one-per-user §31 `85da09f` · Moderation/Admin §53 +
-Reporting §52 `ea88d7b`.
+- Remote milestone commit: `ac2d339`
+- Local equivalent commit: `b536e1d`
+- Exact tree: `08907e3aec30db9fa025b6cf38e867cccefd1667`
+- Branch: `codex/protected-media-foundation`
+- Draft PR: `#19`
+- CI run `127` (`34454622762`): **green**
+- Independent Backend review: **APPROVE**
+- Independent Frontend review: **APPROVE**
+- Independent QA: **PASS** for the exact source-and-CI boundary
+- State: **draft, unmerged, undeployed**
 
-### Slice A — Mark model + integrated composer ✅ (committed)
-- Migration `0011`: `mark_type` gains text/voice/video; `marks.secret` boolean; the three
-  `type='secret'` couplings (extract trigger, F1 CHECK, expiry cleanup) repointed to the
-  flag. Full suite green. **High-risk (secret storage) → Two-Key pending on this range.**
-- Frontend: single integrated composer (`app/create.tsx`) — text + photo + Anonymous +
-  Secret toggles; removed the type-picker and `app/write/[type].tsx`; MarkView pruned of
-  the excluded prototype types (roast/award/poll/doodle/prediction). Resolves the §21/§4
-  reconciliation debt.
+No hosted database, production data, public release, merge, or deployment changed at this
+milestone.
 
-### Slice B — Voice + Video Marks ✅ (committed)
-- `expo-av` recorder (≤60s voice) + ImagePicker video capture (≤30s); `uploadMedia` with
-  per-kind caps + MIME allowlist; MarkView voice/video renderers; app.json mic permission.
-- Reuses the verified public `attachments` bucket (path-scoped, ADR-006/0003) — **no new
-  storage policy/migration, no new security surface.**
-- **Device QA pending:** real mic/camera recording + on-device playback (no device here).
+## Completed and verified at the 60% checkpoint
 
-## Verified This Session (real Postgres 16, local cluster)
-- **Baseline build health (Slice 0):** `npm ci` clean; `tsc --noEmit` → 0 errors;
-  `eslint .` → 0 errors, 6 pre-existing warnings (unused var + exhaustive-deps + a
-  design-reference file). No source changes needed for green baseline.
-- **Security suite `supabase/tests/run_tests.sh` → ALL ASSERTIONS PASS** against a real
-  Postgres (previously only "Believed-likely / hosted not run"). Now **Verified** at the
-  DB layer:
-  - SEC-001 AC-S1…AC-S10: friendships, blocking (bilateral override), anonymity side-table
-    (author never exposed to client/realtime/notifications), mark moderation, storage scoping.
-  - FP-C2: Secret **content** isolation (content off base row + off realtime + RLS side
-    table), `wall_members` gating + invite/accept + F-B1 self-escalation guards, 5
-    notification triggers (no anon de-anonymization), profile-link self-write/world-read.
-  - Hosted-incompatibility guard (no ownership-gated `ALTER` on `storage.objects`) passes.
+### Foundation, activation, and navigation
 
-## In Progress
-- None. The Secret one-time-reveal + expiry slice is **complete through both AIOS keys**
-  (see below) and shipped on draft PR #17. Next unstarted work is in **Next Actions**.
+- Expo/React Native application foundation, Supabase client, primary navigation, account routing,
+  retry-safe onboarding, once-only walkthrough, and safe deferred-route restoration exist.
+- Same-user token refresh preserves valid upload/navigation state; logout or a real account switch
+  performs the full security reset.
 
-## Just Completed — Secret one-time reveal + expiry (migration `0010`, ADR-010) ✅
-- `expires_at`/`opened_at` columns; atomic `reveal_secret(uuid)` RPC (recipient-only,
-  one-time, expiry-classified: `ok`/`consumed`/`expired`/`not_authorized`/`missing`); revoke
-  of direct client `SELECT` on `mark_secrets` (reads go only through the gated RPC);
-  `expire_secret_marks()` cleanup fn; client `revealSecret()` + `MarkView` consumed/expired
-  states; adversarial tests `61_secret_reveal.sql`.
-- **Two-Key satisfied, bound to commit `7d36458`:**
-  - **Key 1 — independent Reviewer: APPROVE.** Re-executed a real two-session concurrency
-    race (exactly one reveal returned content), confirmed direct `authenticated` read is
-    revoked, expiry + purge, DEFINER hygiene, no realtime/anonymity regression. Caught one
-    LOW (`missing` reason unreachable) — fixed in `7d36458` and re-APPROVED.
-  - **Key 2 — independent QA/Security: PASS.** Independently reproduced one-time consume,
-    atomic race, expiry+cleanup, wrong-user `not_authorized` (no consume), no content leak
-    on any failure branch, `authenticated` direct SELECT denied, full regression suite green.
-    No BLOCKER/HIGH/MEDIUM.
-  - **Out of scope (Inferred, later on-device/staging pass):** UI reveal flow on a device,
-    `pg_cron` scheduling of `expire_secret_marks`, live Realtime, hosted GoTrue `auth.uid()`.
+### Core permissions and social relationships
 
-## Gap Map (Specified / Working / Partial / Missing / Conflicting)
-| Area | State | Notes |
-|---|---|---|
-| Slice 0 Foundation | **Working (verified)** | deps/tsc/lint green; theme tokens, nav shell, Supabase client present. |
-| Slice 1 Auth→Onboarding→My Wall | **Partial** | Screens + libs present; Email-OTP/OAuth wired. On-device flow **not** verified (no device/hosted). |
-| Slice 2 Discover→Friend/Follow→Other Wall | **Partial** | Friends + **Followers (§17/§66) implemented + Two-Key @ `ddec951`** (follows table/RLS, block/active-gated, no write grant; Follow button on person wall). Discover-card Follow + profile counts are follow-on UI. RLS **verified**. |
-| Slice 3 Text Mark→Reaction→Alert | **Mostly done** | Integrated composer; **reactions one-per-user §31 done + Two-Key (`0016`)**; notification triggers **verified**. On-device UI pass pending. |
-| Slice 4 Photo/Voice/Video | **Implemented (device QA pending)** | Photo + **Voice (≤60s) + Video (≤30s)** in the integrated composer; `expo-av` recorder + playback; `uploadMedia` caps/MIME; reuses verified `attachments` bucket. Real recording/playback pending on a device. |
-| Slice 5 Permissions/Blocking/Reporting | **Mostly done** | RLS block/permission **verified**; §32 edit window + §33 removal quota server-enforced + verified (`0012`); **Approved Writers §50 done + Two-Key (`0015`)**; report write path present. Owner-removal/edit **UI** (§30), moderation/admin (§53), blocking/reporting UI are frontend follow-ons. |
-| Slice 6 Shared Walls | **Partial** | `walls.ts` member data layer + `app/shared/*` screens; membership RLS **verified**. Ownership-transfer/delete UI needs verification. |
-| Slice 7 Anonymous | **Working (verified)** | anonymity side-table RLS **verified**. |
-| Slice 7 Secret | **Working (verified, DB layer)** | isolation + one-time reveal + 1h expiry **verified**; Two-Key APPROVE+PASS @ `7d36458`. On-device UI pass pending. |
-| Slice 8 Deep links/Sharing/Account deletion/Moderation | **Mostly done (backend)** | pending-link + share libs; **account deactivation §82 + Two-Key @ `3b58be7`**; **moderation/admin §53 + reporting §52 backend done + Two-Key @ `ea88d7b`** (admin role, suspension, audit log, RPCs; self-promote BLOCKER caught+fixed). Admin/report/settings **UI** + hosted purge job pending. |
+- Database contracts cover Personal/Shared Wall access and contribution, friends, followers,
+  approved writers, blocking, reactions, Anonymous/Secret handling, moderation, and account state.
+- Discover supports real people search and relationship actions. Other-Wall contribution is driven
+  by the server capability result rather than guessed from friendship.
 
-## Reconciliation Debt (Master Spec vs current code)
-- ✅ **Mark type model (§21/§4) — RESOLVED (Slice A).** Single integrated composer; Secret/
-  Anonymous are modes; canonical content types text/photo/voice/video; excluded prototype
-  types retired from the app surface.
-- **Alerts vs Notifications label** (§6 default **Alerts**) — audit copy for consistency (open).
-- **Protected media for Secret Marks** — Secret is text-only today; secret media needs
-  signed/protected storage (a later slice). Composer clears Secret when media is attached.
-- **Server-side media limits** — client enforces caps/MIME (§108); the `attachments` bucket's
-  `file_size_limit` / `allowed_mime_types` are a hosted-config hardening task.
+### Wall and Mark client
 
-## Blocked
-- **On-device / hosted verification** blocked without a device build + a hosted Supabase
-  project (external credentials = Founder Gate). DB-layer security is verified locally.
+- Personal and Other Wall surfaces, Status, Wall switching, integrated composer, Mark detail,
+  reactions, edit/delete/removal/report actions, and protected media presentation are present.
+- Photo, Voice, and Video client flows exist; Voice and Video are no longer “unimplemented.” Their
+  physical-device behavior remains unverified.
 
-## Founder Decision Required
-- None this session. (Reconciliation choices D-1..D-3 are engineering decisions per §89.)
-- Pending prior gate (unchanged): applying migrations `0004`–`0010` to hosted Supabase is a
-  destructive-production step requiring Founder go + credentials.
+### Protected media
 
-## Security / High-Risk Review (Two-Key)
-- Secret lifecycle: **Reviewer APPROVE + QA PASS @ `7d36458`** — no BLOCKER/HIGH/MEDIUM.
-- Mark-model reconciliation (`0011`) + Voice/Video: **Reviewer APPROVE + QA PASS @ `725d7ba`**
-  — both independent, both re-executed against the live DB (incl. a two-session concurrency
-  race and secret+media rejection). No Two-Key secret guarantee regressed; no new storage
-  surface. No BLOCKER/HIGH/MEDIUM. One LOW (server-side storage MIME/size limits are
-  client-only) → routed to the hosted storage-hardening task (below).
-- Mark-lifecycle §32/§33 (`0012`): **Reviewer APPROVE + QA PASS @ `e291269`.** Independent
-  review caught **3** real authorization bypasses (created_at window-anchor reset; non-owner
-  quota-poisoning of removal-accounting columns; owner rewriting another author's content) —
-  all fixed in the trigger and regression-tested. Final head clean; no open findings.
-  - _Informational (pre-existing, deploy task):_ `service_role` has no table grants on `marks`
-    in the migration schema — the moderation-write path relies on hosted-Supabase default
-    grants / `postgres`; verify on hosted apply.
-- Approved Writers §15/§50 (`0015`): **Reviewer APPROVE + QA PASS @ `41d7253`** (Two-Key
-  interrupted by the account session limit, then re-run cleanly after reset). `can_contribute`
-  body preserved with only the `'selected'` branch added; §50 private-visibility-wins enforced;
-  approval is write-only (no view grant); owner-only management; block/active override intact.
-  No SEC-001/etc regression. **Zero findings.**
-- Moderation/Admin §53 + Reporting §52 (`0017`): **Reviewer APPROVE + QA PASS @ `ea88d7b`.**
-  Reporting broadened (targets/reason-vocab/details/status); admin role + `is_admin`; account
-  suspension; `moderation_actions` audit; admin RPCs (remove/suspend/resolve, is_admin-gated).
-  **Two-Key caught a real BLOCKER** at the pre-fix `4c7a71a`: the 0001 `profiles update self`
-  policy let a client `set is_admin=true` (self-promote to admin). **Fixed** in `ea88d7b` with a
-  `profiles_guard_privileged` BEFORE-UPDATE trigger (reverts is_admin/account_status/
-  deactivated_at for non-privileged callers; only the SECURITY DEFINER RPCs write them). Both
-  keys re-executed as an authenticated client: is_admin self-set stays false; in-app admins
-  cannot de-anonymize (anonymity boundary holds); no regression. **Zero findings at `ea88d7b`.**
-  This guard also closed the earlier D-slice note about direct `account_status` writes.
-- Reactions one-per-user §31 (`0016`): **Reviewer APPROVE + QA PASS @ `85da09f`.** PK repointed
-  to (mark_id,user_id) (fixes the emoji-stacking "de-dup debt"); self-only UPDATE policy; client
-  single-active reaction; emoji set aligned to §31. A reaction *change* fires no duplicate
-  notification. No regression. **Zero findings.**
-- Followers §17/§66 (`0014`): **Reviewer APPROVE + QA PASS @ `ddec951`.** One-way follow of a
-  public Personal Wall; self-only; block/active-gated both ways; block tears down follow rows;
-  grants no write; no SEC-001/etc regression. **Zero findings.** Edge-list world-readable = D-10.
-- Account deactivation §82 (`0013`): **Reviewer APPROVE + QA PASS @ `3b58be7`.** Re-gates the
-  two SECURITY DEFINER chokepoints + friendships-insert on `is_active_account`; deactivate/
-  reactivate RPCs are self-only. No SEC-001/secret/anon/quota regression; shared walls not
-  over-gated. No BLOCKER/HIGH/MEDIUM. Two LOW/informational (fail-closed, non-blocking):
-  (a) `walls.owner_id`→`auth.users` means a profile-less owner's wall is hidden (fail-closed);
-  (b) the `profiles update self` policy lets a user self-set `account_status` directly,
-  skipping `deactivated_at` stamping (self-only; recoverable) — optional future hardening: a
-  BEFORE-UPDATE trigger to keep `deactivated_at` in sync with `account_status`.
-- Remaining Two-Key surface for a future on-device/staging pass: Secret reveal UI, voice/video
-  recording+playback, hosted expiry job + bucket limits.
+- Mark media uses the private protected-media architecture, not public attachment URLs.
+- Database reservations, quotas, ordered one-to-five-photo model, worker lifecycle, private reader,
+  cleanup/outbox controls, and client reserve/upload/validate/create/cancel/retry workflow exist.
+- Source/CI security and contract evidence is green. Hosted Storage, worker interoperability, and
+  real-device upload/playback remain deliberately disabled or unclaimed until their later gates.
 
-## Tests / Builds Run
-- `npm ci`; `npx tsc --noEmit` (0 err); `npx eslint .` (0 err / 6 warn).
-- `supabase/tests/run_tests.sh` on local PG16 — full pass (91 assertions incl. 8 in `61`).
+### Registered-user Shared Wall lifecycle
 
-## Known Issues
-- 6 eslint warnings (pre-existing, non-blocking).
-- Voice/Video Marks unimplemented (Slice 4 remainder).
-- Secret expiry cleanup needs a scheduled job (pg_cron) on hosted — `expire_secret_marks()`
-  is provided and callable; scheduling is a deploy task.
+- Users can search public Shared Walls and see real privacy, membership, and action states.
+- Creation supports Public/Private Walls and Public Open Join ON/OFF, then opens the created Wall.
+- Public open-join membership is actor-bound and idempotent; posting remains owner/member-only.
+- Owners can invite registered users, view the management roster, revoke invitations, remove
+  members, and invite removed people back.
+- Invitees can accept or decline. Members can leave. Removed users cannot bypass the owner by
+  immediately rejoining an open Wall.
+- Owners cannot create self-membership or simply leave. Ownership transfer is atomic: the accepted
+  target becomes owner and the previous owner becomes a member.
+- Owners can delete a Shared Wall only through strong confirmation; stale destinations fail safely.
+- Shared-Wall Alerts and deferred routes cover invites, accepted invites, Shared Marks, and
+  ownership transfer with graceful unavailable fallbacks.
+- Public/private, block, active-account, roster-privacy, exact-result, race, and owner-identity
+  boundaries are backend-enforced and covered by the green regression suite.
+
+## Verification boundary
+
+**Verified** for exact tree `08907e3aec30db9fa025b6cf38e867cccefd1667`:
+
+- CI run `127` passed TypeScript, lint, and the complete PostgreSQL security regression suite.
+- Independent local QA passed 11 client contract tests, Expo configuration validation, and both
+  iOS and Android exports.
+- Backend and Frontend independent reviewers issued final **APPROVE** verdicts.
+- Independent QA issued **PASS** for source and CI evidence.
+- The Shared-Wall lifecycle and its security/race cases passed the exact-tree verification path.
+
+**Unverified and not included as completed production behavior:**
+
+- Hosted Supabase migrations, Auth/RLS/Storage behavior, Edge Functions, worker dispatch/processing,
+  signed media delivery, deletion jobs, and legacy-media reconciliation.
+- Real hosted accounts and multi-user staging journeys.
+- Physical iOS/Android layout, camera/microphone permissions, uploads, playback, background/resume,
+  and adverse-network behavior.
+- VoiceOver, TalkBack, large text, switch control, contrast, and reduced-motion system verification.
+- Measured startup/render/upload performance and representative low-memory/poor-network behavior.
+- Push notifications, universal HTTPS/App Links, store fallback, and install-to-intent restoration.
+- EAS/TestFlight/Play builds, store review material, production operations, and public release.
+
+## Conservative progress model
+
+“Implementation coverage” describes how much of each workstream now exists in reviewed source.
+“Credited readiness” deliberately discounts that coverage when hosted, device, operational, or
+release evidence is still absent. The credited points—not raw implementation arithmetic—form the
+conservative 60% milestone.
+
+| Workstream | Portfolio weight | Implementation coverage | Credited readiness |
+|---|---:|---:|---:|
+| Product, UX contract and architecture | 10% | 100% | 10.0% |
+| Foundation, auth and onboarding | 10% | 75% | 6.0% |
+| Core backend and permission security | 20% | 90% | 15.0% |
+| Core Wall and Mark client journeys | 15% | 70% | 9.0% |
+| Friends, followers and Shared Walls | 15% | 80% | 10.0% |
+| Protected media end to end | 10% | 75% | 5.0% |
+| Alerts, settings, safety and deep links | 10% | 50% | 4.0% |
+| Device QA, accessibility, performance and release | 10% | 10% | 1.0% |
+| **Total production-ready MVP** | **100%** |  | **60.0%** |
+
+The un-discounted coverage percentages would produce 71.5 points under simple multiplication.
+Publishing that as overall progress would overstate readiness because major hosted/device/release
+boundaries have not been exercised. The evidence discount keeps the claim honest.
+
+## Remaining 40%
+
+- Complete and polish Personal Wall settings, approved-writer management, follower/friend surfaces,
+  remaining Status/Wall-switcher states, and any incomplete Wall/Mark empty/loading/offline paths.
+- Complete Alerts beyond the Shared-Wall journeys, blocked-user management, user/Wall reporting,
+  moderation operations UI, and the full recoverable account-deletion experience.
+- Finish universal links, store fallback, sharing/install restoration, and missing/deleted
+  destination handling across every supported link type.
+- Deploy and validate the complete protected-media stack in non-production hosted infrastructure;
+  reconcile legacy media and perform the separately gated cutover only after adversarial evidence.
+- Validate migrations, RLS, Auth, Realtime, Alerts, and all three-user acceptance journeys using
+  real hosted accounts.
+- Run physical iOS/Android, accessibility, performance, lifecycle, offline, hostile-network, and
+  security/privacy testing; fix findings and repeat.
+- Produce TestFlight and Play internal builds, finish store/privacy/operational material, and prepare
+  the Founder READY/NOT READY release report.
+
+## Known risks and blockers
+
+- Reviewed source and green CI do not prove hosted Supabase/Storage/worker interoperability.
+- Protected media must remain production-disabled until hosted processing, cleanup, signed reads,
+  legacy reconciliation, and device tests pass.
+- Shared-Wall usability and accessibility have not been observed on physical devices.
+- Push, universal links, store fallback, and release operations remain open.
+- Public release remains a Founder Gate. Merge, hosted migration, paid infrastructure, production
+  data changes, and deployment are outside this milestone.
 
 ## Next Actions
-1. ✅ Secret one-time reveal + expiry — Two-Key APPROVE+PASS @ `7d36458`.
-2. ✅ Slice A (Mark model + integrated composer) + ✅ Slice B (Voice + Video) — committed.
-3. **Two-Key on the A+B range** (migration `0011` is the high-risk part): independent
-   Reviewer + QA bound to the head commit. — **in progress.**
-4. ✅ Slice C (Mark-lifecycle §32/§33 enforcement, migration `0012`) — Two-Key @ `e291269`.
-5. **Founder Gate (when ready to deploy):** apply migrations `0004`–`0012` to hosted Supabase
-   in one transaction; schedule `expire_secret_marks()` via `pg_cron`; set the `attachments`
-   bucket `file_size_limit`/`allowed_mime_types`; verify `service_role` moderation grants on
-   `marks`. (Needs Founder go + credentials.)
-6. **Device QA:** real recording/playback for Voice/Video; on-device Secret reveal UI.
-7. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30) — frontend slice; data
-   layer ready (`removeMark`/`editMarkText`/helpers).
-8. **Account-deletion / deactivation lifecycle (§82)** — NEXT high-risk backend slice.
-   Design (keep RLS blast-radius small; each step guarded by the security suite):
-   - Migration `0013`: `profiles.account_status text not null default 'active'
-     check (in ('active','deactivated'))` + `deactivated_at timestamptz`; helper
-     `is_active_account(uid)`.
-   - Enforce "a deactivated account disappears" at the interaction points, NOT by hiding the
-     profile row (that would break author display on existing Marks): deny in `can_view_wall`
-     when the wall owner is deactivated; deny in `can_contribute` when actor or target owner is
-     deactivated; block new friend requests / follows to a deactivated user; exclude deactivated
-     profiles in the search query (`profiles.ts`).
-   - Reactivation-on-login within 30 days (data layer); `deactivate_account()` /
-     `reactivate_account()` RPCs. Before FINAL deletion, require Shared-Wall ownership transfer
-     or delete (§43/§82) — surface as a blocker, don't auto-transfer.
-   - If a full automated 30-day purge can't run without a scheduler, implement deactivation +
-     `deletion_scheduled_at` and mark the purge job as a hosted/pg_cron deploy task (§82).
-   - New test `95_account_lifecycle.sql`: deactivated owner's wall not viewable by others;
-     deactivated user can't contribute or be friend-requested; reactivation restores access;
-     the SEC-001/anon/secret/quota suites stay green. Two-Key.
-9. ✅ Followers §17/§66 (`0014`) — Two-Key @ `ddec951`.
-10. ✅ Approved Writers (§15/§50, `0015`) — Two-Key @ `41d7253`.
-10b. ✅ Reactions one-per-user (§31, `0016`) — Two-Key @ `85da09f`.
-10c. ✅ Reporting §52 + Moderation/admin §53 (`0017`) — Two-Key @ `ea88d7b` (caught+fixed a
-     self-promote-to-admin BLOCKER).
-11. Owner Mark-removal / sender-edit **UI** (Mark detail sheet §30); moderation/admin (§53);
-    blocking/reporting UI (§51/§52); Discover-card Follow + profile counts; Alerts-label copy.
-12. ✅ CI runs the security suite on every PR (postgres:16 service).
+
+1. Complete Settings, safety/account lifecycle, approved-writer management, and remaining Alerts.
+2. Complete universal/deferred links and store fallback across all supported destinations.
+3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
+4. Run physical-device, accessibility, performance, lifecycle, and adversarial QA.
+5. Prepare internal iOS/Android builds and the plain-language Founder READY/NOT READY report.
+
+## Founder decision required
+
+None for continued local/draft development. Founder approval is required before merge, hosted or
+production changes, paid infrastructure, destructive data operations, or public release.
