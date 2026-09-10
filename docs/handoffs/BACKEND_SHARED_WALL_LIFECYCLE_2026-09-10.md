@@ -1,9 +1,9 @@
 # Implementation State: Shared-Wall Lifecycle (0026)
 
-**Role:** Backend  
-**Date:** 2026-09-10  
-**Base:** `5b6f78c3a5685244a75c0955af1a10ecad39cf74` / tree `f452927fb45b5dde9060df08e8927f9c2b339101`  
-**Classification:** Database, authorization, privacy, and concurrency; Two-Key review required.  
+**Role:** Backend
+**Date:** 2026-09-10
+**Base:** `5b6f78c3a5685244a75c0955af1a10ecad39cf74` / tree `f452927fb45b5dde9060df08e8927f9c2b339101`
+**Classification:** Database, authorization, privacy, and concurrency; Two-Key review required.
 **Deployment state:** Source only. Not committed, pushed, merged, applied to hosted Supabase, or deployed.
 
 ## Built
