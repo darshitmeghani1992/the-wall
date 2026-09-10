@@ -456,17 +456,15 @@ insert into media_uploads(
  id,uploader_id,uploader_tombstone_id,wall_id,wall_tombstone_id,kind,client_upload_id,
  source_path,state,session_state,declared_mime,declared_bytes,detected_mime,
  validated_bytes,actual_input_bytes,sha256,width,height,validated_path,
- cache_control_seconds,expires_at,validated_at,quota_day,reserved_charge,
- consumed_mark_id,consumed_mark_tombstone_id,consumed_at
+ cache_control_seconds,expires_at,validated_at,quota_day,reserved_charge
 ) values(
  '71000000-0000-4000-8000-000000000022','44444444-4444-4444-4444-444444444444',
  '44444444-4444-4444-4444-444444444444','71000000-0000-4000-8000-000000000020',
  '71000000-0000-4000-8000-000000000020','photo','71000000-0000-4000-8000-000000000023',
  'staging/44444444-4444-4444-4444-444444444444/71000000-0000-4000-8000-000000000022/source',
- 'consumed','closed','image/jpeg',1000,'image/jpeg',900,1000,repeat('7',64),100,80,
+ 'validated','closed','image/jpeg',1000,'image/jpeg',900,1000,repeat('7',64),100,80,
  'validated/71000000-0000-4000-8000-000000000022/full.jpg',60,
- now()+interval '1 hour',now(),current_date,1000,
- '71000000-0000-4000-8000-000000000021','71000000-0000-4000-8000-000000000021',now()
+ now()+interval '1 hour',now(),current_date,1000
 );
 insert into mark_media(id,mark_id,upload_id,media_type,"position",storage_path,
  mime_type,byte_size,sha256,width,height)
@@ -474,6 +472,12 @@ insert into mark_media(id,mark_id,upload_id,media_type,"position",storage_path,
  '71000000-0000-4000-8000-000000000022','photo',0,
  'validated/71000000-0000-4000-8000-000000000022/full.jpg',
  'image/jpeg',900,repeat('7',64),100,80);
+update media_uploads
+   set state='consumed',
+       consumed_mark_id='71000000-0000-4000-8000-000000000021',
+       consumed_mark_tombstone_id='71000000-0000-4000-8000-000000000021',
+       consumed_at=now()
+ where id='71000000-0000-4000-8000-000000000022';
 set local role authenticated;
 set local "test.uid"='22222222-2222-2222-2222-222222222222';
 do $$ begin

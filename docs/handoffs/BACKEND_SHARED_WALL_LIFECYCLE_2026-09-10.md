@@ -54,12 +54,15 @@
 - **Verified:** no migration toggles or alters platform-owned `storage.objects`.
 - **Verified:** 0026 RLS policies do not directly invoke a helper whose EXECUTE
   privilege is revoked from `authenticated`.
-- **Believed-likely:** SQL syntax and runtime behavior match PostgreSQL/Supabase
-  conventions already exercised by migrations 0018–0025.
-- **Not verified:** migration execution, RLS behavior, rollback, Alerts, media
-  outbox cascade, and physical race outcomes. This workspace has no PostgreSQL
-  server/client, so the full suite must run in clean CI before this Two-Key work
-  may be considered verified or mergeable.
+- **Verified:** clean CI run 126 applied migrations through 0026 and passed the
+  Shared-Wall lifecycle assertions preceding the deletion-media fixture. Its
+  failure was isolated to test setup creating an upload as `consumed` before
+  linking `mark_media`; production integrity correctly rejected that order.
+- **Believed-likely:** the corrected deletion fixture now follows the previously
+  verified media sequence: validated upload, canonical relation, then consumed.
+- **Not verified:** the corrected deletion/outbox assertion, later suites, and
+  physical race outcomes. The full suite must rerun in clean CI before this
+  Two-Key work may be considered verified or mergeable.
 
 ## Stubbed / Mocked
 
