@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
 import { PersonRow } from "@/components/PersonRow";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
@@ -20,13 +21,17 @@ import { followUser, unfollowUser } from "@/lib/follows";
 import { useAuth } from "@/lib/auth";
 import { friendActionsFor, normalizePeopleSearchQuery, type FriendActionKind } from "@/lib/relationship-ui";
 import { SessionFocusFence } from "@/lib/session-generation";
-import { colors, markColors } from "@/theme";
+import { normalizeSharedWallSearch } from "@/lib/shared-wall-contract";
+import { searchPublicSharedWalls, type PublicSharedWall } from "@/lib/walls";
+import { colors, markColors, radius } from "@/theme";
 
 export default function PeopleScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const userId = session?.user.id;
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<"people" | "walls">("people");
+  const [wallResults, setWallResults] = useState<PublicSharedWall[]>([]);
   const [results, setResults] = useState<PersonRelationship[]>([]);
   const [friends, setFriends] = useState<PersonRelationship[]>([]);
   const [incoming, setIncoming] = useState<PersonRelationship[]>([]);
@@ -89,6 +94,7 @@ export default function PeopleScreen() {
   }, [loadNetwork, userId]));
 
   async function runSearch() {
+    if (mode === "walls") return runWallSearch();
     const normalized = normalizePeopleSearchQuery(query);
     const token = searchFence.current.begin(userId ?? null);
     if (!token || !normalized) {
@@ -108,6 +114,23 @@ export default function PeopleScreen() {
       if (searchFence.current.isCurrent(token, currentUserId.current)) {
         setError(cause?.message ?? "Search didn't work. Try again.");
       }
+    } finally {
+      if (searchFence.current.isCurrent(token, currentUserId.current)) setSearching(false);
+    }
+  }
+
+  async function runWallSearch() {
+    const normalized = normalizeSharedWallSearch(query);
+    const token = searchFence.current.begin(userId ?? null);
+    if (!token || !normalized) { setWallResults([]); setSearchedQuery(null); return; }
+    setSearching(true); setError(null);
+    try {
+      const nextResults = await searchPublicSharedWalls(normalized);
+      if (!searchFence.current.isCurrent(token, currentUserId.current)) return;
+      if (normalizeSharedWallSearch(currentQuery.current) !== normalized) return;
+      setWallResults(nextResults); setSearchedQuery(normalized);
+    } catch (cause: any) {
+      if (searchFence.current.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Search didn't work. Try again.");
     } finally {
       if (searchFence.current.isCurrent(token, currentUserId.current)) setSearching(false);
     }
@@ -185,10 +208,19 @@ export default function PeopleScreen() {
 
   return (
     <Screen>
-      <Text variant="display" style={{ marginTop: 20 }}>People</Text>
+      <Text variant="display" style={{ marginTop: 20 }}>Discover</Text>
       <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 4, marginBottom: 18 }}>
-        Find your people, then visit their Walls.
+        Find people and public Shared Walls.
       </Text>
+
+      <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+        {(["people", "walls"] as const).map((choice) => {
+          const selected = mode === choice;
+          return <Pressable key={choice} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={`Discover ${choice}`} onPress={() => { searchFence.current.focus(userId ?? null); setMode(choice); setQuery(""); currentQuery.current = ""; setResults([]); setWallResults([]); setSearchedQuery(null); setError(null); }} style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.ink, backgroundColor: selected ? colors.ink : colors.surface }}><Text variant="label" color={selected ? markColors.brandYellow : colors.ink}>{choice.toUpperCase()}</Text></Pressable>;
+        })}
+      </View>
+
+      {mode === "walls" ? <View style={{ marginBottom: 16 }}><Button label="Start a Shared Wall" variant="yellow" onPress={() => router.push("/shared/create")} /></View> : null}
 
       <Input
         value={query}
@@ -199,17 +231,18 @@ export default function PeopleScreen() {
           setSearching(false);
           setSearchedQuery(null);
           setResults([]);
+          setWallResults([]);
         }}
         onSubmitEditing={runSearch}
-        placeholder="name or handle"
-        accessibilityLabel="Search people by name or handle"
+        placeholder={mode === "people" ? "name or handle" : "Shared Wall name"}
+        accessibilityLabel={mode === "people" ? "Search people by name or handle" : "Search public Shared Walls by name"}
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Search people"
+        accessibilityLabel={mode === "people" ? "Search people" : "Search public Shared Walls"}
         accessibilityState={{ disabled: !query.trim() || searching, busy: searching }}
         onPress={runSearch}
         disabled={!query.trim() || searching}
@@ -220,7 +253,19 @@ export default function PeopleScreen() {
 
       {error ? <Text variant="body" color={colors.error} style={{ marginBottom: 12 }}>{error}</Text> : null}
 
-      {results.length ? (
+      {mode === "walls" && wallResults.length ? (
+        <View style={{ gap: 10, marginBottom: 22 }}>
+          <Text variant="label" color={colors.outline}>PUBLIC SHARED WALLS</Text>
+          {wallResults.map((wall) => (
+            <Pressable key={wall.id} accessibilityRole="button" accessibilityLabel={`Open Shared Wall ${wall.name}`} onPress={() => router.push(`/shared/${wall.id}`)} style={{ minHeight: 72, padding: 14, borderWidth: 1.5, borderColor: colors.ink, borderRadius: radius.card, backgroundColor: colors.card }}>
+              <Text variant="headline" numberOfLines={1}>{wall.name}</Text>
+              <Text variant="body" color={colors.outline} numberOfLines={1}>{wall.owner ? `Started by ${wall.owner.display_name}` : "Public Shared Wall"} · {wall.open_join ? "Open Join" : "Invite required"}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : mode === "walls" && searchedQuery && !searching ? (
+        <Text variant="body" color={colors.outline} style={{ marginBottom: 20 }}>No public Shared Walls found for “{searchedQuery}”.</Text>
+      ) : mode === "people" && results.length ? (
         <View style={{ marginBottom: 20 }}>
           <Text variant="label" color={colors.outline}>SEARCH RESULTS</Text>
           {results.map((person) => {
@@ -247,11 +292,11 @@ export default function PeopleScreen() {
             );
           })}
         </View>
-      ) : searchedQuery && !searching ? (
+      ) : mode === "people" && searchedQuery && !searching ? (
         <Text variant="body" color={colors.outline} style={{ marginBottom: 20 }}>No people found for “{searchedQuery}”.</Text>
       ) : null}
 
-      {loading ? <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 24 }} /> : (
+      {mode === "people" && (loading ? <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 24 }} /> : (
         <>
           {incoming.length ? (
             <View style={{ marginBottom: 24 }}>
@@ -294,7 +339,7 @@ export default function PeopleScreen() {
             </Text>
           )}
         </>
-      )}
+      ))}
     </Screen>
   );
 }

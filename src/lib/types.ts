@@ -52,6 +52,8 @@ export interface Wall {
   contribution_policy: ContributionPolicy;
   allow_anonymous: boolean;
   require_approval: boolean;
+  /** Shared Walls only. Private Walls always keep this false server-side. */
+  open_join: boolean;
   created_at: string;
 }
 

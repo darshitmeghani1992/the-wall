@@ -89,7 +89,7 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
 /**
  * Human-readable summary for a notification row, derived from its `kind` + actor.
  *
- * The cases mirror the currently shipped 0006/0018 trigger vocabulary. Unknown
+ * The cases mirror the currently shipped 0006/0018/0026 trigger vocabulary. Unknown
  * or historical rows degrade without inventing a destination or leaking content.
  */
 export function notificationMessage(n: NotificationWithActor): string {
@@ -106,6 +106,10 @@ export function notificationMessage(n: NotificationWithActor): string {
       return `${who} accepted your friend request`;
     case "shared_wall_invite":
       return `${who} invited you to a Shared Wall`;
+    case "shared_wall_invite_accepted":
+      return `${who} accepted your Shared Wall invitation`;
+    case "shared_wall_ownership_transferred":
+      return `${who} made you the owner of a Shared Wall`;
     case "shared_wall_mark":
       return `${who} left a Mark on a Shared Wall`;
     case "comment":

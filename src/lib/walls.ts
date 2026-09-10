@@ -2,31 +2,35 @@ import { supabase } from "./supabase";
 import { track } from "./analytics";
 import type { Profile, Wall } from "./types";
 import { requireExactCount } from "./result-contract";
+import {
+  normalizeSharedWallSearch,
+  parsePendingSharedWallInvite,
+  parseSharedWallAction,
+  parseSharedWallCapabilities,
+  parseSharedWallSettings,
+  toSharedWallIlikePattern,
+  type PendingSharedWallInvite,
+  type SharedWallActionResult,
+  type SharedWallCapabilitiesContract,
+  type SharedWallSettingsResult,
+} from "./shared-wall-contract";
 
 /** Shared Wall client data over the shipped walls, membership, and P0 RLS contracts. */
 
 export type NewSharedWall = {
   name: string;
-  /** Only 'public' is honestly supported now; 'private' needs the C2 member model. */
-  visibility?: "public";
+  visibility?: "public" | "private";
+  openJoin?: boolean;
   allowAnonymous?: boolean;
 };
 
 /**
- * Shared-wall membership data layer — consumes the C2 `wall_members` contract
- * (migration 0005 / ADR-009). The RLS policies in 0005 are the real authorization
- * boundary; every client-side check here is UX convenience only:
- *   • invite   → RLS "wall_members invite owner": ONLY the wall owner, target wall
- *                MUST be `type='shared'`, row MUST start pending/member.
- *   • accept   → RLS "wall_members accept self" + transition guard: ONLY the
- *                invited user, ONLY pending→accepted.
- *   • roster   → RLS "wall_members read": your own rows, the owner sees all,
- *                accepted members see co-members.
- *
- * A rejected write surfaces as a thrown Supabase error, not a silent success.
+ * Shared-wall membership data layer. Migration 0026 makes every mutation
+ * actor-bound and RPC-only. Client checks shape the experience; database locks,
+ * RLS, tombstones, and RPC result contracts remain the authorization boundary.
  */
 
-export type WallMemberRole = "owner" | "member";
+export type WallMemberRole = "member";
 export type WallMemberStatus = "pending" | "accepted";
 
 export interface WallMember {
@@ -37,9 +41,9 @@ export interface WallMember {
   created_at: string;
 }
 
-export type WallCapabilities = {
+export type WallCapabilities = SharedWallCapabilitiesContract | {
   status: "available";
-  wallType: "personal" | "shared";
+  wallType: "personal";
   isOwner: boolean;
   canView: true;
   canContribute: boolean;
@@ -48,13 +52,12 @@ export type WallCapabilities = {
 /** A membership row with its user's profile resolved (null if not readable). */
 export type WallMemberWithProfile = WallMember & { profile: Profile | null };
 
-/** A pending invite addressed to the current user, with the wall resolved. */
-export type PendingInvite = WallMember & { wall: Wall | null };
+export type PublicSharedWall = Wall & { owner: Profile | null };
+export type RemovedWallMember = { user_id: string; removed_at: string; profile: Profile | null };
 
 /**
- * Create a public Shared Wall owned by the signed-in user. Contribution is
- * 'everyone' so any viewer can leave a Mark (matches `can_contribute` for a
- * public wall). Returns the created row.
+ * Create a Shared Wall owned by the signed-in user. Safe defaults are private
+ * and invite-only. The database remains the authority for every invariant.
  */
 export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
   const { data: authData } = await supabase.auth.getUser();
@@ -63,15 +66,18 @@ export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
 
   const name = input.name.trim();
   if (!name) throw new Error("Give your Shared Wall a name.");
+  if (Array.from(name).length > 60) throw new Error("Keep the Shared Wall name to 60 characters.");
 
+  const visibility = input.visibility ?? "private";
+  const openJoin = visibility === "public" && input.openJoin === true;
   const { data, error } = await supabase
     .from("walls")
     .insert({
       owner_id: uid,
       type: "shared",
       name,
-      // Public only for now — see file header. Private is a C2 member-model dep.
-      visibility: "public",
+      visibility,
+      open_join: openJoin,
       contribution_policy: "everyone",
       allow_anonymous: input.allowAnonymous ?? true,
     })
@@ -79,7 +85,12 @@ export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
     .single();
   if (error) throw error;
 
-  track("Shared Wall Created", { wall_id: (data as Wall).id, allow_anonymous: input.allowAnonymous ?? true });
+  track("Shared Wall Created", {
+    wall_id: (data as Wall).id,
+    visibility,
+    open_join: openJoin,
+    allow_anonymous: input.allowAnonymous ?? true,
+  });
   return data as Wall;
 }
 
@@ -88,7 +99,8 @@ export async function createSharedWall(input: NewSharedWall): Promise<Wall> {
  * and unauthorized so callers cannot turn the read into a privacy oracle.
  */
 export async function getWall(wallId: string): Promise<Wall | null> {
-  const { data } = await supabase.from("walls").select("*").eq("id", wallId).maybeSingle();
+  const { data, error } = await supabase.from("walls").select("*").eq("id", wallId).maybeSingle();
+  if (error) throw error;
   return (data as Wall) ?? null;
 }
 
@@ -114,10 +126,14 @@ export async function getWallCapabilities(wallId: string): Promise<WallCapabilit
   if (error) throw error;
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const value = data as Record<string, unknown>;
-  if (value.status === "unavailable") return null;
+  if (value.status === "unavailable") {
+    if (Object.keys(value).length !== 1) throw new Error("The Wall capability response wasn't valid.");
+    return null;
+  }
+  if (value.wall_type === "shared") return parseSharedWallCapabilities(value);
   if (
     value.status !== "available"
-    || (value.wall_type !== "personal" && value.wall_type !== "shared")
+    || value.wall_type !== "personal"
     || typeof value.is_owner !== "boolean"
     || value.can_view !== true
     || typeof value.can_contribute !== "boolean"
@@ -133,19 +149,28 @@ export async function getWallCapabilities(wallId: string): Promise<WallCapabilit
   };
 }
 
-/** The caller's own membership row, visible through existing wall_members RLS. */
-export async function getMyWallMembership(
-  wallId: string,
-  userId: string,
-): Promise<WallMember | null> {
+/** Bounded, literal-safe public Shared-Wall discovery. */
+export async function searchPublicSharedWalls(input: string): Promise<PublicSharedWall[]> {
+  const query = normalizeSharedWallSearch(input);
+  if (!query) return [];
   const { data, error } = await supabase
-    .from("wall_members")
-    .select("wall_id, user_id, role, status, created_at")
-    .eq("wall_id", wallId)
-    .eq("user_id", userId)
-    .maybeSingle();
+    .from("walls")
+    .select("*")
+    .eq("type", "shared")
+    .eq("visibility", "public")
+    .ilike("name", toSharedWallIlikePattern(query))
+    .order("created_at", { ascending: false })
+    .limit(20);
   if (error) throw error;
-  return (data as WallMember | null) ?? null;
+  const walls = (data ?? []) as Wall[];
+  const ownerIds = Array.from(new Set(walls.map((wall) => wall.owner_id)));
+  const profiles: Record<string, Profile> = {};
+  if (ownerIds.length) {
+    const profileResult = await supabase.from("profiles").select("*").in("id", ownerIds);
+    if (profileResult.error) throw profileResult.error;
+    for (const profile of (profileResult.data ?? []) as Profile[]) profiles[profile.id] = profile;
+  }
+  return walls.map((wall) => ({ ...wall, owner: profiles[wall.owner_id] ?? null }));
 }
 
 /**
@@ -239,7 +264,8 @@ export async function getWallMembers(wallId: string): Promise<WallMemberWithProf
   const ids = Array.from(new Set(members.map((m) => m.user_id)));
   const profiles: Record<string, Profile> = {};
   if (ids.length) {
-    const { data: profileRows } = await supabase.from("profiles").select("*").in("id", ids);
+    const { data: profileRows, error: profileError } = await supabase.from("profiles").select("*").in("id", ids);
+    if (profileError) throw profileError;
     for (const p of (profileRows ?? []) as Profile[]) profiles[p.id] = p;
   }
 
@@ -247,76 +273,113 @@ export async function getWallMembers(wallId: string): Promise<WallMemberWithProf
 }
 
 /**
- * Owner-only invite (UX-gated here; RLS-enforced in 0005). Inserts a pending
- * `member` membership for `userId` on `wallId`. Emits the `Shared Wall Invite
- * Sent` analytics event on success only. Throws if RLS rejects (e.g. caller
- * isn't the owner, or the wall isn't shared).
+ * Owner-only registered-user invitation through the actor-bound 0026 RPC.
+ * A share-sheet link is deliberately not a membership invitation.
  */
-export async function inviteToWall(wallId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from("wall_members")
-    .insert({ wall_id: wallId, user_id: userId, role: "member", status: "pending" });
+export async function inviteToWall(wallId: string, userId: string): Promise<SharedWallActionResult> {
+  const { data, error } = await supabase.rpc("invite_shared_wall_member", {
+    p_wall_id: wallId,
+    p_target_user_id: userId,
+  });
   if (error) throw error;
-  track("Shared Wall Invite Sent", { wall_id: wallId, invitee_id: userId });
+  const result = parseSharedWallAction(data, wallId);
+  if (result.status === "invited") {
+    track("Shared Wall Invite Sent", { wall_id: wallId, invitee_id: userId });
+  }
+  return result;
 }
 
-/**
- * Invited-user-only accept (UX-gated here; RLS + transition guard enforce it in
- * 0005). Flips the caller's own pending row to accepted. Throws a friendly error
- * when no pending invite exists for the caller on this wall (already accepted,
- * revoked, or never invited).
- */
-export async function acceptWallMembership(wallId: string): Promise<void> {
-  const { data: authData } = await supabase.auth.getUser();
-  const uid = authData.user?.id;
-  if (!uid) throw new Error("You need to be signed in to accept an invite.");
-
-  const { data, error } = await supabase
-    .from("wall_members")
-    .update({ status: "accepted" })
-    .eq("wall_id", wallId)
-    .eq("user_id", uid)
-    .eq("status", "pending")
-    .select("wall_id")
-    .maybeSingle();
+/** Invited-user-only accept/decline through the actor-bound 0026 RPC. */
+export async function respondToWallInvite(wallId: string, accept: boolean): Promise<SharedWallActionResult> {
+  const { data, error } = await supabase.rpc("respond_shared_wall_invite", {
+    p_wall_id: wallId,
+    p_accept: accept,
+  });
   if (error) throw error;
-  if (!data) throw new Error("That invite is no longer available.");
+  return parseSharedWallAction(data, wallId);
 }
 
-/** Decline a pending invite through the shipped self-delete RLS contract. */
-export async function declineWallMembership(wallId: string): Promise<void> {
-  const { data: authData } = await supabase.auth.getUser();
-  const uid = authData.user?.id;
-  if (!uid) throw new Error("You need to be signed in to decline an invite.");
-
-  const { data, error } = await supabase
-    .from("wall_members")
-    .delete()
-    .eq("wall_id", wallId)
-    .eq("user_id", uid)
-    .eq("status", "pending")
-    .select("wall_id")
-    .maybeSingle();
+export async function joinSharedWall(wallId: string): Promise<SharedWallActionResult> {
+  const { data, error } = await supabase.rpc("join_shared_wall", { p_wall_id: wallId });
   if (error) throw error;
-  if (!data) throw new Error("That invite is no longer available.");
+  return parseSharedWallAction(data, wallId);
 }
 
-/**
- * Pending invites addressed to `userId`, each with its wall resolved. The wall may
- * come back null (see `getWall` — private shared wall rows aren't member-readable
- * until 0009); the invite itself is still valid and acceptable, so it is kept in
- * the list with `wall: null` rather than dropped.
- */
-export async function getPendingInvites(userId: string): Promise<PendingInvite[]> {
+export async function getPendingSharedWallInvite(wallId: string): Promise<PendingSharedWallInvite> {
   const { data, error } = await supabase
-    .from("wall_members")
-    .select("wall_id, user_id, role, status, created_at")
-    .eq("user_id", userId)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
+    .rpc("get_my_pending_shared_wall_invite", { p_wall_id: wallId });
   if (error) throw error;
-  const invites = (data ?? []) as WallMember[];
+  return parsePendingSharedWallInvite(data, wallId);
+}
 
-  const walls = await Promise.all(invites.map((inv) => getWall(inv.wall_id)));
-  return invites.map((inv, i) => ({ ...inv, wall: walls[i] }));
+export async function removeSharedWallMember(wallId: string, userId: string): Promise<SharedWallActionResult> {
+  const { data, error } = await supabase.rpc("remove_shared_wall_member", {
+    p_wall_id: wallId,
+    p_target_user_id: userId,
+  });
+  if (error) throw error;
+  return parseSharedWallAction(data, wallId);
+}
+
+export async function leaveSharedWall(wallId: string): Promise<SharedWallActionResult> {
+  const { data, error } = await supabase.rpc("leave_shared_wall", { p_wall_id: wallId });
+  if (error) throw error;
+  return parseSharedWallAction(data, wallId);
+}
+
+export async function updateSharedWallSettings(input: {
+  wallId: string;
+  name: string;
+  visibility: "public" | "private";
+  openJoin: boolean;
+  allowAnonymous: boolean;
+}): Promise<SharedWallSettingsResult> {
+  const { data, error } = await supabase.rpc("update_shared_wall_settings", {
+    p_wall_id: input.wallId,
+    p_name: input.name,
+    p_visibility: input.visibility,
+    p_open_join: input.openJoin,
+    p_allow_anonymous: input.allowAnonymous,
+  });
+  if (error) throw error;
+  return parseSharedWallSettings(data, input.wallId);
+}
+
+export async function deleteSharedWall(wallId: string, expectedName: string): Promise<SharedWallActionResult> {
+  const { data, error } = await supabase.rpc("delete_shared_wall", {
+    p_wall_id: wallId,
+    p_expected_name: expectedName,
+  });
+  if (error) throw error;
+  return parseSharedWallAction(data, wallId);
+}
+
+export async function transferSharedWallOwnership(wallId: string, targetUserId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("transfer_shared_wall_ownership", {
+    p_wall_id: wallId,
+    p_target_user_id: targetUserId,
+  });
+  if (error) throw error;
+  if (typeof data !== "boolean") throw new Error("The ownership transfer response wasn't valid.");
+  return data;
+}
+
+export async function getRemovedSharedWallMembers(wallId: string): Promise<RemovedWallMember[]> {
+  const { data, error } = await supabase.rpc("list_removed_shared_wall_members", { p_wall_id: wallId });
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error("The removed-member response wasn't valid.");
+  const rows = data.map((value) => {
+    if (!value || typeof value !== "object" || typeof value.user_id !== "string" || typeof value.removed_at !== "string") {
+      throw new Error("The removed-member response wasn't valid.");
+    }
+    return { user_id: value.user_id, removed_at: value.removed_at };
+  });
+  const ids = rows.map((row) => row.user_id);
+  const profiles: Record<string, Profile> = {};
+  if (ids.length) {
+    const profileResult = await supabase.from("profiles").select("*").in("id", ids);
+    if (profileResult.error) throw profileResult.error;
+    for (const profile of (profileResult.data ?? []) as Profile[]) profiles[profile.id] = profile;
+  }
+  return rows.map((row) => ({ ...row, profile: profiles[row.user_id] ?? null }));
 }

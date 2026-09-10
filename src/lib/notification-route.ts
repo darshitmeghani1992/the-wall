@@ -24,6 +24,11 @@ export function notificationRoute(notification: NotificationRouteInput): string 
       return notification.wall_id
         ? `/shared/invite/${notification.wall_id}`
         : "/(tabs)/alerts";
+    case "shared_wall_invite_accepted":
+    case "shared_wall_ownership_transferred":
+      return notification.wall_id
+        ? `/shared/${notification.wall_id}`
+        : "/(tabs)/alerts";
     case "shared_wall_mark":
       return notification.wall_id
         ? withFocusedMark(`/shared/${notification.wall_id}`, notification.mark_id)

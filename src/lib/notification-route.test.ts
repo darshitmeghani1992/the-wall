@@ -49,5 +49,17 @@ assert.equal(
   `/person/${OTHER_OWNER}`,
 );
 assert.equal(notificationRoute(row({ kind: "unknown" })), "/(tabs)/alerts");
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_invite_accepted" })),
+  `/shared/${WALL}`,
+);
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_ownership_transferred" })),
+  `/shared/${WALL}`,
+);
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_ownership_transferred", wall_id: null })),
+  "/(tabs)/alerts",
+);
 
-console.log("notification route contract: 8 destination boundaries passed");
+console.log("notification route contract: 11 destination boundaries passed");
