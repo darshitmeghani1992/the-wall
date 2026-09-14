@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
+import { executeAccountDeactivation } from "./actor-bound-service-contract";
 import { isAccountRoute, runForExpectedSubject, type AccountRoute } from "./onboarding-contract";
 
 /**
@@ -14,10 +15,22 @@ import { isAccountRoute, runForExpectedSubject, type AccountRoute } from "./onbo
  */
 
 /** Deactivate the signed-in account (recoverable). Reversible via `reactivateAccount`. */
-export async function deactivateAccount(): Promise<void> {
-  const { error } = await supabase.rpc("deactivate_account");
-  if (error) throw error;
-  track("Account Deactivated");
+export async function deactivateAccount(expectedActorId: string): Promise<void> {
+  await executeAccountDeactivation(
+    expectedActorId,
+    {
+      getActorId: async () => {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        return data.user?.id;
+      },
+      deactivate: async () => {
+        const { error } = await supabase.rpc("deactivate_account");
+        if (error) throw error;
+        track("Account Deactivated");
+      },
+    },
+  );
 }
 
 /** Reactivate the signed-in account (returning within the recovery window). */

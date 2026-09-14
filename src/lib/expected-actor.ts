@@ -12,3 +12,15 @@ export function requireExpectedActor(
   if (actualActorId !== expectedActorId) throw new Error("Your session changed. Please try again.");
   return actualActorId;
 }
+
+/** Resolve the current actor at the last async boundary before a mutation. */
+export async function runExpectedActorMutation<Result>(
+  expectedActorId: string,
+  signedOutMessage: string,
+  getActualActorId: () => Promise<string | null | undefined>,
+  mutate: (actorId: string) => Promise<Result>,
+): Promise<Result> {
+  const actualActorId = await getActualActorId();
+  const actorId = requireExpectedActor(expectedActorId, actualActorId, signedOutMessage);
+  return mutate(actorId);
+}

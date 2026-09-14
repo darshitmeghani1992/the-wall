@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/Button";
 import { Text } from "@/components/Text";
 import { MarkView } from "@/components/marks/MarkView";
+import { runMarkReportRemovalFlow } from "@/components/safety-action-flows";
 import {
   deleteMark,
   editMarkText,
@@ -28,6 +29,8 @@ import {
   type ReportReason,
 } from "@/lib/reports";
 import type { ReactionEmoji, ReactionSummary } from "@/lib/reactions";
+import { TargetRouteFence } from "@/lib/relationship-ui";
+import { SessionFocusFence } from "@/lib/session-generation";
 import { colors, markColors, radius, shadow, spacing } from "@/theme";
 
 type Panel = "detail" | "edit" | "delete" | "remove" | "report";
@@ -75,6 +78,13 @@ export function MarkDetailModal({
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const currentViewerId = useRef<string | null>(viewerId ?? null);
+  const currentMarkId = useRef<string | null>(mark?.id ?? null);
+  const subjectFence = useRef(new SessionFocusFence());
+  const markFence = useRef(new TargetRouteFence());
+  const actionInFlight = useRef(false);
+  currentViewerId.current = viewerId ?? null;
+  currentMarkId.current = mark?.id ?? null;
   const isSender = Boolean(mark && viewerId && mark.author_id === viewerId);
   const isOwner = Boolean(mark && viewerId && wallOwnerId === viewerId);
   const canEdit = Boolean(mark && isSender && isWithinEditWindow(mark));
@@ -91,6 +101,19 @@ export function MarkDetailModal({
     setError(null);
   }, [mark?.id, mark?.text]);
 
+  useEffect(() => {
+    const activeSubjectFence = subjectFence.current;
+    const activeMarkFence = markFence.current;
+    activeSubjectFence.focus(viewerId ?? null);
+    activeMarkFence.focus(mark?.id ?? null);
+    actionInFlight.current = false;
+    setBusy(false);
+    return () => {
+      activeSubjectFence.blur();
+      activeMarkFence.blur();
+    };
+  }, [viewerId, mark?.id]);
+
   const heading = useMemo(() => {
     if (panel === "edit") return "Edit your Mark";
     if (panel === "delete") return "Delete this Mark?";
@@ -103,6 +126,7 @@ export function MarkDetailModal({
   const markId = mark.id;
 
   function go(next: Panel) {
+    if (actionInFlight.current) return;
     setError(null);
     setPanel(next);
     if (next === "remove" && remaining === null && viewerId) {
@@ -111,7 +135,7 @@ export function MarkDetailModal({
   }
 
   async function loadAllowance() {
-    if (!viewerId) return;
+    if (!viewerId || actionInFlight.current) return;
     setAllowanceLoading(true);
     setError(null);
     try {
@@ -158,11 +182,29 @@ export function MarkDetailModal({
   }
 
   async function confirmRemoval() {
-    await run(async () => {
-      await removeMark(markId, "normal");
-      onMarkRemoved(markId);
+    if (!viewerId || actionInFlight.current) return;
+    const subjectToken = subjectFence.current.begin(viewerId);
+    const markToken = markFence.current.capture(markId);
+    if (!subjectToken || !markToken) return;
+    const isCurrent = () => subjectFence.current.isCurrent(subjectToken, currentViewerId.current)
+      && markFence.current.isCurrent(markToken, currentMarkId.current);
+    actionInFlight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await removeMark(subjectToken.userId, markToken.targetId, "normal");
+      if (!isCurrent()) return;
+      onMarkRemoved(markToken.targetId);
+      if (!isCurrent()) return;
       onClose();
-    });
+    } catch (cause) {
+      if (isCurrent()) setError(errorMessage(cause));
+    } finally {
+      if (isCurrent()) {
+        actionInFlight.current = false;
+        setBusy(false);
+      }
+    }
   }
 
   async function submitReport() {
@@ -174,33 +216,48 @@ export function MarkDetailModal({
       setError("Choose a reason before submitting.");
       return;
     }
+    if (actionInFlight.current) return;
+    const subjectToken = subjectFence.current.begin(viewerId);
+    const markToken = markFence.current.capture(markId);
+    if (!subjectToken || !markToken) return;
+    const submittedReason = reason;
+    const submittedDetails = details;
+    const shouldRemove = isOwner;
+    const wasReported = reportSubmitted;
+    const isCurrent = () => subjectFence.current.isCurrent(subjectToken, currentViewerId.current)
+      && markFence.current.isCurrent(markToken, currentMarkId.current);
+    actionInFlight.current = true;
     setBusy(true);
     setError(null);
-    try {
-      if (!reportSubmitted) {
-        await createReport(viewerId, { markId, reason, details });
-        setReportSubmitted(true);
-      }
-      if (!isOwner) {
-        onClose();
-        return;
-      }
-      try {
-        await removeMark(markId, "safety");
-        onMarkRemoved(markId);
-        onClose();
-      } catch {
-        setError("Your report was submitted, but the Mark couldn't be removed. Try removing it again from your Wall.");
-      }
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(false);
-    }
+    await runMarkReportRemovalFlow({
+      expectedActorId: subjectToken.userId,
+      markId: markToken.targetId,
+      reason: submittedReason,
+      details: submittedDetails,
+      alreadyReported: wasReported,
+      removeAfterReport: shouldRemove,
+      isCurrent,
+      createReport,
+      removeMark,
+      onReportSubmitted: () => setReportSubmitted(true),
+      onMarkRemoved,
+      onClose,
+      onRemovalError: () => setError("Your report was submitted, but the Mark couldn't be removed. Try removing it again from your Wall."),
+      onError: (cause) => setError(errorMessage(cause)),
+      onFinally: () => {
+        actionInFlight.current = false;
+        setBusy(false);
+      },
+    });
   }
 
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => { if (!actionInFlight.current) onClose(); }}
+    >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View
@@ -259,10 +316,10 @@ export function MarkDetailModal({
                     ]}
                   >
                     <Text variant="label" color={colors.outline} style={{ marginBottom: 6 }}>MARK ACTIONS</Text>
-                    {canEdit ? <ActionRow label="Edit Mark" note="Available for 10 minutes" onPress={() => go("edit")} /> : null}
-                    {canEdit ? <ActionRow label="Delete Mark" note="Permanently removes your Mark" danger onPress={() => go("delete")} /> : null}
-                    {isOwner && !isSender ? <ActionRow label="Remove from Wall" note="Uses one standard removal" onPress={() => go("remove")} /> : null}
-                    {!isSender ? <ActionRow label="Report Mark" note="Send it to the safety team" danger onPress={() => go("report")} /> : null}
+                    {canEdit ? <ActionRow label="Edit Mark" note="Available for 10 minutes" disabled={busy} onPress={() => go("edit")} /> : null}
+                    {canEdit ? <ActionRow label="Delete Mark" note="Permanently removes your Mark" danger disabled={busy} onPress={() => go("delete")} /> : null}
+                    {isOwner && !isSender ? <ActionRow label="Remove from Wall" note="Uses one standard removal" disabled={busy} onPress={() => go("remove")} /> : null}
+                    {!isSender ? <ActionRow label="Report Mark" note="Send it to the safety team" danger disabled={busy} onPress={() => go("report")} /> : null}
                   </View>
                 ) : null}
               </>
@@ -315,12 +372,12 @@ export function MarkDetailModal({
                   onConfirm={confirmRemoval}
                 />
                 {!allowanceLoading && remaining === null ? (
-                  <View style={{ marginTop: 14 }}><Button label="Check allowance again" variant="ghost" onPress={loadAllowance} /></View>
+                  <View style={{ marginTop: 14 }}><Button label="Check allowance again" variant="ghost" disabled={busy} onPress={loadAllowance} /></View>
                 ) : null}
                 {remaining === 0 ? (
                   <View style={{ marginTop: 18 }}>
                     <Text variant="body" color={colors.onSurfaceVariant}>If this Mark is abusive or unsafe, report it instead. Safety removals are never limited.</Text>
-                    <View style={{ marginTop: 14 }}><Button label="Report this Mark" variant="ghost" onPress={() => go("report")} /></View>
+                    <View style={{ marginTop: 14 }}><Button label="Report this Mark" variant="ghost" disabled={busy} onPress={() => go("report")} /></View>
                   </View>
                 ) : null}
               </>
@@ -333,6 +390,7 @@ export function MarkDetailModal({
                   {REPORT_REASONS.map((item) => (
                     <Pressable
                       key={item}
+                      disabled={busy}
                       onPress={() => setReason(item)}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: reason === item }}
@@ -355,6 +413,7 @@ export function MarkDetailModal({
                 </View>
                 <TextInput
                   value={details}
+                  editable={!busy}
                   onChangeText={setDetails}
                   multiline
                   maxLength={500}
@@ -394,12 +453,13 @@ export function MarkDetailModal({
   );
 }
 
-function ActionRow({ label, note, danger = false, onPress }: { label: string; note: string; danger?: boolean; onPress: () => void }) {
+function ActionRow({ label, note, danger = false, disabled = false, onPress }: { label: string; note: string; danger?: boolean; disabled?: boolean; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
-      style={{ minHeight: 64, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant, justifyContent: "center" }}
+      style={{ minHeight: 64, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.outlineVariant, justifyContent: "center", opacity: disabled ? 0.5 : 1 }}
     >
       <Text variant="headline" color={danger ? colors.error : colors.ink} style={{ fontSize: 17 }}>{label}</Text>
       <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginTop: 2 }}>{note}</Text>

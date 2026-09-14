@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
+import { executeMarkRemoval, type MarkRemovalReason } from "./actor-bound-service-contract";
 import type { Mark } from "./types";
 import type { MediaWriterRpc } from "./mark-media-writer";
 import {
@@ -163,7 +164,7 @@ export const EDIT_WINDOW_MS = 10 * 60 * 1000;
 /** Owner normal-removal allowance — 3 per rolling 30 days (§33). Server-enforced. */
 export const NORMAL_REMOVAL_LIMIT = 3;
 
-export type RemovalReason = "normal" | "safety";
+export type RemovalReason = MarkRemovalReason;
 
 /**
  * Owner: remove a received Mark (soft — status becomes 'removed'). The DB trigger
@@ -172,13 +173,31 @@ export type RemovalReason = "normal" | "safety";
  * never rate-limited. Throws `MARK_REMOVAL_QUOTA` when a normal removal is over
  * the cap, so the UI can steer the owner to a safety removal.
  */
-export async function removeMark(markId: string, reason: RemovalReason): Promise<void> {
-  const { error, count } = await supabase
-    .from("marks")
-    .update({ status: "removed", removal_reason: reason }, { count: "exact" })
-    .eq("id", markId);
-  if (error) throw error;
-  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
+export async function removeMark(
+  expectedActorId: string,
+  markId: string,
+  reason: RemovalReason,
+): Promise<void> {
+  await executeMarkRemoval(
+    expectedActorId,
+    markId,
+    reason,
+    {
+      getActorId: async () => {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        return data.user?.id;
+      },
+      remove: async (targetMarkId, removalReason) => {
+        const { error, count } = await supabase
+          .from("marks")
+          .update({ status: "removed", removal_reason: removalReason }, { count: "exact" })
+          .eq("id", targetMarkId);
+        if (error) throw error;
+        if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
+      },
+    },
+  );
 }
 
 /**
