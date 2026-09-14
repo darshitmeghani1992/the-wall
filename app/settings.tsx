@@ -10,7 +10,7 @@ import { colors } from "@/theme";
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { profile, refreshProfile, signOut } = useAuth();
+  const { profile, refreshAccountRoute, signOut } = useAuth();
   const [busy, setBusy] = useState(false);
 
   function confirmDeactivate() {
@@ -26,8 +26,9 @@ export default function SettingsScreen() {
             setBusy(true);
             try {
               await deactivateAccount();
-              await refreshProfile();
-              router.replace("/account-status");
+              await refreshAccountRoute();
+              // Re-enter the canonical actor-bound gate; it maps deactivated to account recovery.
+              router.replace("/");
             } catch (cause: any) {
               Alert.alert("Couldn't deactivate", cause?.message ?? "Please try again.");
             } finally {

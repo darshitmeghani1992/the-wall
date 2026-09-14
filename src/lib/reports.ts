@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
+import { requireExpectedActor } from "./expected-actor";
 
 /**
  * Reporting (Master Spec §52). A user files a report against exactly one target —
@@ -38,11 +39,16 @@ type ReportTarget =
 
 /** File a report against exactly one target. Throws if not signed in / invalid. */
 export async function createReport(
+  expectedActorId: string,
   input: ReportTarget & { reason: ReportReason; details?: string },
 ): Promise<void> {
+  const details = input.details?.trim() || null;
   const { data: auth } = await supabase.auth.getUser();
-  const uid = auth.user?.id;
-  if (!uid) throw new Error("You need to be signed in to report.");
+  const uid = requireExpectedActor(
+    expectedActorId,
+    auth.user?.id,
+    "You need to be signed in to report.",
+  );
 
   const { error } = await supabase.from("reports").insert({
     reporter_id: uid,
@@ -50,7 +56,7 @@ export async function createReport(
     reported_user_id: input.userId ?? null,
     reported_wall_id: input.wallId ?? null,
     reason: input.reason,
-    details: input.details?.trim() || null,
+    details,
   });
   if (error) throw error;
 

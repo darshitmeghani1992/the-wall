@@ -166,6 +166,10 @@ export function MarkDetailModal({
   }
 
   async function submitReport() {
+    if (!viewerId) {
+      setError("You need to be signed in to report this Mark.");
+      return;
+    }
     if (!reason) {
       setError("Choose a reason before submitting.");
       return;
@@ -174,7 +178,7 @@ export function MarkDetailModal({
     setError(null);
     try {
       if (!reportSubmitted) {
-        await createReport({ markId, reason, details });
+        await createReport(viewerId, { markId, reason, details });
         setReportSubmitted(true);
       }
       if (!isOwner) {

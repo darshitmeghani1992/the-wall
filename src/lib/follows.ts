@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
 import { requireExactCount, requireMutationRow } from "./result-contract";
+import { requireExpectedActor } from "./expected-actor";
 import type { Profile } from "./types";
 
 /**
@@ -11,15 +12,9 @@ import type { Profile } from "./types";
  */
 
 /** Follow a user (their Personal Wall must be public). Throws on a blocked/ineligible target. */
-export async function followUser(followedId: string): Promise<void>;
-export async function followUser(followerId: string, followedId: string): Promise<void>;
-export async function followUser(followerOrFollowedId: string, optionalFollowedId?: string): Promise<void> {
+export async function followUser(followerId: string, followedId: string): Promise<void> {
   const { data: auth } = await supabase.auth.getUser();
-  const uid = auth.user?.id;
-  if (!uid) throw new Error("Not signed in.");
-  const followerId = optionalFollowedId !== undefined ? followerOrFollowedId : uid;
-  const followedId = optionalFollowedId ?? followerOrFollowedId;
-  if (uid !== followerId) throw new Error("Your session changed. Please try again.");
+  const uid = requireExpectedActor(followerId, auth.user?.id, "Not signed in.");
   const { data, error } = await supabase
     .from("follows")
     .insert({ follower_id: uid, followed_id: followedId })
@@ -31,15 +26,9 @@ export async function followUser(followerOrFollowedId: string, optionalFollowedI
 }
 
 /** Unfollow a user. */
-export async function unfollowUser(followedId: string): Promise<void>;
-export async function unfollowUser(followerId: string, followedId: string): Promise<void>;
-export async function unfollowUser(followerOrFollowedId: string, optionalFollowedId?: string): Promise<void> {
+export async function unfollowUser(followerId: string, followedId: string): Promise<void> {
   const { data: auth } = await supabase.auth.getUser();
-  const uid = auth.user?.id;
-  if (!uid) throw new Error("Not signed in.");
-  const followerId = optionalFollowedId !== undefined ? followerOrFollowedId : uid;
-  const followedId = optionalFollowedId ?? followerOrFollowedId;
-  if (uid !== followerId) throw new Error("Your session changed. Please try again.");
+  const uid = requireExpectedActor(followerId, auth.user?.id, "Not signed in.");
   const { data, error } = await supabase
     .from("follows")
     .delete()

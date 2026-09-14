@@ -1,31 +1,81 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { useAuth } from "@/lib/auth";
+import { TargetRouteFence } from "@/lib/relationship-ui";
 import { createReport, REPORT_REASONS, REPORT_REASON_LABELS, type ReportReason } from "@/lib/reports";
+import { SessionFocusFence } from "@/lib/session-generation";
 import { colors, radius } from "@/theme";
 
 export default function ReportUserScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { session } = useAuth();
+  const actorId = session?.user.id ?? null;
+  const targetId = typeof id === "string" ? id : null;
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState("");
   const [busy, setBusy] = useState(false);
+  const currentActorId = useRef(actorId);
+  const currentTargetId = useRef(targetId);
+  const subjectFence = useRef(new SessionFocusFence());
+  const targetFence = useRef(new TargetRouteFence());
+  const submissionInFlight = useRef(false);
+  currentActorId.current = actorId;
+  currentTargetId.current = targetId;
+
+  useFocusEffect(useCallback(() => {
+    subjectFence.current.focus(actorId);
+    targetFence.current.focus(targetId);
+    submissionInFlight.current = false;
+    setBusy(false);
+    return () => {
+      subjectFence.current.blur();
+      targetFence.current.blur();
+    };
+  }, [actorId, targetId]));
 
   async function submit() {
-    if (!id || !reason || busy) return;
+    if (!actorId || !targetId || !reason || submissionInFlight.current) return;
+    const subjectToken = subjectFence.current.begin(actorId);
+    const targetToken = targetFence.current.capture(targetId);
+    if (!subjectToken || !targetToken) return;
+    const submittedReason = reason;
+    const submittedDetails = details;
+    submissionInFlight.current = true;
     setBusy(true);
     try {
-      await createReport({ userId: id, reason, details });
+      await createReport(subjectToken.userId, {
+        userId: targetToken.targetId,
+        reason: submittedReason,
+        details: submittedDetails,
+      });
+      if (!subjectFence.current.isCurrent(subjectToken, currentActorId.current)
+        || !targetFence.current.isCurrent(targetToken, currentTargetId.current)) return;
       Alert.alert("Report received", "Thanks. We’ll review it and take action if needed.", [
-        { text: "Done", onPress: () => router.back() },
+        {
+          text: "Done",
+          onPress: () => {
+            if (subjectFence.current.isCurrent(subjectToken, currentActorId.current)
+              && targetFence.current.isCurrent(targetToken, currentTargetId.current)) router.back();
+          },
+        },
       ]);
     } catch (cause: any) {
-      Alert.alert("Couldn't send report", cause?.message ?? "Please try again.");
-      setBusy(false);
+      if (subjectFence.current.isCurrent(subjectToken, currentActorId.current)
+        && targetFence.current.isCurrent(targetToken, currentTargetId.current)) {
+        Alert.alert("Couldn't send report", cause?.message ?? "Please try again.");
+      }
+    } finally {
+      if (subjectFence.current.isCurrent(subjectToken, currentActorId.current)
+        && targetFence.current.isCurrent(targetToken, currentTargetId.current)) {
+        submissionInFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -55,7 +105,7 @@ export default function ReportUserScreen() {
         <Input label="DETAILS · OPTIONAL" value={details} onChangeText={setDetails} multiline maxLength={500} placeholder="Tell us what happened" />
       </View>
       <View style={{ marginTop: 22 }}>
-        <Button label="Submit report" variant="primary" loading={busy} disabled={!reason} onPress={submit} />
+        <Button label="Submit report" variant="primary" loading={busy} disabled={!reason || !actorId || !targetId} onPress={submit} />
       </View>
     </Screen>
   );

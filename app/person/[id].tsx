@@ -207,8 +207,11 @@ export default function PersonWall() {
           setCounts((current) => current ? { ...current, ...nextCounts } : null);
         }
       } catch {
-        setCounts(null);
-        Alert.alert("Follow updated", "The count couldn't refresh yet. Reopen this Wall to try again.");
+        if (actionFence.current.isCurrent(token, currentUserId.current)
+          && targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
+          setCounts(null);
+          Alert.alert("Follow updated", "The count couldn't refresh yet. Reopen this Wall to try again.");
+        }
       }
     } catch (cause: any) {
       if (actionFence.current.isCurrent(token, currentUserId.current)
@@ -284,7 +287,8 @@ export default function PersonWall() {
     if (!profile || safetyBusy || actionInFlight.current) return;
     const targetId = profile.id;
     const targetToken = targetRouteFence.current.capture(targetId);
-    if (!targetToken) return;
+    const subjectToken = actionFence.current.begin(currentUserId.current);
+    if (!targetToken || !subjectToken) return;
     Alert.alert(
       `Block @${profile.handle}?`,
       "You will no longer be able to interact, and existing social connections will be removed.",
@@ -293,19 +297,26 @@ export default function PersonWall() {
         {
           text: "Block",
           style: "destructive",
-          onPress: () => void performBlock(targetId, targetToken),
+          onPress: () => void performBlock(targetId, subjectToken, targetToken),
         },
       ],
     );
   }
 
-  async function performBlock(targetId: string, targetToken: ReturnType<TargetRouteFence["capture"]>) {
-    if (!targetToken || actionInFlight.current) return;
+  async function performBlock(
+    targetId: string,
+    subjectToken: NonNullable<ReturnType<SessionFocusFence["begin"]>>,
+    targetToken: NonNullable<ReturnType<TargetRouteFence["capture"]>>,
+  ) {
+    if (actionInFlight.current
+      || !actionFence.current.isCurrent(subjectToken, currentUserId.current)
+      || !targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) return;
     actionInFlight.current = true;
     setSafetyBusy(true);
     try {
-      await blockUser(targetId);
-      if (!targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) return;
+      await blockUser(subjectToken.userId, targetId);
+      if (!actionFence.current.isCurrent(subjectToken, currentUserId.current)
+        || !targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) return;
       setBlockedByMe(true);
       setProfile(null);
       setWall(null);
@@ -315,11 +326,13 @@ export default function PersonWall() {
       setFollowing(false);
       setRelationship("none");
     } catch (cause: any) {
-      if (targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
+      if (actionFence.current.isCurrent(subjectToken, currentUserId.current)
+        && targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
         Alert.alert("Couldn't block them", cause?.message ?? "Please try again.");
       }
     } finally {
-      if (targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
+      if (actionFence.current.isCurrent(subjectToken, currentUserId.current)
+        && targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
         actionInFlight.current = false;
         setSafetyBusy(false);
       }
@@ -329,17 +342,28 @@ export default function PersonWall() {
   async function performUnblock() {
     const targetId = typeof id === "string" ? id : null;
     if (!targetId || safetyBusy || actionInFlight.current) return;
+    const targetToken = targetRouteFence.current.capture(targetId);
+    const subjectToken = actionFence.current.begin(currentUserId.current);
+    if (!targetToken || !subjectToken) return;
     actionInFlight.current = true;
     setSafetyBusy(true);
     try {
-      await unblockUser(targetId);
+      await unblockUser(subjectToken.userId, targetId);
+      if (!actionFence.current.isCurrent(subjectToken, currentUserId.current)
+        || !targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) return;
       setBlockedByMe(false);
       await load();
     } catch (cause: any) {
-      Alert.alert("Couldn't unblock them", cause?.message ?? "Please try again.");
+      if (actionFence.current.isCurrent(subjectToken, currentUserId.current)
+        && targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
+        Alert.alert("Couldn't unblock them", cause?.message ?? "Please try again.");
+      }
     } finally {
-      actionInFlight.current = false;
-      setSafetyBusy(false);
+      if (actionFence.current.isCurrent(subjectToken, currentUserId.current)
+        && targetRouteFence.current.isCurrent(targetToken, currentPersonId.current)) {
+        actionInFlight.current = false;
+        setSafetyBusy(false);
+      }
     }
   }
 
