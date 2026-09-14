@@ -7,25 +7,10 @@ import { destinationForAccountRoute } from "@/lib/onboarding-contract";
 import { Text } from "@/components/Text";
 import { colors, markColors } from "@/theme";
 
-/**
- * App entry / auth gate. Branches on auth + profile state:
- *   - loading            → splash spinner
- *   - signed out         → onboarding welcome
- *   - signed in, no row  → profile setup
- *   - fully set up        → a pending deep-link target (if any), else Home
- *
- * A deep link opened while signed out stashes its target (pendingLink); once the
- * user is fully set up we consume it — from an effect, exactly once — so the
- * intended Wall isn't lost across sign-in / onboarding. Consuming clears the
- * module-level pending href, so it must NOT run during render (that would be a
- * render side effect and StrictMode's double-render could drop the target).
- */
 function Splash() {
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}>
-      <Text variant="display" color={colors.ink}>
-        the wall
-      </Text>
+      <Text variant="display" color={colors.ink}>the wall</Text>
       <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 16 }} />
     </View>
   );

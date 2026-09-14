@@ -1,20 +1,24 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
 import { requireExactCount, requireMutationRow } from "./result-contract";
+import type { Profile } from "./types";
 
 /**
  * Followers (Master Spec §17, §66). Following is one-way and only works on a
  * PUBLIC Personal Wall; it grants NO write permission and never bypasses privacy
- * or blocking — all enforced server-side by migration 0014 (the insert policy
- * checks the target wall is public, both accounts active, and the pair isn't
- * blocked; blocking removes follow rows). This layer is thin data access.
+ * or blocking — all enforced server-side by migration 0014. This layer is thin
+ * data access and never infers access from follow state.
  */
 
 /** Follow a user (their Personal Wall must be public). Throws on a blocked/ineligible target. */
-export async function followUser(followerId: string, followedId: string): Promise<void> {
+export async function followUser(followedId: string): Promise<void>;
+export async function followUser(followerId: string, followedId: string): Promise<void>;
+export async function followUser(followerOrFollowedId: string, optionalFollowedId?: string): Promise<void> {
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth.user?.id;
   if (!uid) throw new Error("Not signed in.");
+  const followerId = optionalFollowedId !== undefined ? followerOrFollowedId : uid;
+  const followedId = optionalFollowedId ?? followerOrFollowedId;
   if (uid !== followerId) throw new Error("Your session changed. Please try again.");
   const { data, error } = await supabase
     .from("follows")
@@ -27,10 +31,14 @@ export async function followUser(followerId: string, followedId: string): Promis
 }
 
 /** Unfollow a user. */
-export async function unfollowUser(followerId: string, followedId: string): Promise<void> {
+export async function unfollowUser(followedId: string): Promise<void>;
+export async function unfollowUser(followerId: string, followedId: string): Promise<void>;
+export async function unfollowUser(followerOrFollowedId: string, optionalFollowedId?: string): Promise<void> {
   const { data: auth } = await supabase.auth.getUser();
   const uid = auth.user?.id;
   if (!uid) throw new Error("Not signed in.");
+  const followerId = optionalFollowedId !== undefined ? followerOrFollowedId : uid;
+  const followedId = optionalFollowedId ?? followerOrFollowedId;
   if (uid !== followerId) throw new Error("Your session changed. Please try again.");
   const { data, error } = await supabase
     .from("follows")
@@ -43,7 +51,6 @@ export async function unfollowUser(followerId: string, followedId: string): Prom
   requireMutationRow(data, "That follow is no longer available.");
 }
 
-/** Is `followerId` currently following `followedId`? */
 export async function isFollowing(followerId: string, followedId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("follows")
@@ -55,7 +62,6 @@ export async function isFollowing(followerId: string, followedId: string): Promi
   return !!data;
 }
 
-/** Follower / following counts for a user (counts are world-readable, §106). */
 export async function getFollowCounts(userId: string): Promise<{ followers: number; following: number }> {
   const [followers, following] = await Promise.all([
     supabase.from("follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", userId),
@@ -67,4 +73,35 @@ export async function getFollowCounts(userId: string): Promise<{ followers: numb
     followers: requireExactCount(followers.count, "The follower count wasn't available."),
     following: requireExactCount(following.count, "The following count wasn't available."),
   };
+}
+
+async function profilesForIds(ids: string[]): Promise<Profile[]> {
+  if (!ids.length) return [];
+  const { data, error } = await supabase.from("profiles").select("*").in("id", ids);
+  if (error) throw error;
+  const rows = (data ?? []) as Profile[];
+  const byId = new Map(rows.map((profile) => [profile.id, profile]));
+  return ids.map((id) => byId.get(id)).filter((profile): profile is Profile => Boolean(profile));
+}
+
+/** Ordered newest-first list of people following `userId`. */
+export async function getFollowers(userId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from("follows")
+    .select("follower_id, created_at")
+    .eq("followed_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return profilesForIds((data ?? []).map((row) => row.follower_id));
+}
+
+/** Ordered newest-first list of people `userId` follows. */
+export async function getFollowing(userId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from("follows")
+    .select("followed_id, created_at")
+    .eq("follower_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return profilesForIds((data ?? []).map((row) => row.followed_id));
 }

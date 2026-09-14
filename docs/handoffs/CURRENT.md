@@ -3,7 +3,22 @@
 > Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
 > authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
-## Exact checkpoint — 2026-09-10
+## Integration candidate — 2026-09-14
+
+The authorized draft integration branch `codex/integrated-mvp-resume` combines the exact
+`codex/protected-media-foundation` head `c0ec0eb` with the additive Settings, social-list,
+Block/Report, and auth-safe Shared-Wall-link work from `codex/resume-mvp-sep8` at `b1e6302`.
+
+The integration deliberately retains the newer protected-media, actor-bound account-routing,
+capability-driven contribution, Alerts, and RPC-only Shared-Wall contracts. It excludes the older
+profile-derived account gate, obsolete Notifications modal, and direct Shared-Wall membership
+mutations. No schema or migration was added by the integration.
+
+This candidate is **unmerged and undeployed**. The prior 60% checkpoint remains the last certified
+production-readiness claim until an independent Reviewer approves this exact integration and QA
+passes the same version. Do not publish a higher percentage from source breadth alone.
+
+## Certified baseline — 2026-09-10
 
 The-Wall is at a conservative **60% production-ready MVP milestone**.
 
@@ -46,11 +61,22 @@ No hosted migration, production-data change, merge, deployment, or public releas
 
 ## Verification boundary
 
-**Verified:** CI run `127` is green on exact tree `08907e3a...`; TypeScript, lint, and the complete
+**Certified baseline:** CI run `127` is green on exact tree `08907e3a...`; TypeScript, lint, and the complete
 PostgreSQL security regression suite pass in CI. Independently, local QA passed 11 client contract
 tests, Expo configuration validation, and both iOS and Android exports. Final independent Backend
 and Frontend reviews approved the exact candidate. Independent QA passed the source-and-CI
 checkpoint.
+
+**Current integration candidate, author-side Verified:** TypeScript passes; lint passes with zero
+errors and nine pre-existing warnings; all 11 client contract suites pass; the media-writer contract
+passes; the isolated media-processor build and all 31 worker tests pass; Expo public configuration
+resolves; and iOS and Android production exports complete. `git diff --check` passes and no merge
+markers remain. The PostgreSQL security suite is pending the draft-PR CI environment because this
+workspace has no local PostgreSQL client or Docker.
+
+**Current integration candidate, independently unverified:** code-level Reviewer approval and QA
+behavioral verification on the exact integration commit have not yet occurred. Parent approvals do
+not compose across a merge.
 
 **Not verified:** hosted Supabase, real hosted accounts, Storage/Edge/worker interoperability,
 physical iOS/Android behavior, accessibility, performance, adverse networks, push notifications,
@@ -96,6 +122,9 @@ because hosted, device, accessibility, performance, and release evidence is stil
 
 ## Resume instruction
 
-Keep draft PR `#19` unmerged and undeployed. Continue with the Settings + safety/account-lifecycle
-vertical slice under Product → Architecture → implementation → independent Review → QA. Stop only
-at a real Founder Gate.
+Keep `codex/integrated-mvp-resume`, draft PR `#19`, and all predecessor branches unmerged and
+undeployed. Finish the integration gate in this order: commit the resolved candidate; independent
+Reviewer on the exact hash; QA on that approved hash; push the authorized draft branch and require
+green PostgreSQL CI. After that, continue approved-writer management, blocked-user controls,
+remaining Alerts destinations, recoverable deletion, and link/device edge cases through the normal
+Product → Architecture → implementation → Reviewer → QA flow. Stop only at a real Founder Gate.
