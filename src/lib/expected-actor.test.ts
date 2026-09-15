@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+// @ts-ignore Dependency-free Node runner requires the built-in module import.
+import { readFileSync } from "node:fs";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { requireExpectedActor } from "./expected-actor.ts";
+import { mapActorBoundMutationError, requireExpectedActor } from "./expected-actor.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { executeAccountDeactivation, executeMarkRemoval } from "./actor-bound-service-contract.ts";
 
@@ -18,6 +20,16 @@ assert.throws(
   () => requireExpectedActor("user-a", "user-b", "signed out"),
   /session changed/i,
   "a mutation cannot be reassigned to another active account",
+);
+
+const serverMismatch = mapActorBoundMutationError({ message: "ACTOR_MISMATCH", code: "P0001" });
+assert.ok(serverMismatch instanceof Error);
+assert.equal(serverMismatch.message, "Your session changed. Please try again.");
+const unrelatedServerError = { message: "MARK_REMOVAL_QUOTA", code: "P0001" };
+assert.equal(
+  mapActorBoundMutationError(unrelatedServerError),
+  unrelatedServerError,
+  "non-actor server errors retain their original object and behavior",
 );
 
 async function verifyDelayedAccountSwitch(): Promise<void> {
@@ -66,12 +78,21 @@ async function verifyDelayedAccountDeactivation(): Promise<void> {
   assert.equal(mutationCalls, 0, "deactivation never reaches its RPC after the account switches");
 }
 
+async function verifyAccountActorPropagation(): Promise<void> {
+  const calls: string[] = [];
+  await executeAccountDeactivation("user-a", {
+    getActorId: async () => "user-a",
+    deactivate: async (actorId) => { calls.push(actorId); },
+  });
+  assert.deepEqual(calls, ["user-a"], "the preflight-confirmed actor reaches the deactivation RPC port");
+}
+
 async function verifyDelayedSafetyRemoval(): Promise<void> {
   const expectedActorId = "user-a";
   let currentActorId = expectedActorId;
   let releaseActor!: () => void;
   const delayedActor = new Promise<void>((resolve) => { releaseActor = resolve; });
-  const removals: { markId: string; reason: string }[] = [];
+  const removals: { actorId: string; markId: string; reason: string }[] = [];
 
   const operation = executeMarkRemoval(
     expectedActorId,
@@ -82,8 +103,8 @@ async function verifyDelayedSafetyRemoval(): Promise<void> {
         await delayedActor;
         return currentActorId;
       },
-      remove: async (markId, reason) => {
-        removals.push({ markId, reason });
+      remove: async (actorId, markId, reason) => {
+        removals.push({ actorId, markId, reason });
       },
     },
   );
@@ -94,13 +115,52 @@ async function verifyDelayedSafetyRemoval(): Promise<void> {
   assert.deepEqual(removals, [], "safety removal never reaches its update after the account switches");
 }
 
+async function verifyMarkActorPropagation(): Promise<void> {
+  const removals: { actorId: string; markId: string; reason: string }[] = [];
+  const port = {
+    getActorId: async () => "user-a",
+    remove: async (actorId: string, markId: string, reason: "normal" | "safety") => {
+      removals.push({ actorId, markId, reason });
+    },
+  };
+
+  await executeMarkRemoval("user-a", "mark-normal", "normal", port);
+  await executeMarkRemoval("user-a", "mark-safety", "safety", port);
+  assert.deepEqual(removals, [
+    { actorId: "user-a", markId: "mark-normal", reason: "normal" },
+    { actorId: "user-a", markId: "mark-safety", reason: "safety" },
+  ], "normal and safety removals bind the same confirmed actor into the RPC port");
+}
+
+const accountSource = readFileSync("src/lib/account.ts", "utf8");
+assert.match(accountSource, /rpc\("deactivate_account", \{ p_expected_actor_id: actorId \}\)/);
+assert.doesNotMatch(
+  accountSource,
+  /\.rpc\((["'])deactivate_account\1\s*\)/,
+  "deactivation cannot fall back to the retired parameterless RPC",
+);
+assert.match(accountSource, /throw mapActorBoundMutationError\(error\)/);
+const marksSource = readFileSync("src/lib/marks.ts", "utf8");
+const removeMarkSource = marksSource.slice(
+  marksSource.indexOf("export async function removeMark("),
+  marksSource.indexOf("export async function remainingNormalRemovals("),
+);
+assert.match(removeMarkSource, /rpc\("remove_mark", \{/);
+assert.match(removeMarkSource, /p_expected_actor_id: actorId/);
+assert.match(removeMarkSource, /p_mark_id: targetMarkId/);
+assert.match(removeMarkSource, /p_reason: removalReason/);
+assert.match(removeMarkSource, /throw mapActorBoundMutationError\(error\)/);
+assert.doesNotMatch(removeMarkSource, /\.from\("marks"\)/, "removal cannot fall back to a direct table update");
+
 void Promise.all([
   verifyDelayedAccountSwitch(),
   verifyDelayedAccountDeactivation(),
+  verifyAccountActorPropagation(),
   verifyDelayedSafetyRemoval(),
+  verifyMarkActorPropagation(),
 ])
   .then(() => console.log(
-    "expected actor contract: signed-out, mismatch, deactivation switch, and safety-removal switch cases passed",
+    "expected actor contract: preflight/server mismatch, RPC propagation, and delayed-switch cases passed",
   ))
   .catch((cause) => {
     console.error(cause instanceof Error ? cause.message : "expected actor contract failed");

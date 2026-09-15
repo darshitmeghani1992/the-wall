@@ -132,7 +132,7 @@ BEGIN;
 -- Deactivate G → D cannot follow G.
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G
-select deactivate_account();
+select deactivate_account('88888888-8888-8888-8888-888888888888');
 reset role;
 set local role authenticated;
 set local "test.uid" = '55555555-5555-5555-5555-555555555555';   -- D
@@ -151,7 +151,7 @@ BEGIN;
 -- Deactivated D cannot follow anyone.
 set local role authenticated;
 set local "test.uid" = '55555555-5555-5555-5555-555555555555';   -- D
-select deactivate_account();
+select deactivate_account('55555555-5555-5555-5555-555555555555');
 do $$
 declare rejected boolean := false;
 begin

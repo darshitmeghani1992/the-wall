@@ -1,3 +1,5 @@
+const ACTOR_CHANGED_MESSAGE = "Your session changed. Please try again.";
+
 /**
  * Binds a delayed client mutation to the account that initiated it. RLS remains
  * the authorization boundary; this guard prevents an account switch from
@@ -9,8 +11,21 @@ export function requireExpectedActor(
   signedOutMessage: string,
 ): string {
   if (!actualActorId) throw new Error(signedOutMessage);
-  if (actualActorId !== expectedActorId) throw new Error("Your session changed. Please try again.");
+  if (actualActorId !== expectedActorId) throw new Error(ACTOR_CHANGED_MESSAGE);
   return actualActorId;
+}
+
+/** Keep the server's actor-binding failure on the same user-facing contract as the client preflight. */
+export function mapActorBoundMutationError(cause: unknown): unknown {
+  if (
+    cause
+    && typeof cause === "object"
+    && "message" in cause
+    && cause.message === "ACTOR_MISMATCH"
+  ) {
+    return new Error(ACTOR_CHANGED_MESSAGE);
+  }
+  return cause;
 }
 
 /** Resolve the current actor at the last async boundary before a mutation. */

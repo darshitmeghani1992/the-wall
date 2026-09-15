@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
 import { executeMarkRemoval, type MarkRemovalReason } from "./actor-bound-service-contract";
+import { mapActorBoundMutationError } from "./expected-actor";
 import type { Mark } from "./types";
 import type { MediaWriterRpc } from "./mark-media-writer";
 import {
@@ -167,8 +168,9 @@ export const NORMAL_REMOVAL_LIMIT = 3;
 export type RemovalReason = MarkRemovalReason;
 
 /**
- * Owner: remove a received Mark (soft — status becomes 'removed'). The DB trigger
- * (0012) stamps who/when and enforces the §33 quota: 'normal' removals are capped
+ * Owner: remove a received Mark (soft — status becomes 'removed'). The actor-bound
+ * RPC (0027) delegates to the DB trigger (0012), which stamps who/when and enforces
+ * the §33 quota: 'normal' removals are capped
  * at 3 per rolling 30 days; 'safety' removals (from a report/block/abuse path) are
  * never rate-limited. Throws `MARK_REMOVAL_QUOTA` when a normal removal is over
  * the cap, so the UI can steer the owner to a safety removal.
@@ -188,13 +190,13 @@ export async function removeMark(
         if (error) throw error;
         return data.user?.id;
       },
-      remove: async (targetMarkId, removalReason) => {
-        const { error, count } = await supabase
-          .from("marks")
-          .update({ status: "removed", removal_reason: removalReason }, { count: "exact" })
-          .eq("id", targetMarkId);
-        if (error) throw error;
-        if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
+      remove: async (actorId, targetMarkId, removalReason) => {
+        const { error } = await supabase.rpc("remove_mark", {
+          p_expected_actor_id: actorId,
+          p_mark_id: targetMarkId,
+          p_reason: removalReason,
+        });
+        if (error) throw mapActorBoundMutationError(error);
       },
     },
   );

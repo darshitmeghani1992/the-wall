@@ -6,7 +6,7 @@ type ActorProvider = {
 };
 
 export type AccountDeactivationPort = ActorProvider & {
-  deactivate: () => Promise<void>;
+  deactivate: (expectedActorId: string) => Promise<void>;
 };
 
 export async function executeAccountDeactivation(
@@ -17,13 +17,13 @@ export async function executeAccountDeactivation(
     expectedActorId,
     "You need to be signed in to deactivate your account.",
     port.getActorId,
-    async () => port.deactivate(),
+    async (actorId) => port.deactivate(actorId),
   );
 }
 
 export type MarkRemovalReason = "normal" | "safety";
 export type MarkRemovalPort = ActorProvider & {
-  remove: (markId: string, reason: MarkRemovalReason) => Promise<void>;
+  remove: (expectedActorId: string, markId: string, reason: MarkRemovalReason) => Promise<void>;
 };
 
 export async function executeMarkRemoval(
@@ -36,6 +36,6 @@ export async function executeMarkRemoval(
     expectedActorId,
     "You need to be signed in to remove a Mark.",
     port.getActorId,
-    async () => port.remove(markId, reason),
+    async (actorId) => port.remove(actorId, markId, reason),
   );
 }

@@ -139,6 +139,10 @@ echo "── assertion: 70_wall_members (legacy direct-write contract before cut
 psql_test -f "$HERE/70_wall_members.sql" >/dev/null
 echo "── load: 0026_shared_wall_lifecycle.sql"
 psql_test -f "$MIG/0026_shared_wall_lifecycle.sql" >/dev/null
+echo "── load: 0027_actor_bound_safety_mutations.sql"
+psql_test -f "$MIG/0027_actor_bound_safety_mutations.sql" >/dev/null
+echo "── replay: 0027_actor_bound_safety_mutations.sql (idempotence)"
+psql_test -f "$MIG/0027_actor_bound_safety_mutations.sql" >/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
@@ -148,7 +152,7 @@ for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocki
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             58_activation_foundation \
             60_secret_marks 61_secret_reveal 71_shared_wall_lifecycle 80_notifications 85_moderation 90_profile_links \
-            95_account_lifecycle; do
+            95_account_lifecycle 96_actor_bound_safety_mutations; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done
@@ -185,6 +189,10 @@ echo ""
 echo "── assertion: 72_shared_wall_races (two physical sessions)"
 bash "$HERE/72_shared_wall_races.sh"
 
+echo ""
+echo "── assertion: 96_actor_bound_safety_races (two physical sessions)"
+bash "$HERE/96_actor_bound_safety_races.sh"
+
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ✔ ALL ASSERTIONS PASSED"
 echo "   SEC-001 (AC-S1…AC-S10 + moderator-read + storage)"
@@ -192,4 +200,5 @@ echo "   FP-C2  (secret isolation + F1 lifecycle, membership gating, 5"
 echo "           notification triggers, profile links)"
 echo "   MEDIA-C1.1 (credential fence + key lifecycle + atomic callback receipts)"
 echo "   MEDIA-C1.3 (writer cancellation + caption/status contract + final cutover)"
+echo "   ACTOR-BOUND (atomic deactivation + normal/safety Mark removal races)"
 echo "══════════════════════════════════════════════════════════════════════"

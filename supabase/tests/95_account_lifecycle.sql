@@ -36,7 +36,7 @@ BEGIN;
 -- G deactivates via the self-service RPC.
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G
-select deactivate_account();
+select deactivate_account('88888888-8888-8888-8888-888888888888');
 
 reset role;
 do $$
@@ -85,7 +85,7 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G
-select deactivate_account();
+select deactivate_account('88888888-8888-8888-8888-888888888888');
 select reactivate_account();
 reset role;
 do $$
@@ -112,7 +112,7 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O
-select deactivate_account();
+select deactivate_account('44444444-4444-4444-4444-444444444444');
 reset role;
 do $$
 declare o_personal uuid;

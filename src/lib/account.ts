@@ -1,12 +1,13 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
 import { executeAccountDeactivation } from "./actor-bound-service-contract";
+import { mapActorBoundMutationError } from "./expected-actor";
 import { isAccountRoute, runForExpectedSubject, type AccountRoute } from "./onboarding-contract";
 
 /**
  * Account lifecycle (Master Spec §82). Deactivation is a recoverable 30-day
  * window: while deactivated the account is not discoverable or interactable
- * (enforced server-side by migration 0013 — `is_active_account` gates
+ * (enforced server-side by migrations 0013/0027 — `is_active_account` gates
  * `can_view_wall` / `can_contribute` and the friend-request policy). Signing back
  * in and reactivating restores everything.
  *
@@ -24,9 +25,9 @@ export async function deactivateAccount(expectedActorId: string): Promise<void> 
         if (error) throw error;
         return data.user?.id;
       },
-      deactivate: async () => {
-        const { error } = await supabase.rpc("deactivate_account");
-        if (error) throw error;
+      deactivate: async (actorId) => {
+        const { error } = await supabase.rpc("deactivate_account", { p_expected_actor_id: actorId });
+        if (error) throw mapActorBoundMutationError(error);
         track("Account Deactivated");
       },
     },

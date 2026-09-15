@@ -81,7 +81,7 @@ p2=$LAST_PID; await_pair "$p1" "$p2"
 
 # 7 deactivation / join: profile row lock forces post-wait active revalidation.
 run_session r7a 66666666-6666-6666-6666-666666666666 \
- "select deactivate_account(); select pg_sleep(0.8);"
+ "select deactivate_account('66666666-6666-6666-6666-666666666666'); select pg_sleep(0.8);"
 p1=$LAST_PID; sleep 0.1
 run_session r7b 66666666-6666-6666-6666-666666666666 \
  "select join_shared_wall('72000000-0000-4000-8000-000000000007');"
