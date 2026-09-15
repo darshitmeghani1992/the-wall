@@ -6,28 +6,27 @@
 > **Next Actions**. Product authority remains the Master Build Spec. Governance authority remains
 > `docs/aios/`.
 
-_Last updated: 2026-09-10._
+_Last updated: 2026-09-15._
 
 ## Current milestone
 
-The project is at a conservative **60% production-ready MVP milestone**. This is a weighted
+The project is at a conservative **63% production-ready MVP milestone**. This is a weighted
 source-and-CI readiness estimate, not a count of files/screens and not a release-readiness claim.
 
-- Remote milestone commit: `ac2d339`
-- Local equivalent commit: `b536e1d`
-- Exact tree: `08907e3aec30db9fa025b6cf38e867cccefd1667`
-- Branch: `codex/protected-media-foundation`
-- Draft PR: `#19`
-- CI run `127` (`34454622762`): **green**
-- Independent Backend review: **APPROVE**
-- Independent Frontend review: **APPROVE**
+- Remote milestone commit: `d78eada458c2fbfff14106cb7e28055ee4d1e768`
+- Local equivalent commit: `8489c052bc3a5a14eb2ce42b752d5ab97632fb3d`
+- Exact tree: `ef8f8d759689d23dfed9a0e02806a413008d7722`
+- Branch: `codex/integrated-mvp-resume`
+- Draft PR: `#22`
+- CI run `134` (`34940126150`): **green**
+- Independent implementation review: **APPROVE**
 - Independent QA: **PASS** for the exact source-and-CI boundary
 - State: **draft, unmerged, undeployed**
 
 No hosted database, production data, public release, merge, or deployment changed at this
 milestone.
 
-## Completed and verified at the 60% checkpoint
+## Completed and verified at the 63% checkpoint
 
 ### Foundation, activation, and navigation
 
@@ -42,6 +41,12 @@ milestone.
   approved writers, blocking, reactions, Anonymous/Secret handling, moderation, and account state.
 - Discover supports real people search and relationship actions. Other-Wall contribution is driven
   by the server capability result rather than guessed from friendship.
+- Personal Wall privacy, contribution policy, and Anonymous Marks settings now have an explicit,
+  actor-bound save flow. Approved writers can be searched, added, and removed without changing
+  friendship or follow state.
+- Blocked users can be listed and unblocked through a privacy-minimized, outbound-only management
+  contract. The database function returns only the identity fields needed for management and uses
+  deterministic cursor pagination.
 
 ### Wall and Mark client
 
@@ -77,14 +82,16 @@ milestone.
 
 ## Verification boundary
 
-**Verified** for exact tree `08907e3aec30db9fa025b6cf38e867cccefd1667`:
+**Verified** for exact tree `ef8f8d759689d23dfed9a0e02806a413008d7722`:
 
-- CI run `127` passed TypeScript, lint, and the complete PostgreSQL security regression suite.
-- Independent local QA passed 11 client contract tests, Expo configuration validation, and both
+- CI run `134` passed TypeScript, lint, and the complete PostgreSQL security regression suite,
+  including migrations `0027` and `0028` plus idempotent replay.
+- Independent local QA passed all 30 client/contract tests, Expo configuration validation, and both
   iOS and Android exports.
-- Backend and Frontend independent reviewers issued final **APPROVE** verdicts.
+- Independent review issued a final **APPROVE** verdict for the exact tree.
 - Independent QA issued **PASS** for source and CI evidence.
-- The Shared-Wall lifecycle and its security/race cases passed the exact-tree verification path.
+- Shared-Wall lifecycle, server-bound expected-user enforcement, settings management, and their
+  security/race cases passed the exact-tree verification path.
 
 **Unverified and not included as completed production behavior:**
 
@@ -103,29 +110,29 @@ milestone.
 “Implementation coverage” describes how much of each workstream now exists in reviewed source.
 “Credited readiness” deliberately discounts that coverage when hosted, device, operational, or
 release evidence is still absent. The credited points—not raw implementation arithmetic—form the
-conservative 60% milestone.
+conservative 63% milestone.
 
 | Workstream | Portfolio weight | Implementation coverage | Credited readiness |
 |---|---:|---:|---:|
 | Product, UX contract and architecture | 10% | 100% | 10.0% |
-| Foundation, auth and onboarding | 10% | 75% | 6.0% |
-| Core backend and permission security | 20% | 90% | 15.0% |
+| Foundation, auth and onboarding | 10% | 80% | 6.5% |
+| Core backend and permission security | 20% | 92% | 16.0% |
 | Core Wall and Mark client journeys | 15% | 70% | 9.0% |
-| Friends, followers and Shared Walls | 15% | 80% | 10.0% |
+| Friends, followers and Shared Walls | 15% | 85% | 10.5% |
 | Protected media end to end | 10% | 75% | 5.0% |
-| Alerts, settings, safety and deep links | 10% | 50% | 4.0% |
+| Alerts, settings, safety and deep links | 10% | 65% | 5.0% |
 | Device QA, accessibility, performance and release | 10% | 10% | 1.0% |
-| **Total production-ready MVP** | **100%** |  | **60.0%** |
+| **Total production-ready MVP** | **100%** |  | **63.0%** |
 
-The un-discounted coverage percentages would produce 71.5 points under simple multiplication.
+The un-discounted coverage percentages would produce 75.65 points under simple multiplication.
 Publishing that as overall progress would overstate readiness because major hosted/device/release
 boundaries have not been exercised. The evidence discount keeps the claim honest.
 
-## Remaining 40%
+## Remaining 37%
 
-- Complete and polish Personal Wall settings, approved-writer management, follower/friend surfaces,
-  remaining Status/Wall-switcher states, and any incomplete Wall/Mark empty/loading/offline paths.
-- Complete Alerts beyond the Shared-Wall journeys, blocked-user management, user/Wall reporting,
+- Complete and polish follower/friend surfaces, remaining Status/Wall-switcher states, and any
+  incomplete Wall/Mark empty/loading/offline paths.
+- Complete Alerts beyond the Shared-Wall journeys, user/Wall reporting,
   moderation operations UI, and the full recoverable account-deletion experience.
 - Finish universal links, store fallback, sharing/install restoration, and missing/deleted
   destination handling across every supported link type.
@@ -150,7 +157,7 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Next Actions
 
-1. Complete Settings, safety/account lifecycle, approved-writer management, and remaining Alerts.
+1. Complete remaining Alerts plus reporting, moderation, and safety/account-lifecycle surfaces.
 2. Complete universal/deferred links and store fallback across all supported destinations.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
 4. Run physical-device, accessibility, performance, lifecycle, and adversarial QA.

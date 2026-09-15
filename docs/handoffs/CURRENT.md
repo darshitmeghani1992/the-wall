@@ -3,20 +3,40 @@
 > Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
 > authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
-## Integration candidate — 2026-09-14
+## Certified draft checkpoint — 2026-09-15
 
-The authorized draft integration branch `codex/integrated-mvp-resume` combines the exact
-`codex/protected-media-foundation` head `c0ec0eb` with the additive Settings, social-list,
-Block/Report, and auth-safe Shared-Wall-link work from `codex/resume-mvp-sep8` at `b1e6302`.
+The authorized draft integration branch `codex/integrated-mvp-resume` is now at a conservative
+**63% production-ready MVP milestone** for source-and-CI evidence. Draft PR `#22` remains unmerged
+and undeployed.
 
-The integration deliberately retains the newer protected-media, actor-bound account-routing,
-capability-driven contribution, Alerts, and RPC-only Shared-Wall contracts. It excludes the older
-profile-derived account gate, obsolete Notifications modal, and direct Shared-Wall membership
-mutations. No schema or migration was added by the integration.
+| Evidence | Exact value |
+|---|---|
+| Remote checkpoint commit | `d78eada458c2fbfff14106cb7e28055ee4d1e768` |
+| Local equivalent commit | `8489c052bc3a5a14eb2ce42b752d5ab97632fb3d` |
+| Exact tree | `ef8f8d759689d23dfed9a0e02806a413008d7722` |
+| Development branch | `codex/integrated-mvp-resume` |
+| Draft PR | `#22` |
+| CI | Run `134` (`34940126150`) — green |
+| Independent review | **APPROVE** for the exact tree |
+| Independent QA | **PASS** for source + CI |
+| Delivery state | Draft, unmerged, undeployed |
 
-This candidate is **unmerged and undeployed**. The prior 60% checkpoint remains the last certified
-production-readiness claim until an independent Reviewer approves this exact integration and QA
-passes the same version. Do not publish a higher percentage from source breadth alone.
+No hosted migration, production-data change, merge, deployment, or public release occurred.
+
+## Latest completed slice
+
+- Server-bound expected-user enforcement is present through migration `0027` and its regression
+  suite, preventing stale clients from mutating after an account switch.
+- Personal Wall privacy, writer policy, and Anonymous Marks settings have an explicit actor-bound
+  save flow with unsaved-change protection.
+- Approved writers can be searched, added, and removed without changing friendship/follow state;
+  approvals persist when the policy changes.
+- Blocked users can be listed and unblocked. Migration `0028` adds a narrow outbound-only,
+  privacy-minimized read function with exact ACL, actor precedence, and deterministic 20+1 cursor
+  pagination. It does not weaken profile RLS.
+- CI loaded and replayed both migrations and passed the full PostgreSQL security suite.
+- Independent review and QA approved exact tree `ef8f8d75...`; all 30 client/contract tests,
+  TypeScript, lint, Expo config, and iOS/Android production exports passed.
 
 ## Certified baseline — 2026-09-10
 
@@ -67,16 +87,10 @@ tests, Expo configuration validation, and both iOS and Android exports. Final in
 and Frontend reviews approved the exact candidate. Independent QA passed the source-and-CI
 checkpoint.
 
-**Current integration candidate, author-side Verified:** TypeScript passes; lint passes with zero
-errors and nine pre-existing warnings; all 11 client contract suites pass; the media-writer contract
-passes; the isolated media-processor build and all 31 worker tests pass; Expo public configuration
-resolves; and iOS and Android production exports complete. `git diff --check` passes and no merge
-markers remain. The PostgreSQL security suite is pending the draft-PR CI environment because this
-workspace has no local PostgreSQL client or Docker.
-
-**Current integration candidate, independently unverified:** code-level Reviewer approval and QA
-behavioral verification on the exact integration commit have not yet occurred. Parent approvals do
-not compose across a merge.
+**Current checkpoint, independently verified:** TypeScript passes; lint passes with zero errors and
+nine pre-existing warnings; all 30 client/contract tests pass; Expo public configuration resolves;
+and iOS and Android production exports complete. CI run `134` passed the complete PostgreSQL
+security suite. Independent review approved and QA passed the exact tree.
 
 **Not verified:** hosted Supabase, real hosted accounts, Storage/Edge/worker interoperability,
 physical iOS/Android behavior, accessibility, performance, adverse networks, push notifications,
@@ -86,7 +100,7 @@ A source surface is not production-ready merely because it exists or passes CI. 
 remains gated until hosted processing, signed reads, cleanup, legacy reconciliation, and real-device
 tests pass.
 
-## Conservative 60% model
+## Conservative 63% model
 
 Implementation coverage records reviewed source breadth. Credited readiness applies an evidence
 discount for untested hosted/device/release boundaries and is the number used for overall progress.
@@ -94,22 +108,22 @@ discount for untested hosted/device/release boundaries and is the number used fo
 | Workstream | Weight | Implementation coverage | Credited readiness |
 |---|---:|---:|---:|
 | Product, UX contract and architecture | 10% | 100% | 10.0% |
-| Foundation, auth and onboarding | 10% | 75% | 6.0% |
-| Core backend and permission security | 20% | 90% | 15.0% |
+| Foundation, auth and onboarding | 10% | 80% | 6.5% |
+| Core backend and permission security | 20% | 92% | 16.0% |
 | Core Wall and Mark client journeys | 15% | 70% | 9.0% |
-| Friends, followers and Shared Walls | 15% | 80% | 10.0% |
+| Friends, followers and Shared Walls | 15% | 85% | 10.5% |
 | Protected media end to end | 10% | 75% | 5.0% |
-| Alerts, settings, safety and deep links | 10% | 50% | 4.0% |
+| Alerts, settings, safety and deep links | 10% | 65% | 5.0% |
 | Device QA, accessibility, performance and release | 10% | 10% | 1.0% |
-| **Total** | **100%** |  | **60.0%** |
+| **Total** | **100%** |  | **63.0%** |
 
-The implementation percentages alone would yield 71.5 points. The 60% claim is intentionally lower
+The implementation percentages alone would yield 75.65 points. The 63% claim is intentionally lower
 because hosted, device, accessibility, performance, and release evidence is still missing.
 
-## Remaining 40% — recommended order
+## Remaining 37% — recommended order
 
-1. Complete Settings, approved-writer management, blocked-user controls, reporting/moderation UI,
-   recoverable account deletion, and remaining Alerts destinations.
+1. Complete remaining Alerts destinations, reporting/moderation UI, recoverable account deletion,
+   and follower/friend polish.
 2. Finish universal/deferred links, store fallback, install-intent restoration, and graceful stale
    destinations across all supported object types.
 3. Complete remaining Wall/Mark empty/loading/offline states and visual/accessibility polish.
@@ -122,9 +136,7 @@ because hosted, device, accessibility, performance, and release evidence is stil
 
 ## Resume instruction
 
-Keep `codex/integrated-mvp-resume`, draft PR `#19`, and all predecessor branches unmerged and
-undeployed. Finish the integration gate in this order: commit the resolved candidate; independent
-Reviewer on the exact hash; QA on that approved hash; push the authorized draft branch and require
-green PostgreSQL CI. After that, continue approved-writer management, blocked-user controls,
-remaining Alerts destinations, recoverable deletion, and link/device edge cases through the normal
-Product → Architecture → implementation → Reviewer → QA flow. Stop only at a real Founder Gate.
+Keep `codex/integrated-mvp-resume`, draft PR `#22`, and all predecessor branches unmerged and
+undeployed. Continue with remaining Alerts destinations, reporting/moderation, recoverable deletion,
+and link/device edge cases through the normal Product → Architecture → implementation → Reviewer →
+QA flow. Do not apply hosted migrations, merge, or deploy without a new Founder authorization.
