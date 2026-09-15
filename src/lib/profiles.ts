@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { Profile, Wall } from "./types";
+import { updatePersonalWallSettings } from "./personal-wall-settings";
 
 /** Fetch the signed-in user's profile row, or null if they haven't set one up. */
 export async function getProfile(userId: string): Promise<Profile | null> {
@@ -39,7 +40,11 @@ export type ProfileUpdate = {
   website?: string | null;
 };
 
-export type PersonalWallSetup = Pick<Wall, "visibility" | "contribution_policy" | "allow_anonymous">;
+export type PersonalWallSetup = {
+  visibility: "public" | "private";
+  contribution_policy: "friends" | "everyone" | "selected";
+  allow_anonymous: boolean;
+};
 
 /**
  * Update the signed-in user's own profile row. Relies on the existing
@@ -92,15 +97,18 @@ export async function updatePersonalWallSetup(
   userId: string,
   setup: PersonalWallSetup,
 ): Promise<Wall> {
-  const { data, error } = await supabase
-    .from("walls")
-    .update(setup)
-    .eq("owner_id", userId)
-    .eq("type", "personal")
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as Wall;
+  await updatePersonalWallSettings(userId, {
+    visibility: setup.visibility,
+    contributionPolicy: setup.contribution_policy,
+    allowAnonymous: setup.allow_anonymous,
+  });
+  const wall = await getPersonalWall(userId);
+  return requirePersonalWall(wall);
+}
+
+function requirePersonalWall(wall: Wall | null): Wall {
+  if (!wall) throw new Error("Your Personal Wall is no longer available.");
+  return wall;
 }
 
 /** Final ordered write. This must run only after profile and Personal Wall settings succeed. */

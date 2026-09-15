@@ -125,6 +125,11 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
   contribute anywhere or be friend-requested, and it's excluded from people search. SHARED
   walls it owns stay accessible to members (gate is personal-wall-only). Self-service
   `deactivate_account()`/`reactivate_account()` RPCs (self-only) stamp `deactivated_at`.
+  **Correction (2026-09-15, migration 0027):** the zero-argument
+  `deactivate_account()` surface is retired and non-callable by API roles. Clients use
+  `deactivate_account(p_expected_actor_id uuid)`, which compares the expected account with
+  the request token's `auth.uid()` in the same authoritative transaction. Reactivation is
+  unchanged.
 - **Reason:** Hiding the profile row would break author display on existing Marks. Gating the two
   chokepoints (already the tested centre of visibility/contribution) keeps blast-radius minimal
   and the SEC-001 suite as the regression guard. Shared walls aren't gated on owner-active
@@ -169,3 +174,21 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
 - **Reversibility:** Additive/idempotent migration; pre-hosted-apply. `is_admin` is bootstrapped
   only by a backend/SQL actor (postgres/service_role). **Founder Gate?** No for code; hosted
   apply remains a deploy Gate.
+
+## D-12 · 2026-09-15 · Blocked Users management uses a narrow outbound-only RPC (migration 0028)
+- **Decision:** Keep the canonical bilateral profile RLS boundary unchanged. Add
+  `list_my_blocked_users(expected actor, cursor)` as an authenticated-only,
+  `SECURITY DEFINER` read for an active caller's own outbound block associations. It returns
+  at most 20 rows containing only user id, display name, handle, avatar URL, and block time;
+  it cannot accept an arbitrary blocker id and never reveals inbound blocks. The RPC compares
+  the expected account with one captured `auth.uid()` before any other validation.
+- **Reason:** Profile RLS correctly hides both parties across a block, so joining blocks to
+  profiles through ordinary client reads erases the identity needed for the blocker to undo
+  their own block. Broadening profile visibility would weaken a larger privacy boundary. A
+  narrow actor-bound projection exposes only what the management screen needs.
+- **Alternatives:** Broaden profile SELECT across outbound blocks (rejected — weakens general
+  profile privacy); show irreversible anonymous block rows (rejected — unusable); expose an
+  arbitrary blocker argument (rejected — authorization/enumeration risk).
+- **Reversibility:** Client-first rollback: remove RPC callers, revoke its authenticated grant,
+  then drop the exact function. Migration 0028 writes no user data. **Founder Gate?** Approved
+  for source implementation and testing only; hosted migration remains unapproved.

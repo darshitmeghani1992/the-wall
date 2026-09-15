@@ -4,6 +4,8 @@ import { colors, markColors, radius } from "@/theme";
 import type { Profile } from "@/lib/types";
 import { Text } from "./Text";
 
+export type PersonRowIdentity = Pick<Profile, "id" | "display_name" | "handle" | "avatar_url">;
+
 export function PersonRow({
   profile,
   detail,
@@ -15,7 +17,7 @@ export function PersonRow({
   onSecondaryAction,
   onPress,
 }: {
-  profile: Profile;
+  profile: PersonRowIdentity;
   detail?: string;
   action?: string;
   secondaryAction?: string;

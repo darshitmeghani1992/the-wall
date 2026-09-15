@@ -68,6 +68,9 @@ export default function SettingsScreen() {
   return (
     <Screen dockInset={false}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        accessibilityState={{ disabled: busy }}
         onPress={() => { if (!actionInFlight.current) router.back(); }}
         disabled={busy}
         hitSlop={10}
@@ -82,6 +85,8 @@ export default function SettingsScreen() {
 
       <View style={{ gap: 12 }}>
         <Button label="Edit profile" variant="ghost" disabled={busy} onPress={() => router.push("/profile-edit")} />
+        <Button label="Personal Wall settings" variant="ghost" disabled={busy} onPress={() => router.push("/personal-wall-settings")} />
+        <Button label="Blocked users" variant="ghost" disabled={busy} onPress={() => router.push("/blocked-users")} />
         <Button label="Sign out" variant="primary" disabled={busy} onPress={signOut} />
       </View>
 

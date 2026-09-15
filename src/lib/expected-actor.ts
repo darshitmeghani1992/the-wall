@@ -20,6 +20,8 @@ export function mapActorBoundMutationError(cause: unknown): unknown {
   if (
     cause
     && typeof cause === "object"
+    && "code" in cause
+    && cause.code === "42501"
     && "message" in cause
     && cause.message === "ACTOR_MISMATCH"
   ) {

@@ -24,6 +24,9 @@ export default function RootLayout() {
           <Stack.Screen name="account-recovery" />
           <Stack.Screen name="account-unavailable" />
           <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+          <Stack.Screen name="personal-wall-settings" />
+          <Stack.Screen name="approved-writers" />
+          <Stack.Screen name="blocked-users" />
           <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
           <Stack.Screen name="social/[kind]" />
           <Stack.Screen name="person/[id]" />

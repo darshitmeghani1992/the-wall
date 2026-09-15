@@ -22,7 +22,7 @@ assert.throws(
   "a mutation cannot be reassigned to another active account",
 );
 
-const serverMismatch = mapActorBoundMutationError({ message: "ACTOR_MISMATCH", code: "P0001" });
+const serverMismatch = mapActorBoundMutationError({ message: "ACTOR_MISMATCH", code: "42501" });
 assert.ok(serverMismatch instanceof Error);
 assert.equal(serverMismatch.message, "Your session changed. Please try again.");
 const unrelatedServerError = { message: "MARK_REMOVAL_QUOTA", code: "P0001" };
@@ -30,6 +30,12 @@ assert.equal(
   mapActorBoundMutationError(unrelatedServerError),
   unrelatedServerError,
   "non-actor server errors retain their original object and behavior",
+);
+const spoofedMessage = { message: "ACTOR_MISMATCH", code: "P0001" };
+assert.equal(
+  mapActorBoundMutationError(spoofedMessage),
+  spoofedMessage,
+  "the session-changed copy requires both the exact server state and message",
 );
 
 async function verifyDelayedAccountSwitch(): Promise<void> {
