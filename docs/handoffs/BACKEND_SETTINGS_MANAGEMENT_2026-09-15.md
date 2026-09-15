@@ -1,7 +1,7 @@
 # Implementation State: FP-SET-001 Settings Management (Backend)
 
-**Role:** Backend  
-**Date:** 2026-09-15  
+**Role:** Backend
+**Date:** 2026-09-15
 **Base:** draft PR #22 tree `94ffaa71efc0527a61c432443f84b5147309e878`
 
 ## Built

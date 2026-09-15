@@ -1,7 +1,7 @@
 # Frontend Implementation State: FP-SET-001 Settings management
 
-**Role:** FRONTEND  
-**Date:** 2026-09-15  
+**Role:** FRONTEND
+**Date:** 2026-09-15
 **Scope:** Personal Wall settings, approved writers, and blocked users UI only
 
 ## Built
