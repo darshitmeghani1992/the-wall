@@ -20,14 +20,30 @@ run_session() {
   local name="$1" uid="$2" sql="$3"
   psql_test >"$TMP_DIR/$name.out" 2>&1 <<SQL &
 begin;
-set local statement_timeout='5s';
-set local lock_timeout='4s';
+set local statement_timeout='8s';
+set local lock_timeout='6s';
+set local application_name='actor96_$name';
 set local role authenticated;
 set local "test.uid"='$uid';
 $sql
 commit;
 SQL
   LAST_PID=$!
+}
+
+wait_for_lock() {
+  local name="$1" attempt waiting
+  for attempt in $(seq 1 60); do
+    waiting="$(psql_test -Atc "select count(*) from pg_catalog.pg_stat_activity
+      where application_name='actor96_$name' and wait_event_type='Lock';")"
+    if [ "$waiting" = "1" ]; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  cat "$TMP_DIR/$name.out"
+  echo "96 RACE FAIL: $name never reached the expected profile-lock wait" >&2
+  return 1
 }
 
 await_success() {
@@ -134,14 +150,17 @@ await_success "$p1" remove_deactivate_a
 await_success "$p2" remove_deactivate_b
 verify_lifecycle '96100000-0000-4000-8000-000000000011' 'removed' 'deactivated'
 
-# Deactivation wins first: delayed removal revalidates the profile and fails.
+# Deactivation wins first on the owner's Shared Wall. RLS admits the Mark from
+# the active statement snapshot; the observed lock wait proves the a0 trigger
+# was reached before it revalidates the newly-deactivated profile and fails.
 setup_lifecycle '96100000-0000-4000-8000-000000000012'
 run_session deactivate_remove_a "$OWNER" \
-  "select public.deactivate_account('$OWNER'); select pg_sleep(0.8);"
+  "select public.deactivate_account('$OWNER'); select pg_sleep(4);"
 p1=$LAST_PID; sleep 0.1
 run_session deactivate_remove_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000012','safety');"
 p2=$LAST_PID
+wait_for_lock deactivate_remove_b
 await_success "$p1" deactivate_remove_a
 await_error "$p2" deactivate_remove_b "ACTOR_NOT_ACTIVE"
 verify_lifecycle '96100000-0000-4000-8000-000000000012' 'active' 'deactivated'
@@ -159,15 +178,17 @@ await_success "$p1" remove_suspend_a
 await_success "$p2" remove_suspend_b
 verify_lifecycle '96100000-0000-4000-8000-000000000021' 'removed' 'suspended'
 
-# Admin suspension wins first: delayed removal fails active-state revalidation.
+# Admin suspension wins first on the same Shared-Wall shape: the latched profile
+# wait proves this is the trigger path, not a pre-trigger RLS zero-row denial.
 setup_lifecycle '96100000-0000-4000-8000-000000000022'
 psql_test -c "update public.profiles set is_admin=true where id='$OWNER';"
 run_session suspend_remove_a "$OWNER" \
-  "select public.admin_suspend_account('$OWNER','race'); select pg_sleep(0.8);"
+  "select public.admin_suspend_account('$OWNER','race'); select pg_sleep(4);"
 p1=$LAST_PID; sleep 0.1
 run_session suspend_remove_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000022','safety');"
 p2=$LAST_PID
+wait_for_lock suspend_remove_b
 await_success "$p1" suspend_remove_a
 await_error "$p2" suspend_remove_b "ACTOR_NOT_ACTIVE"
 verify_lifecycle '96100000-0000-4000-8000-000000000022' 'active' 'suspended'

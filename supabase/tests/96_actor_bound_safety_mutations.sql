@@ -275,7 +275,10 @@ end $$;
 rollback;
 \echo '96 (remove non-owner + missing)     : PASS  (target denial precedes inactive state)'
 
--- Direct owner updates are also fenced when their account is inactive.
+-- A committed-inactive owner is filtered before any BEFORE UPDATE trigger runs.
+-- The RPC converts UPDATE 0 into its non-enumerating action error; a legacy
+-- direct update is a safe zero-row no-op. Physical races below prove the a0
+-- trigger separately when RLS admitted the row under an active snapshot.
 begin;
 insert into public.marks(id,wall_id,author_id,type,text) values
  ('96000000-0000-4000-8000-000000000021','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -293,28 +296,27 @@ do $$ declare v_state text; v_message text; begin
     raise exception '96 FAIL: inactive owner removed Mark';
   exception when others then
     get stacked diagnostics v_state=returned_sqlstate, v_message=message_text;
-    if v_state<>'42501' or v_message<>'ACTOR_NOT_ACTIVE' then
+    if v_state<>'42501' or v_message<>'MARK_ACTION_NOT_ALLOWED' then
       raise exception '96 FAIL: inactive owner result was % %',v_state,v_message; end if;
   end;
-  begin
-    update public.marks set status='removed',removal_reason='safety'
-     where id='96000000-0000-4000-8000-000000000022';
-    raise exception '96 FAIL: inactive owner direct update removed Mark';
-  exception when others then
-    get stacked diagnostics v_state=returned_sqlstate, v_message=message_text;
-    if v_state<>'42501' or v_message<>'ACTOR_NOT_ACTIVE' then
-      raise exception '96 FAIL: inactive direct-update result was % %',v_state,v_message; end if;
-  end;
+end $$;
+do $$ declare v_rows integer; begin
+  update public.marks set status='removed',removal_reason='safety'
+   where id='96000000-0000-4000-8000-000000000022';
+  get diagnostics v_rows=row_count;
+  if v_rows<>0 then
+    raise exception '96 FAIL: inactive owner direct update affected % rows',v_rows; end if;
 end $$;
 reset role;
 do $$ begin
   if exists(select 1 from public.marks
              where id in ('96000000-0000-4000-8000-000000000021',
                           '96000000-0000-4000-8000-000000000022')
-               and status='removed') then
-    raise exception '96 FAIL: inactive-owner Mark changed'; end if;
+               and (status='removed' or removed_by is not null
+                    or removed_at is not null or removal_reason is not null)) then
+    raise exception '96 FAIL: inactive-owner Mark/accounting changed'; end if;
 end $$;
 rollback;
-\echo '96 (inactive owner fenced)          : PASS  (RPC + direct update; ACTOR_NOT_ACTIVE)'
+\echo '96 (committed inactive owner)       : PASS  (RPC action denial + direct UPDATE 0)'
 
 \echo '── 96_actor_bound_safety_mutations: ALL PASS ──'
