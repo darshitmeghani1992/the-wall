@@ -192,7 +192,7 @@ do $$ declare v_rows integer; begin
   end if;
   select count(*) into v_rows from public.profiles where id = auth.uid();
   if v_rows <> 0 then raise exception '58 FAIL: deactivated actor read hidden profile'; end if;
-  perform public.reactivate_account();
+  perform public.reactivate_account('11111111-1111-1111-1111-111111111111');
   if public.get_current_account_route() <> 'onboarding' then
     raise exception '58 FAIL: reactivated account did not return to onboarding';
   end if;
@@ -204,13 +204,20 @@ update public.profiles set account_status = 'suspended'
  where id = '22222222-2222-2222-2222-222222222222';
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';
-do $$ declare v_rows integer; begin
+do $$ declare v_rows integer; v_rejected boolean := false; begin
   if public.get_current_account_route() <> 'suspended' then
     raise exception '58 FAIL: suspended own account route was wrong';
   end if;
   select count(*) into v_rows from public.profiles where id = auth.uid();
   if v_rows <> 0 then raise exception '58 FAIL: suspended actor read hidden profile'; end if;
-  perform public.reactivate_account();
+  begin
+    perform public.reactivate_account('22222222-2222-2222-2222-222222222222');
+  exception when insufficient_privilege then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception '58 FAIL: suspended account reactivation did not fail closed';
+  end if;
   if public.get_current_account_route() <> 'suspended' then
     raise exception '58 FAIL: suspended account self-reactivated';
   end if;
