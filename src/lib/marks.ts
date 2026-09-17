@@ -63,13 +63,14 @@ export type MarkWithAuthor = Mark & { author: Author | null };
  * then hydrate authors. Anonymous marks never carry author info to the client.
  */
 export async function getWallMarks(wallId: string): Promise<MarkWithAuthor[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("marks")
     .select("*")
     .eq("wall_id", wallId)
     .eq("status", "active")
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false });
+  if (error) throw error;
 
   const marks = (data ?? []) as Mark[];
   return hydrateAuthors(marks);
@@ -83,10 +84,11 @@ export async function hydrateAuthors(marks: Mark[]): Promise<MarkWithAuthor[]> {
 
   const authors: Record<string, Author> = {};
   if (ids.length) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("id, display_name, avatar_url, handle")
       .in("id", ids);
+    if (error) throw error;
     for (const a of (data ?? []) as Author[]) authors[a.id] = a;
   }
 
@@ -113,8 +115,13 @@ export function subscribeToWall(
       async (payload) => {
         const raw = payload.new as Mark;
         if (raw.status !== "active") return; // pending marks await approval
-        const [hydrated] = await hydrateAuthors([raw]);
-        onInsert(hydrated);
+        try {
+          const [hydrated] = await hydrateAuthors([raw]);
+          onInsert(hydrated);
+        } catch {
+          // A realtime presentation refresh is best-effort. The next screen reload retries the
+          // throwing resolver-facing read; never leak this callback failure as an unhandled promise.
+        }
       },
     )
     .subscribe();

@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
@@ -18,15 +18,30 @@ import { useWallReactions } from "@/hooks/useWallReactions";
 import { shareSharedWall } from "@/lib/share";
 import type { Profile, Wall } from "@/lib/types";
 import { colors, markColors, radius } from "@/theme";
+import {
+  acknowledgeDeferredArrival,
+  claimDeferredAttemptReference,
+  retryDeferredDestination,
+  transferDeferredAttemptToUnavailable,
+} from "@/lib/deferred-destination";
+import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
+import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
+import { destinationForAccountRoute } from "@/lib/onboarding-contract";
+
+type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
 
 export default function SharedWallScreen() {
   const router = useRouter();
-  const { id, justCreated, focusMark } = useLocalSearchParams<{ id: string; justCreated?: string; focusMark?: string }>();
+  const { id, justCreated, focusMark, __deferred_ref: rawReference } = useLocalSearchParams<{ id: string; justCreated?: string; focusMark?: string; __deferred_ref?: string }>();
   const wallId = String(id ?? "");
   const justCreatedId = justCreated ? String(justCreated) : null;
   const focusMarkId = focusMark ? String(focusMark) : null;
-  const { session } = useAuth();
+  const reference = typeof rawReference === "string" ? rawReference : null;
+  const { loading: authLoading, session, accountRoute } = useAuth();
   const userId = session?.user.id;
+  const [deferredAttempt, setDeferredAttempt] = useState<ClaimedAttempt | null>(null);
+  const [deferredReadyToken, setDeferredReadyToken] = useState<DeferredAttemptToken | null>(null);
+  const claimedReference = useRef<string | null>(null);
   const [wall, setWall] = useState<Wall | null>(null);
   const [owner, setOwner] = useState<Profile | null>(null);
   const [capabilities, setCapabilities] = useState<WallCapabilities | null>(null);
@@ -44,24 +59,76 @@ export default function SharedWallScreen() {
   currentUserId.current = userId ?? null;
   currentWallId.current = wallId;
 
+  useEffect(() => {
+    if (!reference || !userId || !wallId || accountRoute !== "ready" || claimedReference.current === reference) return;
+    claimedReference.current = reference;
+    setDeferredReadyToken(null);
+    setLoading(true);
+    setWall(null);
+    setOwner(null);
+    setCapabilities(null);
+    setMarks([]);
+    setSelectedMark(null);
+    setDeferredAttempt({
+      reference,
+      token: claimDeferredAttemptReference(
+        reference as DeferredNavigationRef,
+        { kind: "shared", wallId, focusMarkId },
+        userId,
+      ),
+    });
+  }, [accountRoute, focusMarkId, reference, userId, wallId]);
+
+  useEffect(() => {
+    if (deferredReadyToken) void acknowledgeDeferredArrival(deferredReadyToken);
+  }, [deferredReadyToken]);
+
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null);
     const requestedWallId = wallId;
     if (!token || !requestedWallId) return;
+    const capturedDeferredToken = reference ? deferredAttempt?.token ?? null : null;
     setLoading(true);
+    setDeferredReadyToken(null);
     setError(null);
     setFocusedMarkUnavailable(false);
     try {
-      const [nextWall, nextCapabilities] = await Promise.all([
-        getWall(requestedWallId), getWallCapabilities(requestedWallId),
-      ]);
+      const wallPromise = getWall(requestedWallId);
+      const capabilitiesPromise = getWallCapabilities(requestedWallId);
+      let marksPromise: Promise<MarkWithAuthor[]> | null = null;
+      if (capturedDeferredToken) {
+        const destination = focusMarkId
+          ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "shared" as const, wallId: requestedWallId } }
+          : { kind: "shared_wall" as const, wallId: requestedWallId };
+        const resolution = await resolveDeferredDestination(destination, token.userId, {
+          sharedWall: async () => {
+            const [wall, wallCapabilities] = await Promise.all([wallPromise, capabilitiesPromise]);
+            return wall?.type === "shared" && wallCapabilities?.wallType === "shared" ? wall : null;
+          },
+          wallMarks: async (resolvedWallId) => {
+            marksPromise ??= getWallMarks(resolvedWallId);
+            return marksPromise;
+          },
+        });
+        if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId) return;
+        if (resolution.status === "terminal_unavailable") {
+          const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
+          if (unavailable) router.replace(unavailable.href as never);
+          return;
+        }
+        if (resolution.status === "retryable_failure") {
+          setError("We couldn't open this Shared Wall. Check your connection and try again.");
+          return;
+        }
+      }
+      const [nextWall, nextCapabilities] = await Promise.all([wallPromise, capabilitiesPromise]);
       if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId) return;
       if (!nextWall || nextWall.type !== "shared" || !nextCapabilities || nextCapabilities.wallType !== "shared") {
         setWall(null);
         setError("This Shared Wall isn't available.");
         return;
       }
-      const [ownerProfile, nextMarks] = await Promise.all([getProfile(nextWall.owner_id), getWallMarks(nextWall.id)]);
+      const [ownerProfile, nextMarks] = await Promise.all([getProfile(nextWall.owner_id), marksPromise ?? getWallMarks(nextWall.id)]);
       if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId) return;
       setWall(nextWall);
       setCapabilities(nextCapabilities);
@@ -72,19 +139,24 @@ export default function SharedWallScreen() {
         setSelectedMark(focused);
         setFocusedMarkUnavailable(!focused);
       }
+      if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't open this Shared Wall.");
+      if (fence.isCurrent(token, currentUserId.current)) {
+        setError(capturedDeferredToken
+          ? "We couldn't open this Shared Wall. Check your connection and try again."
+          : cause?.message ?? "Couldn't open this Shared Wall.");
+      }
     } finally {
       if (fence.isCurrent(token, currentUserId.current)) setLoading(false);
     }
-  }, [fence, focusMarkId, userId, wallId]);
+  }, [deferredAttempt, fence, focusMarkId, reference, router, userId, wallId]);
 
   useFocusEffect(useCallback(() => {
     fence.focus(userId ?? null);
     setWall(null); setOwner(null); setCapabilities(null); setMarks([]); setSelectedMark(null); setBusy(null);
-    if (userId && wallId) void load(); else setLoading(false);
+    if (userId && accountRoute === "ready" && wallId && (!reference || deferredAttempt?.reference === reference)) void load(); else if (!reference && accountRoute === "ready") setLoading(false);
     return () => { fence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
-  }, [fence, load, userId, wallId]));
+  }, [accountRoute, deferredAttempt?.reference, fence, load, reference, userId, wallId]));
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
@@ -147,9 +219,21 @@ export default function SharedWallScreen() {
     }
   }
 
+  async function retryLoad() {
+    const captured = deferredAttempt?.token ?? null;
+    if (captured && !await retryDeferredDestination(captured)) return;
+    await load();
+  }
+
+  if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (!session) return <Redirect href="/welcome" />;
+  if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
-  if (error && !wall) return <Unavailable message={error} onBack={() => router.back()} onRetry={() => void load()} />;
-  if (!wall || capabilities?.wallType !== "shared") return <Unavailable message="This Shared Wall isn't available." onBack={() => router.back()} onRetry={() => void load()} />;
+  if (error && !wall) return <Unavailable message={error} onBack={() => router.back()} onRetry={() => void retryLoad()} />;
+  if (!wall || capabilities?.wallType !== "shared") return <Unavailable message="This Shared Wall isn't available." onBack={() => router.back()} onRetry={() => void retryLoad()} />;
 
   const joinState = capabilities.joinState;
   const isOwner = joinState === "owner";

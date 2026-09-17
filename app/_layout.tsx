@@ -23,6 +23,7 @@ export default function RootLayout() {
           <Stack.Screen name="help" options={{ presentation: "modal" }} />
           <Stack.Screen name="account-recovery" />
           <Stack.Screen name="account-unavailable" />
+          <Stack.Screen name="deferred-destination-unavailable" />
           <Stack.Screen name="settings" options={{ presentation: "modal" }} />
           <Stack.Screen name="personal-wall-settings" />
           <Stack.Screen name="approved-writers" />

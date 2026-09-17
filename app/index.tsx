@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
-import { Redirect } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { consumePendingLink } from "@/lib/pendingLink";
+import { prepareDeferredDestinationResume } from "@/lib/deferred-destination";
 import { destinationForAccountRoute } from "@/lib/onboarding-contract";
 import { Text } from "@/components/Text";
 import { colors, markColors } from "@/theme";
@@ -18,25 +18,37 @@ function Splash() {
 
 export default function Index() {
   const { loading, session, accountRoute } = useAuth();
+  const { fallback } = useLocalSearchParams<{ fallback?: string }>();
 
   // Resolved redirect target once the user is fully set up. `null` means the
   // consume effect hasn't run yet (we show a brief splash rather than routing).
   const [target, setTarget] = useState<string | null>(null);
   // Guards single-use consume against StrictMode's double-invoke of effects.
-  const consumedFor = useRef<string | null>(null);
+  const preparedFor = useRef<string | null>(null);
 
   useEffect(() => {
     // The server bootstrap is authoritative. In particular, a profile hidden by
     // deactivation/suspension must never be mistaken for a new account.
     if (loading || !session || accountRoute !== "ready") {
       setTarget(null);
-      consumedFor.current = null;
+      preparedFor.current = null;
       return;
     }
-    if (consumedFor.current === session.user.id) return;
-    consumedFor.current = session.user.id;
-    setTarget(consumePendingLink() ?? "/(tabs)/home");
-  }, [loading, session, accountRoute]);
+    const subject = session.user.id;
+    if (preparedFor.current === subject) return;
+    preparedFor.current = subject;
+    void prepareDeferredDestinationResume(subject).then((result) => {
+      if (preparedFor.current !== subject) return;
+      if (result.status === "navigate" || result.status === "terminal_unavailable") {
+        setTarget(result.href);
+      } else if (result.status === "none" || result.status === "durable_disabled") {
+        setTarget(fallback === "discover" ? "/(tabs)/discover" : "/(tabs)/home");
+      }
+      // `in_flight` means another invocation already owns the one navigation.
+    }).catch(() => {
+      if (preparedFor.current === subject) setTarget(fallback === "discover" ? "/(tabs)/discover" : "/(tabs)/home");
+    });
+  }, [loading, session, accountRoute, fallback]);
 
   if (loading) return <Splash />;
   if (!session) return <Redirect href="/welcome" />;

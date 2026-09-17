@@ -10,7 +10,6 @@ import { useAuth } from "@/lib/auth";
 import { completeWalkthrough } from "@/lib/account";
 import { clearOnboardingDraft, loadOnboardingDraft } from "@/lib/onboarding";
 import { destinationAfterWalkthrough, AccountRouteFence, walkthroughRequiresPersistence } from "@/lib/onboarding-contract";
-import { consumePendingLink } from "@/lib/pendingLink";
 import { colors, markColors } from "@/theme";
 
 const MOMENTS = [
@@ -66,10 +65,7 @@ export default function Walkthrough() {
       try { await clearOnboardingDraft(userId); } catch { /* Completion is already durable server-side. */ }
       await refreshAccountRoute();
       if (currentUserId.current === userId) {
-        const target = destinationAfterWalkthrough(
-          consumePendingLink(),
-          draft.postWalkthroughDestination,
-        );
+        const target = destinationAfterWalkthrough(draft.postWalkthroughDestination);
         router.replace(target as never);
       }
     } catch (cause: any) {

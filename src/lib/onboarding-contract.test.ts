@@ -19,13 +19,8 @@ assert.deepEqual(
 assert.equal(isAccountRoute("ready"), true);
 assert.equal(isAccountRoute("unexpected"), false);
 
-assert.equal(
-  destinationAfterWalkthrough("/u/maya", "discover"),
-  "/u/maya",
-  "pending deep-link restoration follows walkthrough and wins over onboarding intent",
-);
-assert.equal(destinationAfterWalkthrough(null, "discover"), "/(tabs)/discover");
-assert.equal(destinationAfterWalkthrough(null, null), "/(tabs)/home");
+assert.equal(destinationAfterWalkthrough("discover"), "/?fallback=discover");
+assert.equal(destinationAfterWalkthrough(null), "/");
 assert.equal(LEGACY_ONBOARDING_DESTINATION, "/", "obsolete About/Interests return to the account gate");
 assert.equal(walkthroughRequiresPersistence(false), true, "first-use finish and skip persist completion");
 assert.equal(walkthroughRequiresPersistence(true), false, "Help replay cannot rewrite completion");

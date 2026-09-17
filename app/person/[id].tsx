@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { Masonry } from "@/components/Masonry";
 import { Screen } from "@/components/Screen";
@@ -43,17 +43,33 @@ import {
   type WallCapabilities,
 } from "@/lib/walls";
 import { colors, markColors, radius } from "@/theme";
+import {
+  acknowledgeDeferredArrival,
+  claimDeferredAttemptReference,
+  retryDeferredDestination,
+  transferDeferredAttemptToUnavailable,
+} from "@/lib/deferred-destination";
+import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
+import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
+import { destinationForAccountRoute } from "@/lib/onboarding-contract";
+
+type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
 
 export default function PersonWall() {
   const router = useRouter();
-  const { id, justCreated, focusMark } = useLocalSearchParams<{
+  const { id, justCreated, focusMark, __deferred_ref: rawReference } = useLocalSearchParams<{
     id: string;
     justCreated?: string;
     focusMark?: string;
+    __deferred_ref?: string;
   }>();
   const justCreatedId = justCreated ? String(justCreated) : null;
   const focusMarkId = focusMark ? String(focusMark) : null;
-  const { session } = useAuth();
+  const reference = typeof rawReference === "string" ? rawReference : null;
+  const { loading: authLoading, session, accountRoute } = useAuth();
+  const [deferredAttempt, setDeferredAttempt] = useState<ClaimedAttempt | null>(null);
+  const [deferredReadyToken, setDeferredReadyToken] = useState<DeferredAttemptToken | null>(null);
+  const claimedReference = useRef<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [wall, setWall] = useState<Wall | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
@@ -79,16 +95,43 @@ export default function PersonWall() {
   currentUserId.current = session?.user.id ?? null;
   currentPersonId.current = typeof id === "string" ? id : null;
 
+  useEffect(() => {
+    const subject = session?.user.id;
+    const personId = typeof id === "string" ? id : null;
+    if (!reference || !subject || !personId || accountRoute !== "ready" || claimedReference.current === reference) return;
+    claimedReference.current = reference;
+    setDeferredReadyToken(null);
+    setLoading(true);
+    setProfile(null);
+    setWall(null);
+    setMarks([]);
+    setSelectedMark(null);
+    setDeferredAttempt({
+      reference,
+      token: claimDeferredAttemptReference(
+        reference as DeferredNavigationRef,
+        { kind: "personal", ownerId: personId, focusMarkId },
+        subject,
+      ),
+    });
+  }, [accountRoute, focusMarkId, id, reference, session?.user.id]);
+
+  useEffect(() => {
+    if (deferredReadyToken) void acknowledgeDeferredArrival(deferredReadyToken);
+  }, [deferredReadyToken]);
+
   const load = useCallback(async () => {
     const viewerId = session?.user.id ?? null;
     const personId = typeof id === "string" ? id : null;
     const token = loadFence.current.begin(viewerId);
     if (!token || !personId) return;
+    const capturedDeferredToken = reference ? deferredAttempt?.token ?? null : null;
     if (viewerId === personId) {
       router.replace("/(tabs)/home");
       return;
     }
     setLoading(true);
+    setDeferredReadyToken(null);
     setError(null);
     setFocusedMarkUnavailable(false);
     setSelectedMark(null);
@@ -104,28 +147,70 @@ export default function PersonWall() {
         setRelationship("none");
         setFollowing(false);
         setCounts(null);
+        if (capturedDeferredToken) {
+          const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
+          if (unavailable) router.replace(unavailable.href as never);
+        }
         return;
       }
+      const personPromise = getProfile(personId);
+      const personalWallPromise = getReadablePersonalWall(personId);
+      let capabilitiesPromise: Promise<WallCapabilities | null> | null = null;
+      let marksPromise: Promise<MarkWithAuthor[]> | null = null;
+      if (capturedDeferredToken) {
+        const destination = focusMarkId
+          ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "personal" as const, ownerId: personId } }
+          : { kind: "personal_user" as const, userId: personId };
+        const resolution = await resolveDeferredDestination(destination, token.userId, {
+          personalWall: async () => {
+            const [person, personalWall] = await Promise.all([personPromise, personalWallPromise]);
+            if (!person || !personalWall) return null;
+            capabilitiesPromise ??= getWallCapabilities(personalWall.id);
+            const wallCapabilities = await capabilitiesPromise;
+            return wallCapabilities ? personalWall : null;
+          },
+          wallMarks: async (wallId) => {
+            marksPromise ??= getWallMarks(wallId);
+            return marksPromise;
+          },
+        });
+        if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
+        if (resolution.status === "terminal_unavailable") {
+          const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
+          if (unavailable) router.replace(unavailable.href as never);
+          return;
+        }
+        if (resolution.status === "retryable_failure") {
+          setError("This Wall isn't available right now. Try again.");
+          return;
+        }
+      }
       const [person, personalWall, state, followCounts, publicWalls] = await Promise.all([
-        getProfile(personId),
-        getReadablePersonalWall(personId),
+        personPromise,
+        personalWallPromise,
         getRelationship(token.userId, personId),
         getFollowCounts(personId),
         getPublicSharedWallCount(personId),
       ]);
       if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
+      if (!person || !personalWall) {
+        return;
+      }
       setProfile(person);
       setWall(personalWall);
       setRelationship(state);
       setCounts({ ...followCounts, publicWalls });
       setFollowing(false);
       if (personalWall) {
-        const wallCapabilities = await getWallCapabilities(personalWall.id);
+        capabilitiesPromise ??= getWallCapabilities(personalWall.id);
+        const wallCapabilities = await capabilitiesPromise;
         if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
         setCapabilities(wallCapabilities);
-        if (!wallCapabilities) return;
+        if (!wallCapabilities) {
+          return;
+        }
         const [nextMarks, followState] = await Promise.all([
-          getWallMarks(personalWall.id),
+          marksPromise ?? getWallMarks(personalWall.id),
           personalWall.visibility === "public" ? isFollowing(token.userId, personId) : Promise.resolve(false),
         ]);
         if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
@@ -136,6 +221,7 @@ export default function PersonWall() {
           setSelectedMark(focusedMark);
           setFocusedMarkUnavailable(!focusedMark);
         }
+        if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
       }
     } catch {
       if (loadFence.current.isCurrent(token, currentUserId.current)) {
@@ -144,7 +230,7 @@ export default function PersonWall() {
     } finally {
       if (loadFence.current.isCurrent(token, currentUserId.current)) setLoading(false);
     }
-  }, [focusMarkId, id, router, session?.user.id]);
+  }, [deferredAttempt, focusMarkId, id, reference, router, session?.user.id]);
 
   useFocusEffect(useCallback(() => {
     const viewerId = session?.user.id ?? null;
@@ -156,7 +242,7 @@ export default function PersonWall() {
     setRelationshipBusy(false);
     setSafetyBusy(false);
     actionInFlight.current = false;
-    if (viewerId) void load();
+    if (viewerId && accountRoute === "ready" && (!reference || deferredAttempt?.reference === reference)) void load();
     else {
       setProfile(null);
       setWall(null);
@@ -171,7 +257,7 @@ export default function PersonWall() {
       actionFence.current.blur();
       targetRouteFence.current.blur();
     };
-  }, [id, load, session?.user.id]));
+  }, [accountRoute, deferredAttempt?.reference, id, load, reference, session?.user.id]));
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
@@ -367,6 +453,18 @@ export default function PersonWall() {
     }
   }
 
+  async function retryLoad() {
+    const captured = deferredAttempt?.token ?? null;
+    if (captured && !await retryDeferredDestination(captured)) return;
+    await load();
+  }
+
+  if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (!session) return <Redirect href="/welcome" />;
+  if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
 
   return (
@@ -384,7 +482,7 @@ export default function PersonWall() {
         <View>
           <Text accessibilityRole="alert" variant="body" color={colors.error}>{error ?? "This person isn't available."}</Text>
           <View style={{ marginTop: 16, alignSelf: "flex-start" }}>
-            <Button label="Try again" variant="ghost" onPress={() => void load()} />
+            <Button label="Try again" variant="ghost" onPress={() => void retryLoad()} />
           </View>
         </View>
       ) : (

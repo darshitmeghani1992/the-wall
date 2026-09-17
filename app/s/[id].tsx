@@ -1,9 +1,7 @@
-import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import { destinationForAccountRoute } from "@/lib/onboarding-contract";
-import { setPendingLink } from "@/lib/pendingLink";
 import { colors, markColors } from "@/theme";
 
 function Spinner() {
@@ -19,13 +17,6 @@ export default function SharedWallLink() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const wallId = String(id ?? "");
   const { loading, session, accountRoute } = useAuth();
-
-  useEffect(() => {
-    if (loading || !wallId) return;
-    if (!session || accountRoute !== "ready") {
-      setPendingLink(`/s/${wallId}`);
-    }
-  }, [accountRoute, loading, session, wallId]);
 
   if (loading) return <Spinner />;
   if (!session) return <Redirect href="/welcome" />;

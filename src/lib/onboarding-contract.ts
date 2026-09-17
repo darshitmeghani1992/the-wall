@@ -58,13 +58,11 @@ export function destinationForAccountRoute(route: AccountRoute): string {
   }
 }
 
-/** A preserved external intent wins, but is consumed only after walkthrough persistence succeeds. */
+/** Deferred recovery is resumed centrally at `/`; this preserves only the approved local fallback. */
 export function destinationAfterWalkthrough(
-  pendingHref: string | null,
   requested: PostWalkthroughDestination,
 ): string {
-  if (pendingHref) return pendingHref;
-  return requested === "discover" ? "/(tabs)/discover" : "/(tabs)/home";
+  return requested === "discover" ? "/?fallback=discover" : "/";
 }
 
 export function walkthroughRequiresPersistence(isReplay: boolean): boolean {

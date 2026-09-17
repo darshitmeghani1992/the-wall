@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { Image } from "expo-image";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
@@ -21,6 +21,17 @@ import { useWallReactions } from "@/hooks/useWallReactions";
 import { supabase } from "@/lib/supabase";
 import type { MarkType, Wall } from "@/lib/types";
 import { colors, markColors, radius } from "@/theme";
+import {
+  acknowledgeDeferredArrival,
+  claimDeferredAttemptReference,
+  retryDeferredDestination,
+  transferDeferredAttemptToUnavailable,
+} from "@/lib/deferred-destination";
+import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
+import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
+import { destinationForAccountRoute } from "@/lib/onboarding-contract";
+
+type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
 
 type Filter = { key: string; label: string; match: (type: MarkType) => boolean };
 
@@ -33,12 +44,14 @@ const FILTERS: Filter[] = [
 /** Authenticated home: the user's real Personal Wall, not a separate feed/hub. */
 export default function MyWall() {
   const router = useRouter();
-  const { session, profile } = useAuth();
+  const { loading: authLoading, session, profile, accountRoute } = useAuth();
   const userId = session?.user.id;
-  const { justCreated, focusMark } = useLocalSearchParams<{
+  const { justCreated, focusMark, __deferred_ref: rawReference } = useLocalSearchParams<{
     justCreated?: string;
     focusMark?: string;
+    __deferred_ref?: string;
   }>();
+  const reference = typeof rawReference === "string" ? rawReference : null;
   const focusMarkId = String(focusMark ?? "") || null;
   const highlightedMarkId = String(justCreated ?? focusMarkId ?? "") || null;
 
@@ -49,6 +62,11 @@ export default function MyWall() {
   const [friendCount, setFriendCount] = useState(0);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [deferredAttempt, setDeferredAttempt] = useState<ClaimedAttempt | null>(null);
+  const [deferredReadyToken, setDeferredReadyToken] = useState<DeferredAttemptToken | null>(null);
+  const claimedReference = useRef<string | null>(null);
   const [focusedMarkUnavailable, setFocusedMarkUnavailable] = useState(false);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const dropIds = useRef<Set<string>>(new Set(justCreated ? [String(justCreated)] : []));
@@ -56,7 +74,30 @@ export default function MyWall() {
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
 
+  useEffect(() => {
+    if (!reference || !userId || accountRoute !== "ready" || claimedReference.current === reference) return;
+    claimedReference.current = reference;
+    setDeferredReadyToken(null);
+    setLoading(true);
+    setWall(null);
+    setMarks([]);
+    setSelectedMark(null);
+    setDeferredAttempt({
+      reference,
+      token: claimDeferredAttemptReference(
+        reference as DeferredNavigationRef,
+        { kind: "personal", ownerId: userId, focusMarkId },
+        userId,
+      ),
+    });
+  }, [accountRoute, focusMarkId, reference, userId]);
+
+  useEffect(() => {
+    if (deferredReadyToken) void acknowledgeDeferredArrival(deferredReadyToken);
+  }, [deferredReadyToken]);
+
   const refreshSharedWalls = useCallback(async () => {
+    if (accountRoute !== "ready") return;
     const token = sharedWallsFence.begin(userId ?? null);
     if (!token) return;
     setSharedWallsError(false);
@@ -69,7 +110,7 @@ export default function MyWall() {
       setSharedWalls([]);
       setSharedWallsError(true);
     }
-  }, [sharedWallsFence, userId]);
+  }, [accountRoute, sharedWallsFence, userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,7 +118,7 @@ export default function MyWall() {
       if (!userId) {
         setSharedWalls([]);
         setSharedWallsError(false);
-      } else {
+      } else if (accountRoute === "ready") {
         void refreshSharedWalls();
       }
       return () => {
@@ -85,7 +126,7 @@ export default function MyWall() {
         setSharedWalls([]);
         setSharedWallsError(false);
       };
-    }, [refreshSharedWalls, sharedWallsFence, userId]),
+    }, [accountRoute, refreshSharedWalls, sharedWallsFence, userId]),
   );
 
   useEffect(() => {
@@ -99,21 +140,59 @@ export default function MyWall() {
         setLoading(false);
         return;
       }
+      if (accountRoute !== "ready") return;
+      if (reference && deferredAttempt?.reference !== reference) return;
+      const capturedDeferredToken = reference ? deferredAttempt?.token ?? null : null;
       setLoading(true);
+      setLoadError(false);
+      setDeferredReadyToken(null);
       setFocusedMarkUnavailable(false);
       setWall(null);
       setMarks([]);
       setSelectedMark(null);
 
-      const personalWall = await getPersonalWall(userId);
+      const personalWallPromise = getPersonalWall(userId);
+      let marksPromise: Promise<MarkWithAuthor[]> | null = null;
+      if (capturedDeferredToken) {
+        const destination = focusMarkId
+          ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "personal" as const, ownerId: userId } }
+          : { kind: "personal_user" as const, userId };
+        const resolution = await resolveDeferredDestination(destination, userId, {
+          personalWall: async () => personalWallPromise,
+          wallMarks: async (wallId) => {
+            marksPromise ??= getWallMarks(wallId);
+            return marksPromise;
+          },
+        });
+        if (!active) return;
+        if (resolution.status === "terminal_unavailable") {
+          const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
+          if (unavailable) router.replace(unavailable.href as never);
+          setLoading(false);
+          return;
+        }
+        if (resolution.status === "retryable_failure") {
+          setLoadError(true);
+          setLoading(false);
+          return;
+        }
+      }
+
+      const personalWall = await personalWallPromise;
       if (!active || !personalWall) {
-        if (active) setLoading(false);
+        if (active) {
+          if (capturedDeferredToken) {
+            const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
+            if (unavailable) router.replace(unavailable.href as never);
+          }
+          setLoading(false);
+        }
         return;
       }
 
       setWall(personalWall);
       const [nextMarks, friends] = await Promise.all([
-        getWallMarks(personalWall.id),
+        marksPromise ?? getWallMarks(personalWall.id),
         supabase
           .from("friendships")
           .select("requester_id", { count: "exact", head: true })
@@ -128,15 +207,25 @@ export default function MyWall() {
         setFocusedMarkUnavailable(!focusedMark);
       }
       setFriendCount(friends.count ?? 0);
+      if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
       setLoading(false);
     })().catch(() => {
-      if (active) setLoading(false);
+      if (active) {
+        setLoadError(true);
+        setLoading(false);
+      }
     });
 
     return () => {
       active = false;
     };
-  }, [focusMarkId, userId]);
+  }, [accountRoute, deferredAttempt, focusMarkId, reference, reloadKey, router, userId]);
+
+  async function retryLoad() {
+    const captured = deferredAttempt?.token ?? null;
+    if (captured && !await retryDeferredDestination(captured)) return;
+    setReloadKey((value) => value + 1);
+  }
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
@@ -278,6 +367,13 @@ export default function MyWall() {
     [filter, friendCount, initial, marks.length, profile, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
+  if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
+  if (!session) return <Redirect href="/welcome" />;
+  if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
+  if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
+  if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
+
   return (
     <Screen>
       <Header />
@@ -304,7 +400,13 @@ export default function MyWall() {
         </View>
       ) : null}
 
-      {loading ? (
+      {loadError ? (
+        <View style={{ marginTop: 24, gap: 12 }}>
+          <Text accessibilityRole="alert" variant="headline">We couldn&apos;t load your Wall.</Text>
+          <Text variant="body" color={colors.outline}>Check your connection and try again.</Text>
+          <Button label="Retry" variant="yellow" onPress={() => void retryLoad()} />
+        </View>
+      ) : loading ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
       ) : marks.length === 0 ? (
         <View style={{ marginTop: 8 }}><InviteCrew handle={profile?.handle} /></View>

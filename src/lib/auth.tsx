@@ -20,6 +20,13 @@ import { authEventEffects } from "./mark-media-writer";
 import { resetProtectedMediaUploads } from "./upload";
 import { getCurrentAccountRoute } from "./account";
 import { AccountRouteFence, type AccountRoute, type AccountRouteToken } from "./onboarding-contract";
+import {
+  clearDeferredDestinationForExplicitSignOut,
+  deferredSubjectForUserId,
+  reconcileDeferredDestinationIdentity,
+  retryDeferredDestinationSignOutScrub,
+} from "./deferred-destination";
+import type { DeferredSubject } from "./deferred-destination-contract";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -105,6 +112,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const initialSubject = data.session?.user.id ?? null;
       if (authSubjectRef.current === undefined) authSubjectRef.current = initialSubject;
       else if (authSubjectRef.current !== initialSubject) return;
+      await reconcileDeferredDestinationIdentity(
+        { status: "unknown" },
+        deferredSubjectForUserId(initialSubject),
+      );
+      if (!active || authSubjectRef.current !== initialSubject) return;
       const initialToken = currentRouteFence.begin(initialSubject);
       setSession(data.session);
       try {
@@ -135,16 +147,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const eventToken = currentRouteFence.begin(nextSubject);
       if (effects.clearProtectedMedia) protectedMediaCache.clearAll();
       if (effects.rotateMediaGeneration) setSessionGeneration(allocateMediaSessionGeneration());
-      setSession(s);
+      // A replacement identity is not exposed until durable destination ownership is reconciled.
+      if (previousSubject !== nextSubject) setSession(null);
       if (effects.clearAccountState) {
         setAccountRoute(null);
         setProfile(null);
       }
       if (effects.showRouteLoading) setLoading(true);
+      const previousDeferredSubject: DeferredSubject = previousSubject === undefined
+        ? { status: "unknown" }
+        : deferredSubjectForUserId(previousSubject);
+      await reconcileDeferredDestinationIdentity(
+        previousDeferredSubject,
+        deferredSubjectForUserId(nextSubject),
+      );
+      if (!currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) return;
       if (effects.resetProtectedResume) {
         try { await resetProtectedMediaUploads(); } catch { /* Identity is already fenced locally. */ }
       }
       if (!currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) return;
+      setSession(s);
       if (!effects.refreshAccountState) return;
       try {
         await loadAccountState(s, eventToken);
@@ -217,12 +239,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadAccountState, session]);
 
   async function signOut() {
+    await clearDeferredDestinationForExplicitSignOut();
     protectedMediaCache.clearAll();
-    try { await resetProtectedMediaUploads(); } catch { /* Supabase sign-out must still proceed. */ }
-    await supabase.auth.signOut();
-    routeFence.current.invalidate(null);
-    setAccountRoute(null);
-    setProfile(null);
+    try {
+      try { await resetProtectedMediaUploads(); } catch { /* Supabase sign-out must still proceed. */ }
+      await supabase.auth.signOut();
+    } finally {
+      await retryDeferredDestinationSignOutScrub();
+      routeFence.current.invalidate(null);
+      setAccountRoute(null);
+      setProfile(null);
+    }
   }
 
   const value = useMemo<AuthState>(

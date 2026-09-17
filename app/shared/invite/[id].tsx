@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
@@ -10,13 +10,28 @@ import { beginExclusiveMutation, endExclusiveMutation } from "@/lib/mutation-gua
 import { getPendingSharedWallInvite, respondToWallInvite } from "@/lib/walls";
 import type { PendingSharedWallInvite } from "@/lib/shared-wall-contract";
 import { colors, markColors, radius } from "@/theme";
+import {
+  acknowledgeDeferredArrival,
+  claimDeferredAttemptReference,
+  retryDeferredDestination,
+  transferDeferredAttemptToUnavailable,
+} from "@/lib/deferred-destination";
+import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
+import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
+import { destinationForAccountRoute } from "@/lib/onboarding-contract";
+
+type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
 
 export default function SharedWallInviteScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, __deferred_ref: rawReference } = useLocalSearchParams<{ id: string; __deferred_ref?: string }>();
   const wallId = String(id ?? "");
-  const { session } = useAuth();
+  const reference = typeof rawReference === "string" ? rawReference : null;
+  const { loading: authLoading, session, accountRoute } = useAuth();
   const userId = session?.user.id;
+  const [deferredAttempt, setDeferredAttempt] = useState<ClaimedAttempt | null>(null);
+  const [deferredReadyToken, setDeferredReadyToken] = useState<DeferredAttemptToken | null>(null);
+  const claimedReference = useRef<string | null>(null);
   const [invite, setInvite] = useState<PendingSharedWallInvite>({ status: "unavailable" });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
@@ -27,25 +42,72 @@ export default function SharedWallInviteScreen() {
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
 
+  useEffect(() => {
+    if (!reference || !userId || !wallId || accountRoute !== "ready" || claimedReference.current === reference) return;
+    claimedReference.current = reference;
+    setDeferredReadyToken(null);
+    setLoading(true);
+    setInvite({ status: "unavailable" });
+    setError(null);
+    setDeferredAttempt({
+      reference,
+      token: claimDeferredAttemptReference(
+        reference as DeferredNavigationRef,
+        { kind: "shared_invite", wallId },
+        userId,
+      ),
+    });
+  }, [accountRoute, reference, userId, wallId]);
+
+  useEffect(() => {
+    if (deferredReadyToken) void acknowledgeDeferredArrival(deferredReadyToken);
+  }, [deferredReadyToken]);
+
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null);
     if (!token || !wallId) return;
+    const capturedDeferredToken = reference ? deferredAttempt?.token ?? null : null;
     setLoading(true); setError(null);
+    setDeferredReadyToken(null);
     try {
-      const next = await getPendingSharedWallInvite(wallId);
-      if (fence.isCurrent(token, currentUserId.current)) setInvite(next);
+      const invitePromise = getPendingSharedWallInvite(wallId);
+      if (capturedDeferredToken) {
+        const resolution = await resolveDeferredDestination(
+          { kind: "shared_invite", wallId },
+          token.userId,
+          { invitation: async () => invitePromise },
+        );
+        if (!fence.isCurrent(token, currentUserId.current)) return;
+        if (resolution.status === "terminal_unavailable") {
+          const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
+          if (unavailable) router.replace(unavailable.href as never);
+          return;
+        }
+        if (resolution.status === "retryable_failure") {
+          setError("We couldn't check this invitation. Check your connection and try again.");
+          return;
+        }
+      }
+      const next = await invitePromise;
+      if (!fence.isCurrent(token, currentUserId.current)) return;
+      setInvite(next);
+      if (next.status === "available" && capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't check this invitation.");
+      if (fence.isCurrent(token, currentUserId.current)) {
+        setError(capturedDeferredToken
+          ? "We couldn't check this invitation. Check your connection and try again."
+          : cause?.message ?? "Couldn't check this invitation.");
+      }
     } finally {
       if (fence.isCurrent(token, currentUserId.current)) setLoading(false);
     }
-  }, [fence, userId, wallId]);
+  }, [deferredAttempt, fence, reference, router, userId, wallId]);
 
   useFocusEffect(useCallback(() => {
     fence.focus(userId ?? null); setInvite({ status: "unavailable" }); setDeclined(false); setBusy(null);
-    if (userId && wallId) void load(); else setLoading(false);
+    if (userId && accountRoute === "ready" && wallId && (!reference || deferredAttempt?.reference === reference)) void load(); else if (!reference && accountRoute === "ready") setLoading(false);
     return () => { fence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
-  }, [fence, load, userId, wallId]));
+  }, [accountRoute, deferredAttempt?.reference, fence, load, reference, userId, wallId]));
 
   async function respond(accept: boolean) {
     if (!userId || busy || invite.status !== "available" || !beginExclusiveMutation(mutationInFlight)) return;
@@ -66,7 +128,20 @@ export default function SharedWallInviteScreen() {
     }
   }
 
+  async function retryLoad() {
+    const captured = deferredAttempt?.token ?? null;
+    if (captured && !await retryDeferredDestination(captured)) return;
+    await load();
+  }
+
+  if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (!session) return <Redirect href="/welcome" />;
+  if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
+  if (error) return <Screen><View style={{ marginTop: 24, gap: 12 }}><Text accessibilityRole="alert" variant="headline">We couldn&apos;t open this invitation.</Text><Text variant="body" color={colors.onSurfaceVariant}>{error}</Text><Button label="Retry" variant="yellow" onPress={() => void retryLoad()} /><Button label="My Wall" variant="ghost" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
   return (
     <Screen>
       <Text variant="display" style={{ fontSize: 26, marginTop: 24 }}>Shared Wall invite</Text>
@@ -90,7 +165,6 @@ export default function SharedWallInviteScreen() {
           </>
         )}
       </View>
-      {error ? <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: 14 }}>{error}</Text> : null}
     </Screen>
   );
 }

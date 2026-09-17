@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
@@ -6,81 +6,101 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { getProfileByHandle } from "@/lib/profiles";
-import { setPendingLink } from "@/lib/pendingLink";
+import {
+  claimDeferredAttemptReference,
+  retryDeferredDestination,
+  transferDeferredAttemptToUnavailable,
+  transferDeferredHandleTarget,
+} from "@/lib/deferred-destination";
+import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
+import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
 import { colors, markColors } from "@/theme";
 
-/**
- * Handle deep link — `thewall://u/<handle>` opens that person's Wall.
- *
- * Resolves a @handle to a profile, then routes to their Wall (or My Wall if the
- * handle is the signed-in user's own). If the app is opened cold and signed out,
- * the intended target is stashed (pendingLink) and the auth gate returns here
- * after sign-in / onboarding — so the link isn't lost across auth.
- *
- * This is the SAFE, in-app portion of deep linking. Universal / https App Links
- * (opening thewall.app/@handle straight into the app) need native config
- * (associatedDomains + intentFilters + domain verification) — a reported infra
- * dependency, not implemented here.
- */
 function Spinner() {
-  return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}>
-      <ActivityIndicator color={markColors.brandYellow} />
-    </View>
-  );
+  return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}><ActivityIndicator color={markColors.brandYellow} /></View>;
 }
+
+type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
 
 export default function HandleLink() {
   const router = useRouter();
-  const { handle } = useLocalSearchParams<{ handle: string }>();
-  const clean = String(handle ?? "").replace(/^@/, "");
+  const { handle, __deferred_ref: rawReference } = useLocalSearchParams<{ handle: string; __deferred_ref?: string }>();
+  const clean = String(handle ?? "").replace(/^@/, "").toLowerCase();
+  const reference = typeof rawReference === "string" ? rawReference : null;
   const { loading, session, accountRoute } = useAuth();
   const [notFound, setNotFound] = useState(false);
+  const [retryable, setRetryable] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState<ClaimedAttempt | null>(null);
+  const claimedReference = useRef<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      if (loading) return;
-      // Not ready to resolve yet — stash the target and let the gate come back here.
-      if (!session || accountRoute !== "ready") {
-        setPendingLink(`/u/${clean}`);
-        return;
-      }
-      const profile = await getProfileByHandle(clean);
-      if (!active) return;
-      if (!profile) {
-        setNotFound(true);
-        return;
-      }
-      setTarget(profile.id === session.user.id ? "/(tabs)/home" : `/person/${profile.id}`);
-    })().catch(() => {
-      if (active) setNotFound(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, [loading, session, accountRoute, clean]);
-
-  if (loading) return <Spinner />;
-  // Signed out / mid-onboarding: send through the gate; pending target is stashed.
-  if (!session) return <Redirect href="/welcome" />;
-  if (accountRoute !== "ready") return <Redirect href="/" />;
-  if (target) return <Redirect href={target} />;
-
-  if (notFound) {
-    return (
-      <Screen dockInset={false}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
-          <Text variant="headline">No wall for @{clean}</Text>
-          <Text variant="body" color={colors.outline} style={{ textAlign: "center" }}>
-            That handle doesn't exist, or the link is out of date.
-          </Text>
-          <Button label="Back to my Wall" variant="primary" onPress={() => router.replace("/(tabs)/home")} />
-        </View>
-      </Screen>
+    const subject = session?.user.id;
+    if (!reference || !subject || accountRoute !== "ready" || claimedReference.current === reference) return;
+    claimedReference.current = reference;
+    setTarget(null);
+    setNotFound(false);
+    setRetryable(false);
+    const token = claimDeferredAttemptReference(
+      reference as DeferredNavigationRef,
+      { kind: "handle", handle: clean },
+      subject,
     );
+    setAttempt({ reference, token });
+  }, [accountRoute, clean, reference, session?.user.id]);
+
+  const resolve = useCallback(async (capturedAttempt: ClaimedAttempt | null) => {
+    const subject = session?.user.id;
+    if (!subject || accountRoute !== "ready") return;
+    setRetryable(false);
+    setNotFound(false);
+    const resolution = await resolveDeferredDestination(
+      { kind: "personal_handle", handle: clean },
+      subject,
+      { profileByHandle: getProfileByHandle },
+    );
+    if (resolution.status === "terminal_unavailable") {
+      if (capturedAttempt?.token) {
+        const unavailable = transferDeferredAttemptToUnavailable(capturedAttempt.token);
+        if (unavailable) router.replace(unavailable.href as never);
+      } else setNotFound(true);
+      return;
+    }
+    if (resolution.status === "retryable_failure") {
+      setRetryable(true);
+      return;
+    }
+    if (capturedAttempt?.token) {
+      const transferred = transferDeferredHandleTarget(capturedAttempt.token, resolution.exactTarget);
+      if (transferred) router.replace(transferred.href as never);
+      return;
+    }
+    setTarget(resolution.href);
+  }, [accountRoute, clean, router, session?.user.id]);
+
+  useEffect(() => {
+    if (reference && !attempt) return;
+    if (reference && !attempt?.token) return;
+    void resolve(attempt);
+  }, [attempt, reference, resolve]);
+
+  async function retry() {
+    const captured = attempt;
+    if (captured?.token && !await retryDeferredDestination(captured.token)) return;
+    await resolve(captured);
   }
 
+  if (loading) return <Spinner />;
+  if (!session) return <Redirect href="/welcome" />;
+  if (accountRoute !== "ready") return <Redirect href="/" />;
+  if (reference && attempt?.reference !== reference) return <Spinner />;
+  if (reference && attempt?.reference === reference && !attempt.token) return <Redirect href="/(tabs)/home" />;
+  if (target) return <Redirect href={target} />;
+  if (retryable) {
+    return <Screen dockInset={false}><View style={{ flex: 1, justifyContent: "center", gap: 12 }}><Text accessibilityRole="alert" variant="headline">We couldn&apos;t open this Wall.</Text><Text variant="body" color={colors.outline}>Check your connection and try again.</Text><Button label="Retry" variant="yellow" onPress={() => void retry()} /><Button label="My Wall" variant="ghost" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
+  }
+  if (notFound) {
+    return <Screen dockInset={false}><View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}><Text variant="headline">This isn&apos;t available anymore.</Text><Button label="My Wall" variant="primary" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
+  }
   return <Spinner />;
 }

@@ -17,11 +17,12 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 export async function getProfileByHandle(handle: string): Promise<Profile | null> {
   const clean = handle.trim().replace(/^@/, "");
   if (!clean) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("*")
     .ilike("handle", clean)
     .maybeSingle();
+  if (error) throw error;
   return (data as Profile) ?? null;
 }
 
@@ -125,11 +126,12 @@ export async function markOnboardingComplete(userId: string): Promise<Profile> {
 
 /** The user's own Personal Wall (created by the DB trigger at signup). */
 export async function getPersonalWall(userId: string): Promise<Wall | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("walls")
     .select("*")
     .eq("owner_id", userId)
     .eq("type", "personal")
     .maybeSingle();
+  if (error) throw error;
   return (data as Wall) ?? null;
 }
