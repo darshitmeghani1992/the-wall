@@ -32,6 +32,7 @@ export default function RootLayout() {
           <Stack.Screen name="social/[kind]" />
           <Stack.Screen name="person/[id]" />
           <Stack.Screen name="report-user/[id]" options={{ presentation: "modal" }} />
+          <Stack.Screen name="report-wall/[id]" options={{ presentation: "modal" }} />
           <Stack.Screen name="shared/create" options={{ presentation: "modal" }} />
           <Stack.Screen name="shared/[id]" />
           <Stack.Screen name="u/[handle]" />

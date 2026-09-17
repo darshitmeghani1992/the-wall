@@ -263,6 +263,7 @@ export default function SharedWallScreen() {
         {(isOwner || isMember) ? <Button label="Members" variant="primary" onPress={() => router.push(`/shared/${wall.id}/members`)} /> : null}
         {isOwner ? <Button label="Wall settings" variant="primary" onPress={() => router.push(`/shared/${wall.id}/settings`)} /> : null}
         <Button label="Share view-only link ↗" variant="ghost" onPress={() => void share()} />
+        {!isOwner ? <Button label="Report Shared Wall" variant="ghost" onPress={() => router.push(`/report-wall/${wall.id}`)} /> : null}
         {isMember ? <Button label="Leave Shared Wall" variant="ghost" loading={busy === "leave"} onPress={confirmLeave} /> : null}
       </View>
 
