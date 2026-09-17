@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-17  
 **Slice:** ACL-001  
-**State:** Author-side verified; draft-PR CI pending
+**State:** Source and draft-PR CI verified
 
 ## Delivered
 
@@ -20,7 +20,8 @@
 - Expo public config: pass
 - iOS and Android production exports: pass
 - `git diff --check`: pass
-- Local PostgreSQL suite: unavailable because `psql` is not installed; draft-PR CI is the required database evidence
+- Local PostgreSQL suite: unavailable because `psql` is not installed
+- Draft-PR CI: run `140` (`35202162615`) passed the complete PostgreSQL security suite, TypeScript, and lint
 
 ## Release boundary
 
