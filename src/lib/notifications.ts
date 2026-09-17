@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 import type { Notification } from "./types";
+import { requireExpectedActor } from "./expected-actor";
+import { requireMutationRow } from "./result-contract";
 export { notificationRoute } from "./notification-route";
 
 /**
@@ -23,7 +25,14 @@ export type NotificationWithActor = Notification & {
  * hydrated in one query. RLS already restricts rows to `user_id = auth.uid()`;
  * the explicit `.eq` mirrors that and lets the index do the work.
  */
-export async function listNotifications(userId: string): Promise<NotificationWithActor[]> {
+export async function listNotifications(expectedActorId: string): Promise<NotificationWithActor[]> {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  const userId = requireExpectedActor(
+    expectedActorId,
+    auth.user?.id,
+    "You need to be signed in to view Alerts.",
+  );
   const { data, error } = await supabase
     .from("notifications")
     .select("*")
@@ -71,19 +80,49 @@ export async function listNotifications(userId: string): Promise<NotificationWit
 }
 
 /** Mark one notification read (RLS: only the recipient can update their own). */
-export async function markNotificationRead(id: string): Promise<void> {
-  const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id);
+export async function markNotificationRead(
+  expectedActorId: string,
+  notificationId: string,
+): Promise<string> {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  const userId = requireExpectedActor(
+    expectedActorId,
+    auth.user?.id,
+    "You need to be signed in to update Alerts.",
+  );
+  const { data, error } = await supabase
+    .from("notifications")
+    .update({ read: true })
+    .eq("id", notificationId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
   if (error) throw error;
+  const updated = requireMutationRow(data, "That Alert is no longer available.");
+  if ((updated as { id?: unknown }).id !== notificationId) {
+    throw new Error("The updated Alert didn't match the requested Alert.");
+  }
+  return notificationId;
 }
 
 /** Mark every unread notification read (used when the screen opens). */
-export async function markAllNotificationsRead(userId: string): Promise<void> {
-  const { error } = await supabase
+export async function markAllNotificationsRead(expectedActorId: string): Promise<string[]> {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  const userId = requireExpectedActor(
+    expectedActorId,
+    auth.user?.id,
+    "You need to be signed in to update Alerts.",
+  );
+  const { data, error } = await supabase
     .from("notifications")
     .update({ read: true })
     .eq("user_id", userId)
-    .eq("read", false);
+    .eq("read", false)
+    .select("id");
   if (error) throw error;
+  return ((data ?? []) as { id: string }[]).map((row) => row.id);
 }
 
 /**

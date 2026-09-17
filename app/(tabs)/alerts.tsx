@@ -6,6 +6,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { useAuth } from "@/lib/auth";
 import { SessionFocusFence } from "@/lib/session-generation";
+import { applyNotificationReadReceipts, relativeNotificationTime } from "@/lib/notification-ui";
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -15,17 +16,6 @@ import {
   type NotificationWithActor,
 } from "@/lib/notifications";
 import { colors, markColors, radius } from "@/theme";
-
-function relativeTime(iso: string): string {
-  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(iso).toLocaleDateString();
-}
 
 /** In-app Alerts backed only by the signed-in recipient's RLS-filtered rows. */
 export default function AlertsScreen() {
@@ -51,7 +41,9 @@ export default function AlertsScreen() {
       if (rows.some((row) => !row.read)) {
         try {
           if (!fence.isCurrent(token, currentUserId.current)) return;
-          await markAllNotificationsRead(token.userId);
+          const readIds = await markAllNotificationsRead(token.userId);
+          if (!fence.isCurrent(token, currentUserId.current)) return;
+          setItems((current) => applyNotificationReadReceipts(current, readIds));
         } catch {
           // Reading Alerts remains available if the non-critical receipt fails.
         }
@@ -90,7 +82,9 @@ export default function AlertsScreen() {
     if (!token) return;
     if (!notification.read) {
       try {
-        await markNotificationRead(notification.id);
+        const readId = await markNotificationRead(token.userId, notification.id);
+        if (!fence.isCurrent(token, currentUserId.current)) return;
+        setItems((current) => applyNotificationReadReceipts(current, [readId]));
       } catch {
         // Navigation remains useful when the non-critical read receipt fails.
       }
@@ -132,7 +126,7 @@ export default function AlertsScreen() {
             <Pressable
               key={notification.id}
               accessibilityRole="button"
-              accessibilityLabel={`${notificationMessage(notification)}, ${relativeTime(notification.created_at)}`}
+              accessibilityLabel={`${notificationMessage(notification)}, ${relativeNotificationTime(notification.created_at)}`}
               onPress={() => void open(notification)}
               style={{
                 flexDirection: "row",
@@ -174,7 +168,7 @@ export default function AlertsScreen() {
               <View style={{ flex: 1 }}>
                 <Text variant="body">{notificationMessage(notification)}</Text>
                 <Text variant="label" color={colors.outline} style={{ marginTop: 2 }}>
-                  {relativeTime(notification.created_at)}
+                  {relativeNotificationTime(notification.created_at)}
                 </Text>
               </View>
               {!notification.read ? (
