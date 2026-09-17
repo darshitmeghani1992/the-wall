@@ -86,7 +86,7 @@ BEGIN;
 set local role authenticated;
 set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G
 select deactivate_account('88888888-8888-8888-8888-888888888888');
-select reactivate_account();
+select reactivate_account('88888888-8888-8888-8888-888888888888');
 reset role;
 do $$
 declare g_wall uuid;

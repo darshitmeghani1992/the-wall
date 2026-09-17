@@ -153,7 +153,15 @@ end $$;
 -- C tries to self-reactivate → stays suspended.
 set local role authenticated;
 set local "test.uid" = '33333333-3333-3333-3333-333333333333';   -- C (suspended)
-select reactivate_account();
+do $$
+declare rejected boolean := false;
+begin
+  begin
+    perform reactivate_account('33333333-3333-3333-3333-333333333333');
+  exception when insufficient_privilege then rejected := true;
+  end;
+  if not rejected then raise exception '85 FAIL: suspended user reactivation did not fail closed'; end if;
+end $$;
 reset role;
 do $$
 begin

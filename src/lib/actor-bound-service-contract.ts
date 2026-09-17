@@ -21,6 +21,22 @@ export async function executeAccountDeactivation(
   );
 }
 
+export type AccountReactivationPort = ActorProvider & {
+  reactivate: (expectedActorId: string) => Promise<void>;
+};
+
+export async function executeAccountReactivation(
+  expectedActorId: string,
+  port: AccountReactivationPort,
+): Promise<void> {
+  await runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to restore your account.",
+    port.getActorId,
+    async (actorId) => port.reactivate(actorId),
+  );
+}
+
 export type MarkRemovalReason = "normal" | "safety";
 export type MarkRemovalPort = ActorProvider & {
   remove: (expectedActorId: string, markId: string, reason: MarkRemovalReason) => Promise<void>;

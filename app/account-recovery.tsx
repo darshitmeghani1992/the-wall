@@ -5,6 +5,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { reactivateAccount } from "@/lib/account";
+import { runAccountRecoveryFlow } from "@/lib/account-recovery-flow";
 import { useAuth } from "@/lib/auth";
 import { AccountRouteFence } from "@/lib/onboarding-contract";
 import { colors } from "@/theme";
@@ -21,8 +22,11 @@ export default function AccountRecovery() {
 
   useEffect(() => {
     const currentFence = fence.current;
-    if (accountRoute && accountRoute !== "deactivated" && !inFlight.current) router.replace("/");
     return () => currentFence.invalidate(currentUserId.current);
+  }, [userId]);
+
+  useEffect(() => {
+    if (accountRoute && accountRoute !== "deactivated" && !inFlight.current) router.replace("/");
   }, [accountRoute, router]);
 
   async function restore() {
@@ -30,19 +34,21 @@ export default function AccountRecovery() {
     const token = fence.current.begin(userId);
     inFlight.current = true;
     setBusy(true);
-    try {
-      await reactivateAccount(userId);
-      if (!fence.current.isCurrent(token, currentUserId.current)) return;
-      await refreshAccountRoute();
-      if (currentUserId.current === userId) router.replace("/");
-    } catch (cause: any) {
-      if (currentUserId.current === userId) Alert.alert("Couldn't restore your account", cause?.message ?? "Please try again.");
-    } finally {
-      if (currentUserId.current === userId) {
+    await runAccountRecoveryFlow({
+      expectedActorId: userId,
+      isCurrent: () => fence.current.isCurrent(token, currentUserId.current),
+      reactivate: reactivateAccount,
+      refreshAccountRoute,
+      navigateToCanonicalGate: () => router.replace("/"),
+      onError: (cause) => Alert.alert(
+        "Couldn't restore your account",
+        cause instanceof Error ? cause.message : "Please try again.",
+      ),
+      onFinally: () => {
         inFlight.current = false;
         setBusy(false);
-      }
-    }
+      },
+    });
   }
 
   if (accountRoute && accountRoute !== "deactivated" && !inFlight.current) {

@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
-import { executeAccountDeactivation } from "./actor-bound-service-contract";
+import { executeAccountDeactivation, executeAccountReactivation } from "./actor-bound-service-contract";
 import { mapActorBoundMutationError } from "./expected-actor";
 import { isAccountRoute, runForExpectedSubject, type AccountRoute } from "./onboarding-contract";
 
@@ -36,17 +36,19 @@ export async function deactivateAccount(expectedActorId: string): Promise<void> 
 
 /** Reactivate the signed-in account (returning within the recovery window). */
 export async function reactivateAccount(expectedUserId: string): Promise<void> {
-  await runForExpectedSubject(
+  await executeAccountReactivation(
     expectedUserId,
-    async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) throw error;
-      return data.user?.id ?? null;
-    },
-    async () => {
-      const { error } = await supabase.rpc("reactivate_account");
-      if (error) throw error;
-      track("Account Reactivated");
+    {
+      getActorId: async () => {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        return data.user?.id;
+      },
+      reactivate: async (actorId) => {
+        const { error } = await supabase.rpc("reactivate_account", { p_expected_actor_id: actorId });
+        if (error) throw mapActorBoundMutationError(error);
+        track("Account Reactivated");
+      },
     },
   );
 }

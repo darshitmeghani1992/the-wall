@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { mapActorBoundMutationError, requireExpectedActor } from "./expected-actor.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { executeAccountDeactivation, executeMarkRemoval } from "./actor-bound-service-contract.ts";
+import { executeAccountDeactivation, executeAccountReactivation, executeMarkRemoval } from "./actor-bound-service-contract.ts";
 
 assert.equal(
   requireExpectedActor("user-a", "user-a", "signed out"),
@@ -93,6 +93,36 @@ async function verifyAccountActorPropagation(): Promise<void> {
   assert.deepEqual(calls, ["user-a"], "the preflight-confirmed actor reaches the deactivation RPC port");
 }
 
+async function verifyDelayedAccountReactivation(): Promise<void> {
+  const expectedActorId = "user-a";
+  let currentActorId = expectedActorId;
+  let releaseActor!: () => void;
+  let mutationCalls = 0;
+  const delayedActor = new Promise<void>((resolve) => { releaseActor = resolve; });
+
+  const operation = executeAccountReactivation(expectedActorId, {
+    getActorId: async () => {
+      await delayedActor;
+      return currentActorId;
+    },
+    reactivate: async () => { mutationCalls += 1; },
+  });
+
+  currentActorId = "user-b";
+  releaseActor();
+  await assert.rejects(operation, /session changed/i, "reactivation rejects a delayed account switch");
+  assert.equal(mutationCalls, 0, "reactivation never reaches its RPC after the account switches");
+}
+
+async function verifyReactivationActorPropagation(): Promise<void> {
+  const calls: string[] = [];
+  await executeAccountReactivation("user-a", {
+    getActorId: async () => "user-a",
+    reactivate: async (actorId) => { calls.push(actorId); },
+  });
+  assert.deepEqual(calls, ["user-a"], "the preflight-confirmed actor reaches the reactivation RPC port");
+}
+
 async function verifyDelayedSafetyRemoval(): Promise<void> {
   const expectedActorId = "user-a";
   let currentActorId = expectedActorId;
@@ -146,6 +176,12 @@ assert.doesNotMatch(
   "deactivation cannot fall back to the retired parameterless RPC",
 );
 assert.match(accountSource, /throw mapActorBoundMutationError\(error\)/);
+assert.match(accountSource, /rpc\("reactivate_account", \{ p_expected_actor_id: actorId \}\)/);
+assert.doesNotMatch(
+  accountSource,
+  /\.rpc\((["'])reactivate_account\1\s*\)/,
+  "reactivation cannot fall back to the retired parameterless RPC",
+);
 const marksSource = readFileSync("src/lib/marks.ts", "utf8");
 const removeMarkSource = marksSource.slice(
   marksSource.indexOf("export async function removeMark("),
@@ -162,6 +198,8 @@ void Promise.all([
   verifyDelayedAccountSwitch(),
   verifyDelayedAccountDeactivation(),
   verifyAccountActorPropagation(),
+  verifyDelayedAccountReactivation(),
+  verifyReactivationActorPropagation(),
   verifyDelayedSafetyRemoval(),
   verifyMarkActorPropagation(),
 ])
