@@ -18,6 +18,9 @@ minor version per shipped slice; note schema/doc changes.
   suppressing stale picker, save, refresh, error, and navigation continuations
   after blur, sign-out, or account switch. Onboarding now uses the same guarded
   avatar upload boundary.
+- Cleared the remaining lint backlog across auth callback, protected-media edge
+  code/tests, worker types, and the static design reference; lint now has zero
+  errors and zero warnings.
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).

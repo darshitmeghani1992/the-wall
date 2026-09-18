@@ -27,7 +27,7 @@ export async function processPhoto(
   deadlineMs = Date.now() + WALL_TIME_MS.photo,
 ): Promise<PhotoOutput> {
   await assertSize(inputPath, INPUT_BYTES.photo, "TOO_LARGE");
-  const container = await inspectPhotoContainer(inputPath);
+  await inspectPhotoContainer(inputPath);
   const probe = await runProbe(inputPath, Math.min(5_000, remainingTimeMs(deadlineMs)));
   const videoStreams = (probe.streams ?? []).filter((stream) => stream.codec_type === "video");
   if (videoStreams.length !== 1 || (probe.streams ?? []).some((stream) => stream.codec_type !== "video")) {

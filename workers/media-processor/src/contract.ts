@@ -49,9 +49,9 @@ type NodeCryptoKey = Awaited<ReturnType<typeof webcrypto.subtle.importKey>>;
 
 /** Native WebCrypto verifier for the protocol-v2 Ed25519 compact JWS. */
 export class Ed25519EnvelopeVerifier implements EnvelopeVerifier {
-  readonly #keys: ReadonlyArray<{ kid: string; key: NodeCryptoKey }>;
+  readonly #keys: readonly { kid: string; key: NodeCryptoKey }[];
 
-  private constructor(keys: ReadonlyArray<{ kid: string; key: NodeCryptoKey }>) {
+  private constructor(keys: readonly { kid: string; key: NodeCryptoKey }[]) {
     this.#keys = keys;
   }
 
@@ -59,7 +59,7 @@ export class Ed25519EnvelopeVerifier implements EnvelopeVerifier {
     if (keys.length < 1 || keys.length > 2) throw new Error("exactly current and optional prior public keys are allowed");
     const seenKids = new Set<string>();
     const seenKeys = new Set<string>();
-    const imported: Array<{ kid: string; key: NodeCryptoKey }> = [];
+    const imported: { kid: string; key: NodeCryptoKey }[] = [];
     for (const candidate of keys) {
       if (!isKid(candidate.kid) || seenKids.has(candidate.kid) || candidate.publicKey.byteLength !== 32) {
         throw new Error("worker public-key allow-list is invalid");
@@ -88,7 +88,7 @@ export class Ed25519EnvelopeVerifier implements EnvelopeVerifier {
     const signingInput = new TextEncoder().encode(`${protectedSegment}.${payloadSegment}`);
 
     // Try the bounded current/prior list before parsing the untrusted header.
-    const matches: Array<{ kid: string; key: NodeCryptoKey }> = [];
+    const matches: { kid: string; key: NodeCryptoKey }[] = [];
     for (const candidate of this.#keys) {
       if (await webcrypto.subtle.verify({ name: "Ed25519" }, candidate.key, signature, signingInput)) matches.push(candidate);
     }

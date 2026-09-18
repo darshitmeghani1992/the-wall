@@ -249,7 +249,7 @@ function validateClaimedAttempt(value: ClaimedMediaAttempt): void {
   if (value.validated_path !== expectedBase) throw new Error("claimed attempt path mismatch");
 }
 
-function destinationTemplates(attempt: ClaimedMediaAttempt): Array<Omit<WorkerDestination, "url">> {
+function destinationTemplates(attempt: ClaimedMediaAttempt): Omit<WorkerDestination, "url">[] {
   const directory = `validated/${attempt.id}/${attempt.attempt_id}`;
   if (attempt.kind === "photo") {
     return [

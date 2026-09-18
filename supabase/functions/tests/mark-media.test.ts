@@ -81,7 +81,7 @@ function resolvedRow(path = "validated/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/bbbb
   };
 }
 
-function scriptedFetch(steps: Array<(call: FetchCall) => Response | Promise<Response>>, calls: FetchCall[]): typeof fetch {
+function scriptedFetch(steps: ((call: FetchCall) => Response | Promise<Response>)[], calls: FetchCall[]): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     calls.push({ url, init });
