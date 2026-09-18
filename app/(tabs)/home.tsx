@@ -16,6 +16,7 @@ import { getPersonalWall } from "@/lib/profiles";
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { getAccessibleSharedWalls } from "@/lib/walls";
 import { SessionFocusFence } from "@/lib/session-generation";
+import { settleOptional } from "@/lib/optional-result";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
 import { useWallReactions } from "@/hooks/useWallReactions";
 import { supabase } from "@/lib/supabase";
@@ -59,7 +60,7 @@ export default function MyWall() {
   const [sharedWalls, setSharedWalls] = useState<Wall[]>([]);
   const [sharedWallsError, setSharedWallsError] = useState(false);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
-  const [friendCount, setFriendCount] = useState(0);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -193,11 +194,15 @@ export default function MyWall() {
       setWall(personalWall);
       const [nextMarks, friends] = await Promise.all([
         marksPromise ?? getWallMarks(personalWall.id),
-        supabase
+        settleOptional(supabase
           .from("friendships")
           .select("requester_id", { count: "exact", head: true })
           .eq("status", "accepted")
-          .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`),
+          .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+          .then(({ count, error }) => {
+            if (error || count === null) throw error ?? new Error("Friend count unavailable");
+            return count;
+          })),
       ]);
       if (!active) return;
       setMarks(nextMarks);
@@ -206,7 +211,7 @@ export default function MyWall() {
         setSelectedMark(focusedMark);
         setFocusedMarkUnavailable(!focusedMark);
       }
-      setFriendCount(friends.count ?? 0);
+      setFriendCount(friends.available ? friends.value : null);
       if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
       setLoading(false);
     })().catch(() => {
@@ -270,7 +275,7 @@ export default function MyWall() {
               {wall?.name ?? `${profile?.display_name ?? "My"}'s Wall`}
             </Text>
             <Text variant="label" color={colors.outline}>
-              {marks.length} MARKS · {friendCount} FRIENDS
+              {marks.length} MARKS · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
             </Text>
           </View>
         </View>
@@ -325,9 +330,11 @@ export default function MyWall() {
           </ScrollView>
         </View>
         {sharedWallsError ? (
-          <Text variant="body" color={colors.outline} style={{ fontSize: 13, marginTop: 6 }}>
-            Shared Walls aren&apos;t available right now.
-          </Text>
+          <Pressable accessibilityRole="button" onPress={() => void refreshSharedWalls()} style={{ minHeight: 44, justifyContent: "center" }}>
+            <Text variant="body" color={colors.outline} style={{ fontSize: 13 }}>
+              Shared Walls aren&apos;t available right now. Tap to retry.
+            </Text>
+          </Pressable>
         ) : null}
 
         <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
@@ -364,7 +371,7 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, marks.length, profile, router, sharedWalls, sharedWallsError, userId, wall],
+    [filter, friendCount, initial, marks.length, profile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;

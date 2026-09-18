@@ -12,6 +12,7 @@ import { getWall, getWallCapabilities, joinSharedWall, leaveSharedWall, type Wal
 import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { getProfile } from "@/lib/profiles";
 import { SessionFocusFence } from "@/lib/session-generation";
+import { settleOptional } from "@/lib/optional-result";
 import { beginExclusiveMutation, endExclusiveMutation } from "@/lib/mutation-guard";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
 import { useWallReactions } from "@/hooks/useWallReactions";
@@ -128,11 +129,14 @@ export default function SharedWallScreen() {
         setError("This Shared Wall isn't available.");
         return;
       }
-      const [ownerProfile, nextMarks] = await Promise.all([getProfile(nextWall.owner_id), marksPromise ?? getWallMarks(nextWall.id)]);
+      const [ownerResult, nextMarks] = await Promise.all([
+        settleOptional(getProfile(nextWall.owner_id)),
+        marksPromise ?? getWallMarks(nextWall.id),
+      ]);
       if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId) return;
       setWall(nextWall);
       setCapabilities(nextCapabilities);
-      setOwner(ownerProfile);
+      setOwner(ownerResult.available ? ownerResult.value : null);
       setMarks(nextMarks);
       if (focusMarkId) {
         const focused = nextMarks.find((mark) => mark.id === focusMarkId) ?? null;

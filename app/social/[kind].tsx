@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { PersonRow } from "@/components/PersonRow";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { useAuth } from "@/lib/auth";
 import { getFollowers, getFollowing } from "@/lib/follows";
+import { SessionFocusFence } from "@/lib/session-generation";
 import type { Profile } from "@/lib/types";
 import { colors, markColors } from "@/theme";
 
@@ -19,28 +20,46 @@ export default function SocialListScreen() {
   const [people, setPeople] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadFence = useRef(new SessionFocusFence());
+  const currentUserId = useRef<string | null>(session?.user.id ?? null);
+  const currentTargetId = useRef<string | null>(targetId ?? null);
+  currentUserId.current = session?.user.id ?? null;
+  currentTargetId.current = targetId ?? null;
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!targetId || (kind !== "followers" && kind !== "following")) {
-        setError("This list isn't available.");
+  const load = useCallback(async () => {
+    const token = loadFence.current.begin(session?.user.id ?? null);
+    const requestedTargetId = targetId;
+    if (!token || !requestedTargetId || (kind !== "followers" && kind !== "following")) {
+      setError("This list isn't available.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const next = followersMode ? await getFollowers(requestedTargetId) : await getFollowing(requestedTargetId);
+      if (!loadFence.current.isCurrent(token, currentUserId.current) || currentTargetId.current !== requestedTargetId) return;
+      setPeople(next);
+    } catch (cause: any) {
+      if (loadFence.current.isCurrent(token, currentUserId.current) && currentTargetId.current === requestedTargetId) {
+        setError(cause?.message ?? "Couldn't load this list.");
+      }
+    } finally {
+      if (loadFence.current.isCurrent(token, currentUserId.current) && currentTargetId.current === requestedTargetId) {
         setLoading(false);
-        return;
       }
-      setLoading(true);
+    }
+  }, [followersMode, kind, session?.user.id, targetId]);
+
+  useFocusEffect(useCallback(() => {
+    loadFence.current.focus(session?.user.id ?? null);
+    void load();
+    return () => {
+      loadFence.current.blur();
+      setPeople([]);
       setError(null);
-      try {
-        const next = followersMode ? await getFollowers(targetId) : await getFollowing(targetId);
-        if (active) setPeople(next);
-      } catch (cause: any) {
-        if (active) setError(cause?.message ?? "Couldn't load this list.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => { active = false; };
-  }, [followersMode, kind, targetId]);
+    };
+  }, [load, session?.user.id]));
 
   return (
     <Screen dockInset={false}>
@@ -52,7 +71,14 @@ export default function SocialListScreen() {
       {loading ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
       ) : error ? (
-        <Text variant="body" color={colors.error}>{error}</Text>
+        <View>
+          <Text accessibilityRole="alert" variant="body" color={colors.error}>{error}</Text>
+          <View style={{ marginTop: 16, alignSelf: "flex-start" }}>
+            <Pressable accessibilityRole="button" onPress={() => void load()} style={{ minHeight: 44, justifyContent: "center" }}>
+              <Text variant="label">TRY AGAIN</Text>
+            </Pressable>
+          </View>
+        </View>
       ) : people.length ? (
         <View>
           {people.map((profile) => (

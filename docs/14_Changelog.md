@@ -4,6 +4,12 @@ Version-per-feature log for The Wall (Expo app). Newest first. Bump the
 minor version per shipped slice; note schema/doc changes.
 
 ## Unreleased
+- Hardened Wall/social read resilience: follower lists and profile counts now
+  reject stale account/route responses and expose retries; primary Marks remain
+  readable when optional friend counts, follow state, social counts, or owner
+  profile enrichment fails; unavailable counts are no longer shown as zero.
+- Added a dependency-free optional-result contract test covering primary-content
+  isolation and exact-zero preservation.
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).

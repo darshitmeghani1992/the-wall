@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -8,30 +8,44 @@ import { Button } from "@/components/Button";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getFollowCounts } from "@/lib/follows";
+import { SessionFocusFence } from "@/lib/session-generation";
 import { shareMyWall } from "@/lib/share";
 import { colors, markColors } from "@/theme";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   const [followers, setFollowers] = useState(0);
   const [following, setFollowing] = useState(0);
   const [countsLoading, setCountsLoading] = useState(false);
+  const [countsError, setCountsError] = useState(false);
+  const countsFence = useRef(new SessionFocusFence());
+  const currentUserId = useRef<string | null>(session?.user.id ?? null);
+  currentUserId.current = session?.user.id ?? null;
   const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
 
   const refreshCounts = useCallback(async () => {
-    if (!profile?.id) return;
+    const token = countsFence.current.begin(session?.user.id ?? null);
+    if (!token) return;
     setCountsLoading(true);
+    setCountsError(false);
     try {
-      const next = await getFollowCounts(profile.id);
+      const next = await getFollowCounts(token.userId);
+      if (!countsFence.current.isCurrent(token, currentUserId.current)) return;
       setFollowers(next.followers);
       setFollowing(next.following);
+    } catch {
+      if (countsFence.current.isCurrent(token, currentUserId.current)) setCountsError(true);
     } finally {
-      setCountsLoading(false);
+      if (countsFence.current.isCurrent(token, currentUserId.current)) setCountsLoading(false);
     }
-  }, [profile?.id]);
+  }, [session?.user.id]);
 
-  useFocusEffect(useCallback(() => { void refreshCounts(); }, [refreshCounts]));
+  useFocusEffect(useCallback(() => {
+    countsFence.current.focus(session?.user.id ?? null);
+    void refreshCounts();
+    return () => countsFence.current.blur();
+  }, [refreshCounts, session?.user.id]));
 
   return (
     <Screen>
@@ -49,7 +63,11 @@ export default function ProfileScreen() {
         {profile?.handle ? <Text variant="label" color={colors.outline}>@{profile.handle}</Text> : null}
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 26, marginTop: 4 }}>
-          {countsLoading ? <ActivityIndicator color={markColors.brandYellow} /> : (
+          {countsLoading ? <ActivityIndicator color={markColors.brandYellow} /> : countsError ? (
+            <Pressable accessibilityRole="button" onPress={() => void refreshCounts()} style={{ minHeight: 44, justifyContent: "center" }}>
+              <Text accessibilityRole="alert" variant="label" color={colors.error}>COUNTS UNAVAILABLE · RETRY</Text>
+            </Pressable>
+          ) : (
             <>
               <Pressable accessibilityRole="button" accessibilityLabel={`${followers} followers. Open followers list.`} onPress={() => router.push("/social/followers")} style={{ alignItems: "center", minWidth: 76, minHeight: 44, justifyContent: "center" }}>
                 <Text variant="headline">{followers}</Text>

@@ -36,6 +36,7 @@ import {
   type FriendActionKind,
 } from "@/lib/relationship-ui";
 import { SessionFocusFence } from "@/lib/session-generation";
+import { settleOptional } from "@/lib/optional-result";
 import {
   getPublicSharedWallCount,
   getReadablePersonalWall,
@@ -81,6 +82,8 @@ export default function PersonWall() {
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [counts, setCounts] = useState<{ followers: number; following: number; publicWalls: number } | null>(null);
+  const [socialDetailsUnavailable, setSocialDetailsUnavailable] = useState(false);
+  const [followStateAvailable, setFollowStateAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
@@ -134,6 +137,8 @@ export default function PersonWall() {
     setDeferredReadyToken(null);
     setError(null);
     setFocusedMarkUnavailable(false);
+    setSocialDetailsUnavailable(false);
+    setFollowStateAvailable(true);
     setSelectedMark(null);
     setWall(null);
     setMarks([]);
@@ -189,8 +194,8 @@ export default function PersonWall() {
         personPromise,
         personalWallPromise,
         getRelationship(token.userId, personId),
-        getFollowCounts(personId),
-        getPublicSharedWallCount(personId),
+        settleOptional(getFollowCounts(personId)),
+        settleOptional(getPublicSharedWallCount(personId)),
       ]);
       if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
       if (!person || !personalWall) {
@@ -199,8 +204,15 @@ export default function PersonWall() {
       setProfile(person);
       setWall(personalWall);
       setRelationship(state);
-      setCounts({ ...followCounts, publicWalls });
+      if (followCounts.available && publicWalls.available) {
+        setCounts({ ...followCounts.value, publicWalls: publicWalls.value });
+        setSocialDetailsUnavailable(false);
+      } else {
+        setCounts(null);
+        setSocialDetailsUnavailable(true);
+      }
       setFollowing(false);
+      setFollowStateAvailable(personalWall.visibility !== "public");
       if (personalWall) {
         capabilitiesPromise ??= getWallCapabilities(personalWall.id);
         const wallCapabilities = await capabilitiesPromise;
@@ -211,11 +223,12 @@ export default function PersonWall() {
         }
         const [nextMarks, followState] = await Promise.all([
           marksPromise ?? getWallMarks(personalWall.id),
-          personalWall.visibility === "public" ? isFollowing(token.userId, personId) : Promise.resolve(false),
+          settleOptional(personalWall.visibility === "public" ? isFollowing(token.userId, personId) : Promise.resolve(false)),
         ]);
         if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
         setMarks(nextMarks);
-        setFollowing(followState);
+        setFollowing(followState.available ? followState.value : false);
+        setFollowStateAvailable(followState.available);
         if (focusMarkId) {
           const focusedMark = nextMarks.find((mark) => mark.id === focusMarkId) ?? null;
           setSelectedMark(focusedMark);
@@ -273,7 +286,7 @@ export default function PersonWall() {
 
   async function toggleFollow() {
     const viewerId = session?.user.id ?? null;
-    if (!profile || !wall || wall.visibility !== "public" || actionInFlight.current) return;
+    if (!profile || !wall || wall.visibility !== "public" || !followStateAvailable || actionInFlight.current) return;
     const targetToken = targetRouteFence.current.capture(profile.id);
     const token = actionFence.current.begin(viewerId);
     if (!token || !targetToken) return;
@@ -512,6 +525,10 @@ export default function PersonWall() {
               </Pressable>
               <Text variant="label" color={colors.onSurfaceVariant} style={{ minHeight: 44, textAlignVertical: "center", paddingLeft: 12 }}>{counts.publicWalls} PUBLIC WALLS</Text>
             </View>
+          ) : socialDetailsUnavailable ? (
+            <Pressable accessibilityRole="button" onPress={() => void retryLoad()} style={{ minHeight: 44, justifyContent: "center", marginBottom: 16 }}>
+              <Text accessibilityRole="alert" variant="body" color={colors.outline}>Social counts aren&apos;t available right now. Tap to retry.</Text>
+            </Pressable>
           ) : null}
           {profile.bio ? <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: -6, marginBottom: 18 }}>{profile.bio}</Text> : null}
           {wall && capabilities ? <WallStatus wallId={wall.id} viewerId={session?.user.id} /> : null}
@@ -540,8 +557,13 @@ export default function PersonWall() {
               <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginBottom: canLeaveMark ? 24 : 12 }}>
                 {canLeaveMark ? <Button label={`Leave a Mark for @${profile.handle}`} variant="yellow" onPress={() => router.push(`/create?wallId=${wall.id}&recipientId=${profile.id}&handle=${encodeURIComponent(profile.handle)}`)} /> : null}
                 <Button label="Share ↗" variant="primary" onPress={() => sharePersonWall(profile.handle, profile.display_name)} />
-                {wall.visibility === "public" ? <Button label={following ? "Following ✓" : "Follow"} variant={following ? "ghost" : "primary"} loading={followBusy} onPress={toggleFollow} /> : null}
+                {wall.visibility === "public" ? <Button label={followStateAvailable ? (following ? "Following ✓" : "Follow") : "Follow unavailable"} variant={following ? "ghost" : "primary"} disabled={!followStateAvailable} loading={followBusy} onPress={toggleFollow} /> : null}
               </View>
+              {wall.visibility === "public" && !followStateAvailable ? (
+                <Pressable accessibilityRole="button" onPress={() => void retryLoad()} style={{ minHeight: 44, justifyContent: "center", marginTop: -8, marginBottom: 12 }}>
+                  <Text accessibilityRole="alert" variant="body" color={colors.outline}>Follow status is unavailable. Tap to retry.</Text>
+                </Pressable>
+              ) : null}
               {!canLeaveMark ? <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>{contributionUnavailableCopy(wall.contribution_policy, relationship)}</Text> : null}
               {marks.length ? (
                 <Masonry data={marks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
