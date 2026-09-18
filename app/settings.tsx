@@ -87,6 +87,9 @@ export default function SettingsScreen() {
         <Button label="Edit profile" variant="ghost" disabled={busy} onPress={() => router.push("/profile-edit")} />
         <Button label="Personal Wall settings" variant="ghost" disabled={busy} onPress={() => router.push("/personal-wall-settings")} />
         <Button label="Blocked users" variant="ghost" disabled={busy} onPress={() => router.push("/blocked-users")} />
+        {profile?.is_admin ? (
+          <Button label="Moderation queue" variant="yellow" disabled={busy} onPress={() => router.push("/moderation")} />
+        ) : null}
         <Button label="Sign out" variant="primary" disabled={busy} onPress={signOut} />
       </View>
 

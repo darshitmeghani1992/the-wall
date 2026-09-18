@@ -108,7 +108,7 @@ set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (not admin
 do $$
 declare rejected boolean := false;
 begin
-  begin perform admin_remove_mark('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1','x');
+  begin perform admin_remove_mark('22222222-2222-2222-2222-222222222222','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1','x');
   exception when insufficient_privilege then rejected := true; end;
   if not rejected then raise exception '85 FAIL: a non-admin removed a Mark'; end if;
 end $$;
@@ -118,7 +118,7 @@ end $$;
 reset role;
 set local role authenticated;
 set local "test.uid" = '55555555-5555-5555-5555-555555555555';   -- D (admin)
-select admin_remove_mark('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1','abuse');
+select admin_remove_mark('55555555-5555-5555-5555-555555555555','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1','abuse');
 reset role;
 do $$
 begin
@@ -139,7 +139,7 @@ end $$;
 -- Admin suspends C; C cannot self-reactivate.
 set local role authenticated;
 set local "test.uid" = '55555555-5555-5555-5555-555555555555';   -- D (admin)
-select admin_suspend_account('33333333-3333-3333-3333-333333333333','abuse');
+select admin_suspend_account('55555555-5555-5555-5555-555555555555','33333333-3333-3333-3333-333333333333','abuse');
 reset role;
 do $$
 begin
@@ -174,7 +174,7 @@ end $$;
 -- Admin resolves the report; logged; report status updated.
 set local role authenticated;
 set local "test.uid" = '55555555-5555-5555-5555-555555555555';   -- D (admin)
-select admin_resolve_report('99000000-0000-0000-0000-000000000002','resolved','handled');
+select admin_resolve_report('55555555-5555-5555-5555-555555555555','99000000-0000-0000-0000-000000000002','resolved','handled');
 do $$
 begin
   if (select status from reports where id = '99000000-0000-0000-0000-000000000002') <> 'resolved' then

@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { mapActorBoundMutationError, runExpectedActorMutation } from "./expected-actor";
 
 /**
  * Moderation / admin data layer (Master Spec §53). All privileged actions go
@@ -34,38 +35,75 @@ export type ModerationAction = {
 };
 
 /** Admin: remove a Mark (moderation removal — never quota-limited). */
-export async function adminRemoveMark(markId: string, reason: string): Promise<void> {
-  const { error } = await supabase.rpc("admin_remove_mark", { p_mark_id: markId, p_reason: reason });
-  if (error) throw error;
+async function runAdminMutation(
+  expectedActorId: string,
+  mutate: (actorId: string) => Promise<void>,
+): Promise<void> {
+  await runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to moderate reports.",
+    async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id;
+    },
+    mutate,
+  );
+}
+
+/** Admin: remove a Mark (moderation removal — never quota-limited). */
+export async function adminRemoveMark(expectedActorId: string, markId: string, reason: string): Promise<void> {
+  await runAdminMutation(expectedActorId, async (actorId) => {
+    const { error } = await supabase.rpc("admin_remove_mark", {
+      p_expected_actor_id: actorId, p_mark_id: markId, p_reason: reason,
+    });
+    if (error) throw mapActorBoundMutationError(error);
+  });
 }
 
 /** Admin: suspend an account (the user cannot self-reactivate). */
-export async function adminSuspendAccount(userId: string, reason: string): Promise<void> {
-  const { error } = await supabase.rpc("admin_suspend_account", { p_user_id: userId, p_reason: reason });
-  if (error) throw error;
+export async function adminSuspendAccount(expectedActorId: string, userId: string, reason: string): Promise<void> {
+  await runAdminMutation(expectedActorId, async (actorId) => {
+    const { error } = await supabase.rpc("admin_suspend_account", {
+      p_expected_actor_id: actorId, p_user_id: userId, p_reason: reason,
+    });
+    if (error) throw mapActorBoundMutationError(error);
+  });
 }
 
 /** Admin: resolve (or dismiss) a report. */
 export async function adminResolveReport(
+  expectedActorId: string,
   reportId: string,
   status: "resolved" | "dismissed",
   reason: string,
 ): Promise<void> {
-  const { error } = await supabase.rpc("admin_resolve_report", {
-    p_report_id: reportId,
-    p_status: status,
-    p_reason: reason,
+  await runAdminMutation(expectedActorId, async (actorId) => {
+    const { error } = await supabase.rpc("admin_resolve_report", {
+      p_expected_actor_id: actorId, p_report_id: reportId, p_status: status, p_reason: reason,
+    });
+    if (error) throw mapActorBoundMutationError(error);
   });
-  if (error) throw error;
 }
 
 /** Admin: list reports (RLS returns rows only to admins/the reporter). */
-export async function listReports(status?: ReportRow["status"]): Promise<ReportRow[]> {
-  let query = supabase.from("reports").select("*").order("created_at", { ascending: false });
-  if (status) query = query.eq("status", status);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data ?? []) as ReportRow[];
+export async function listReports(expectedActorId: string, status?: ReportRow["status"]): Promise<ReportRow[]> {
+  return runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to review reports.",
+    async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id;
+    },
+    async () => {
+      let query = supabase.from("reports").select("*").order("created_at", { ascending: false });
+      if (status) query = query.eq("status", status);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as ReportRow[];
+    },
+  );
 }
 
 /** Admin: the moderation action log (RLS is admin-only). */
