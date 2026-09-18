@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-18  
 **Slice:** MOD-001  
-**State:** Author-side verified; draft-PR CI pending
+**State:** Source and draft-PR CI verified
 
 ## Delivered
 
@@ -20,7 +20,7 @@
 - Expo public config: pass
 - iOS and Android production exports: pass
 - `git diff --check`: pass
-- PostgreSQL suite: pending draft-PR CI because local `psql` is unavailable
+- PostgreSQL suite: draft-PR CI run `143` (`35316271535`) passed; local `psql` is unavailable
 
 ## Release boundary
 

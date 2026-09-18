@@ -6,9 +6,33 @@
 > **Next Actions**. Product authority remains the Master Build Spec. Governance authority remains
 > `docs/aios/`.
 
-_Last updated: 2026-09-15._
+_Last updated: 2026-09-18._
 
-## Current milestone
+## Latest source-and-CI candidate
+
+The draft branch is now at an estimated **70% production-ready MVP candidate**. This candidate has
+author-side verification and green CI, but it has not yet received the independent exact-tree
+review/QA required to replace the separately recorded certified milestone below.
+
+- Remote candidate commit: `ccf38d54fc8f53eeeda9133d5f3ab224098a1163`
+- Local equivalent commit: `6278a9b`
+- Exact tree: `11f6e66e76bec41adf95e7be31c27d5fe7d7c791`
+- Draft PR: `#22`
+- CI run `143` (`35316271535`): **green**
+- Independent certification: remains **65%** pending a new exact-tree review/QA pass
+- State: **draft, unmerged, undeployed**
+
+Since the last certified checkpoint, the candidate completed end-to-end user/Shared-Wall reporting,
+actor-bound Alert receipts, actor-bound account recovery, and an admin moderation queue. Migration
+`0030` binds privileged moderation to the expected administrator, rejects missing/administrator
+targets, makes retries receipt-safe, and audits only real transitions. The app now supports dismiss,
+resolve-only, remove-Mark-and-resolve, and suspend-user-and-resolve decisions with account-switch
+fencing. All 60 client/contract tests, TypeScript, lint, Expo config, platform exports, and the full
+PostgreSQL security suite pass.
+
+No hosted migration, production-data change, merge, deployment, or public release occurred.
+
+## Last independently certified milestone
 
 The project is at a conservative **63% production-ready MVP milestone**. This is a weighted
 source-and-CI readiness estimate, not a count of files/screens and not a release-readiness claim.

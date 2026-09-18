@@ -3,6 +3,25 @@
 > Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
 > authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
+## Latest source-and-CI candidate — 2026-09-18
+
+Draft PR `#22` is at an estimated **70% production-ready MVP candidate** after completing reporting,
+Alert receipt reliability, actor-bound account recovery, and the admin moderation queue.
+
+| Evidence | Exact value |
+|---|---|
+| Remote candidate commit | `ccf38d54fc8f53eeeda9133d5f3ab224098a1163` |
+| Local equivalent commit | `6278a9b` |
+| Exact tree | `11f6e66e76bec41adf95e7be31c27d5fe7d7c791` |
+| CI | Run `143` (`35316271535`) — green |
+| Client/contract tests | 60/60 pass |
+| Independent certification | Remains 65% pending a new exact-tree review/QA pass |
+| Delivery state | Draft, unmerged, undeployed |
+
+No hosted migration, production-data change, merge, deployment, or public release occurred. The next
+high-impact candidate slice is remaining Wall/Mark empty/loading/offline polish and follower/friend
+surface completion, followed by independent exact-tree review and QA.
+
 ## Certified draft checkpoint — 2026-09-15
 
 The authorized draft integration branch `codex/integrated-mvp-resume` is now at a conservative
