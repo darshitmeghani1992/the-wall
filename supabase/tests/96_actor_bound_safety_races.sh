@@ -165,14 +165,14 @@ await_success "$p1" deactivate_remove_a
 await_error "$p2" deactivate_remove_b "ACTOR_NOT_ACTIVE"
 verify_lifecycle '96100000-0000-4000-8000-000000000012' 'active' 'deactivated'
 
-# Removal wins before an admin self-suspension.
+# Removal wins before a separate administrator suspends the owner.
 setup_lifecycle '96100000-0000-4000-8000-000000000021'
-psql_test -c "update public.profiles set is_admin=true where id='$OWNER';"
+psql_test -c "update public.profiles set is_admin=true where id='$AUTHOR';"
 run_session remove_suspend_a "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000021','safety'); select pg_sleep(0.8);"
 p1=$LAST_PID; sleep 0.1
-run_session remove_suspend_b "$OWNER" \
-  "select public.admin_suspend_account('$OWNER','race');"
+run_session remove_suspend_b "$AUTHOR" \
+  "select public.admin_suspend_account('$AUTHOR','$OWNER','race');"
 p2=$LAST_PID
 await_success "$p1" remove_suspend_a
 await_success "$p2" remove_suspend_b
@@ -181,9 +181,9 @@ verify_lifecycle '96100000-0000-4000-8000-000000000021' 'removed' 'suspended'
 # Admin suspension wins first on the same Shared-Wall shape: the latched profile
 # wait proves this is the trigger path, not a pre-trigger RLS zero-row denial.
 setup_lifecycle '96100000-0000-4000-8000-000000000022'
-psql_test -c "update public.profiles set is_admin=true where id='$OWNER';"
-run_session suspend_remove_a "$OWNER" \
-  "select public.admin_suspend_account('$OWNER','race'); select pg_sleep(4);"
+psql_test -c "update public.profiles set is_admin=true where id='$AUTHOR';"
+run_session suspend_remove_a "$AUTHOR" \
+  "select public.admin_suspend_account('$AUTHOR','$OWNER','race'); select pg_sleep(4);"
 p1=$LAST_PID; sleep 0.1
 run_session suspend_remove_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000022','safety');"
@@ -197,6 +197,7 @@ psql_test <<SQL
 delete from public.marks where id::text like '96100000-0000-4000-8000-%';
 delete from public.moderation_actions where target_user_id='$OWNER' and reason='race';
 update public.profiles set account_status='active',deactivated_at=null,is_admin=false where id='$OWNER';
+update public.profiles set is_admin=false where id='$AUTHOR';
 SQL
 
 echo "96 (6 physical actor-bound races) : PASS  (quota + deactivate + suspend; both orders)"
