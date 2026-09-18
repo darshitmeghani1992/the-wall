@@ -192,3 +192,25 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
 - **Reversibility:** Client-first rollback: remove RPC callers, revoke its authenticated grant,
   then drop the exact function. Migration 0028 writes no user data. **Founder Gate?** Approved
   for source implementation and testing only; hosted migration remains unapproved.
+
+## D-13 · 2026-09-18 · Permanent account deletion requires ownership resolution and deletes authored content
+- **Decision:** Permanent deletion is distinct from ordinary deactivation. Scheduling requires
+  strong `DELETE` confirmation and zero owned Shared Walls; each Shared Wall must first be
+  transferred to an active accepted member or explicitly deleted by its owner. The server starts
+  an immutable 30-day recovery window and deactivates the account atomically. Reactivation during
+  that window cancels deletion atomically. Final service-only purge deletes all Marks authored by
+  the user on every Wall before deleting the auth identity; the Personal Wall and remaining
+  identity-owned/social data then follow existing cascades. Protected media uses its durable
+  deletion outbox, and public avatars must be removed through the Storage API before service-only
+  purge preparation and Auth Admin identity deletion.
+- **Reason:** Silent Shared-Wall cascade deletion would destroy other members' group history;
+  silent transfer would grant control without consent. Conversely, leaving authored Marks with a
+  null author would contradict the Founder's explicit full-deletion decision. A separate lifecycle
+  prevents reversible deactivation from being confused with permanent deletion.
+- **Alternatives:** Keep authored Marks as `Deleted user` (superseded by the 2026-09-18 Founder
+  decision); auto-transfer Shared Walls (rejected — consent/selection ambiguity); delete owned
+  Shared Walls automatically (rejected — disproportionate group-data loss).
+- **Reversibility:** Scheduling is reversible for 30 days; final purge is intentionally
+  irreversible. Migration 0031 is additive before hosted application. **Founder Gate?** Product
+  behavior and draft source implementation approved; hosted migration, scheduler, merge, and
+  deployment remain unapproved and require independent Two-Key review plus QA.

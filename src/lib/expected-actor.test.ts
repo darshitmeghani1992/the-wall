@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { mapActorBoundMutationError, requireExpectedActor } from "./expected-actor.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { executeAccountDeactivation, executeAccountReactivation, executeMarkRemoval, executeProfileUpdate } from "./actor-bound-service-contract.ts";
+import { executeAccountDeactivation, executeAccountDeletionRequest, executeAccountReactivation, executeMarkRemoval, executeProfileUpdate } from "./actor-bound-service-contract.ts";
 
 assert.equal(
   requireExpectedActor("user-a", "user-a", "signed out"),
@@ -37,6 +37,12 @@ assert.equal(
   spoofedMessage,
   "the session-changed copy requires both the exact server state and message",
 );
+const expiredDeletion = mapActorBoundMutationError({
+  message: "ACCOUNT_DELETION_EXPIRED",
+  code: "42501",
+});
+assert.ok(expiredDeletion instanceof Error);
+assert.match(expiredDeletion.message, /recovery window has ended/i);
 
 async function verifyDelayedAccountSwitch(): Promise<void> {
   const expectedActorId = "user-a";
@@ -127,6 +133,39 @@ async function verifyAccountActorPropagation(): Promise<void> {
   assert.deepEqual(calls, ["user-a"], "the preflight-confirmed actor reaches the deactivation RPC port");
 }
 
+async function verifyDelayedAccountDeletion(): Promise<void> {
+  let currentActorId = "user-a";
+  let releaseActor!: () => void;
+  const delayedActor = new Promise<void>((resolve) => { releaseActor = resolve; });
+  const calls: { actorId: string; confirmation: string }[] = [];
+  const operation = executeAccountDeletionRequest("user-a", "DELETE", {
+    getActorId: async () => {
+      await delayedActor;
+      return currentActorId;
+    },
+    requestDeletion: async (actorId, confirmation) => {
+      calls.push({ actorId, confirmation });
+      return "scheduled";
+    },
+  });
+  currentActorId = "user-b";
+  releaseActor();
+  await assert.rejects(operation, /session changed/i, "deletion rejects a delayed account switch");
+  assert.deepEqual(calls, [], "deletion never reaches its RPC after the account switches");
+}
+
+async function verifyDeletionActorPropagation(): Promise<void> {
+  const calls: { actorId: string; confirmation: string }[] = [];
+  await executeAccountDeletionRequest("user-a", "DELETE", {
+    getActorId: async () => "user-a",
+    requestDeletion: async (actorId, confirmation) => {
+      calls.push({ actorId, confirmation });
+      return "scheduled";
+    },
+  });
+  assert.deepEqual(calls, [{ actorId: "user-a", confirmation: "DELETE" }]);
+}
+
 async function verifyDelayedAccountReactivation(): Promise<void> {
   const expectedActorId = "user-a";
   let currentActorId = expectedActorId;
@@ -211,6 +250,9 @@ assert.doesNotMatch(
 );
 assert.match(accountSource, /throw mapActorBoundMutationError\(error\)/);
 assert.match(accountSource, /rpc\("reactivate_account", \{ p_expected_actor_id: actorId \}\)/);
+assert.match(accountSource, /rpc\("request_account_deletion", \{/);
+assert.match(accountSource, /p_expected_actor_id: actorId/);
+assert.match(accountSource, /p_confirmation: confirmedText/);
 assert.doesNotMatch(
   accountSource,
   /\.rpc\((["'])reactivate_account\1\s*\)/,
@@ -241,6 +283,8 @@ void Promise.all([
   verifyProfileActorPropagation(),
   verifyDelayedAccountDeactivation(),
   verifyAccountActorPropagation(),
+  verifyDelayedAccountDeletion(),
+  verifyDeletionActorPropagation(),
   verifyDelayedAccountReactivation(),
   verifyReactivationActorPropagation(),
   verifyDelayedSafetyRemoval(),

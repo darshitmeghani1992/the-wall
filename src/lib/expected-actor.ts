@@ -27,6 +27,16 @@ export function mapActorBoundMutationError(cause: unknown): unknown {
   ) {
     return new Error(ACTOR_CHANGED_MESSAGE);
   }
+  if (
+    cause
+    && typeof cause === "object"
+    && "code" in cause
+    && cause.code === "42501"
+    && "message" in cause
+    && cause.message === "ACCOUNT_DELETION_EXPIRED"
+  ) {
+    return new Error("The 30-day recovery window has ended. This account can no longer be restored.");
+  }
   return cause;
 }
 

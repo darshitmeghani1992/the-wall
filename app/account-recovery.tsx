@@ -4,7 +4,8 @@ import { Redirect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
-import { reactivateAccount } from "@/lib/account";
+import { getCurrentAccountDeletion, reactivateAccount } from "@/lib/account";
+import type { CurrentAccountDeletion } from "@/lib/account-deletion-contract";
 import { runAccountRecoveryFlow } from "@/lib/account-recovery-flow";
 import { useAuth } from "@/lib/auth";
 import { AccountRouteFence } from "@/lib/onboarding-contract";
@@ -18,6 +19,8 @@ export default function AccountRecovery() {
   currentUserId.current = userId;
   const fence = useRef(new AccountRouteFence());
   const [busy, setBusy] = useState(false);
+  const [deletion, setDeletion] = useState<CurrentAccountDeletion | null>(null);
+  const [deletionStatusUnavailable, setDeletionStatusUnavailable] = useState(false);
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -28,6 +31,19 @@ export default function AccountRecovery() {
   useEffect(() => {
     if (accountRoute && accountRoute !== "deactivated" && !inFlight.current) router.replace("/");
   }, [accountRoute, router]);
+
+  useEffect(() => {
+    let current = true;
+    setDeletion(null);
+    setDeletionStatusUnavailable(false);
+    if (!userId || accountRoute !== "deactivated") return () => { current = false; };
+    void getCurrentAccountDeletion()
+      .then((result) => { if (current && currentUserId.current === userId) setDeletion(result); })
+      .catch(() => {
+        if (current && currentUserId.current === userId) setDeletionStatusUnavailable(true);
+      });
+    return () => { current = false; };
+  }, [accountRoute, userId]);
 
   async function restore() {
     if (!userId || inFlight.current) return;
@@ -58,12 +74,27 @@ export default function AccountRecovery() {
   return (
     <Screen scroll={false} dockInset={false}>
       <View style={{ flex: 1, justifyContent: "center", gap: 12 }}>
-        <Text variant="label" color={colors.outline}>WELCOME BACK</Text>
-        <Text variant="display" style={{ fontSize: 32 }}>Your Wall is paused.</Text>
-        <Text variant="body" color={colors.onSurfaceVariant}>Restore your account to return to your Wall and connections.</Text>
+        <Text variant="label" color={colors.outline}>
+          {deletion?.status === "scheduled" ? "DELETION SCHEDULED" : "WELCOME BACK"}
+        </Text>
+        <Text variant="display" style={{ fontSize: 32 }}>
+          {deletion?.status === "scheduled" ? "Your account is scheduled for deletion." : "Your Wall is paused."}
+        </Text>
+        <Text variant="body" color={colors.onSurfaceVariant}>
+          {deletion?.status === "scheduled"
+            ? `Restore your account before ${new Date(deletion.purgeAfter).toLocaleDateString()} to cancel permanent deletion.`
+            : deletionStatusUnavailable
+              ? "Restore your account to return to your Wall and cancel any pending deletion."
+              : "Restore your account to return to your Wall and connections."}
+        </Text>
       </View>
       <View style={{ gap: 12, paddingBottom: 12 }}>
-        <Button label="Restore my account" variant="yellow" loading={busy} onPress={() => void restore()} />
+        <Button
+          label={deletion?.status === "scheduled" ? "Cancel deletion and restore" : "Restore my account"}
+          variant="yellow"
+          loading={busy}
+          onPress={() => void restore()}
+        />
         <Button label="Sign out" variant="ghost" disabled={busy} onPress={() => void signOut()} />
       </View>
     </Screen>

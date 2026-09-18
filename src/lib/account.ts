@@ -1,6 +1,16 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
-import { executeAccountDeactivation, executeAccountReactivation } from "./actor-bound-service-contract";
+import {
+  executeAccountDeactivation,
+  executeAccountDeletionRequest,
+  executeAccountReactivation,
+} from "./actor-bound-service-contract";
+import {
+  parseAccountDeletionRequest,
+  parseCurrentAccountDeletion,
+  type AccountDeletionRequestResult,
+  type CurrentAccountDeletion,
+} from "./account-deletion-contract";
 import { mapActorBoundMutationError } from "./expected-actor";
 import { isAccountRoute, runForExpectedSubject, type AccountRoute } from "./onboarding-contract";
 
@@ -34,7 +44,38 @@ export async function deactivateAccount(expectedActorId: string): Promise<void> 
   );
 }
 
-/** Reactivate the signed-in account (returning within the recovery window). */
+/** Schedule irreversible deletion after the server-owned 30-day recovery window. */
+export async function requestAccountDeletion(
+  expectedActorId: string,
+  confirmation: string,
+): Promise<AccountDeletionRequestResult> {
+  return executeAccountDeletionRequest(expectedActorId, confirmation, {
+    getActorId: async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id;
+    },
+    requestDeletion: async (actorId, confirmedText) => {
+      const { data, error } = await supabase.rpc("request_account_deletion", {
+        p_expected_actor_id: actorId,
+        p_confirmation: confirmedText,
+      });
+      if (error) throw mapActorBoundMutationError(error);
+      const result = parseAccountDeletionRequest(data);
+      if (result.status === "scheduled") track("Account Deletion Scheduled");
+      return result;
+    },
+  });
+}
+
+/** Read only the signed-in actor's pending deletion schedule. */
+export async function getCurrentAccountDeletion(): Promise<CurrentAccountDeletion> {
+  const { data, error } = await supabase.rpc("get_my_account_deletion");
+  if (error) throw error;
+  return parseCurrentAccountDeletion(data);
+}
+
+/** Reactivate the signed-in account and atomically cancel pending deletion. */
 export async function reactivateAccount(expectedUserId: string): Promise<void> {
   await executeAccountReactivation(
     expectedUserId,

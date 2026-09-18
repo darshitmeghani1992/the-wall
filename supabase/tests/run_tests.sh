@@ -155,6 +155,10 @@ echo "── load: 0030_actor_bound_admin_moderation.sql"
 psql_test -f "$MIG/0030_actor_bound_admin_moderation.sql" >/dev/null
 echo "── replay: 0030_actor_bound_admin_moderation.sql (idempotence)"
 psql_test -f "$MIG/0030_actor_bound_admin_moderation.sql" >/dev/null
+echo "── load: 0031_recoverable_account_deletion.sql"
+psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
+echo "── replay: 0031_recoverable_account_deletion.sql (idempotence)"
+psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
@@ -164,7 +168,8 @@ for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocki
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             58_activation_foundation \
             60_secret_marks 61_secret_reveal 71_shared_wall_lifecycle 80_notifications 85_moderation 90_profile_links \
-            95_account_lifecycle 96_actor_bound_safety_mutations 97_actor_bound_account_reactivation 98_actor_bound_admin_moderation; do
+            95_account_lifecycle 96_actor_bound_safety_mutations 97_actor_bound_account_reactivation 98_actor_bound_admin_moderation \
+            99_recoverable_account_deletion; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done

@@ -25,6 +25,7 @@ export default function RootLayout() {
           <Stack.Screen name="account-unavailable" />
           <Stack.Screen name="deferred-destination-unavailable" />
           <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+          <Stack.Screen name="delete-account" />
           <Stack.Screen name="personal-wall-settings" />
           <Stack.Screen name="approved-writers" />
           <Stack.Screen name="blocked-users" />

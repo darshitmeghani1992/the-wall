@@ -106,6 +106,18 @@ export default function SettingsScreen() {
         >
           <Text variant="label" color={colors.error}>DEACTIVATE ACCOUNT</Text>
         </Pressable>
+        <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 20, marginBottom: 12 }}>
+          Permanent deletion includes your Personal Wall and every Mark you authored. A 30-day recovery window applies.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Delete account"
+          disabled={busy || !actorId || profile?.account_status !== "active"}
+          onPress={() => router.push("/delete-account")}
+          style={{ minHeight: 48, justifyContent: "center", opacity: busy ? 0.5 : 1 }}
+        >
+          <Text variant="label" color={colors.error}>DELETE ACCOUNT</Text>
+        </Pressable>
       </View>
     </Screen>
   );

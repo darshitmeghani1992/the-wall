@@ -38,6 +38,23 @@ export async function executeAccountDeactivation(
   );
 }
 
+export type AccountDeletionPort<Result> = ActorProvider & {
+  requestDeletion: (expectedActorId: string, confirmation: string) => Promise<Result>;
+};
+
+export async function executeAccountDeletionRequest<Result>(
+  expectedActorId: string,
+  confirmation: string,
+  port: AccountDeletionPort<Result>,
+): Promise<Result> {
+  return runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to delete your account.",
+    port.getActorId,
+    async (actorId) => port.requestDeletion(actorId, confirmation),
+  );
+}
+
 export type AccountReactivationPort = ActorProvider & {
   reactivate: (expectedActorId: string) => Promise<void>;
 };

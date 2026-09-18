@@ -1,5 +1,5 @@
 import { blockUser, unblockUser } from "./blocks";
-import { deactivateAccount, reactivateAccount } from "./account";
+import { deactivateAccount, reactivateAccount, requestAccountDeletion } from "./account";
 import { followUser, unfollowUser } from "./follows";
 import { removeMark } from "./marks";
 import { adminRemoveMark, adminResolveReport, adminSuspendAccount, listReports } from "./moderation";
@@ -17,6 +17,7 @@ export type UnblockRequiresExpectedActor = Assert<Equal<Parameters<typeof unbloc
 export type ReportRequiresExpectedActor = Assert<Equal<Parameters<typeof createReport>["length"], 2>>;
 export type DeactivationRequiresExpectedActor = Assert<Equal<Parameters<typeof deactivateAccount>["length"], 1>>;
 export type ReactivationRequiresExpectedActor = Assert<Equal<Parameters<typeof reactivateAccount>["length"], 1>>;
+export type DeletionRequiresExpectedActorAndConfirmation = Assert<Equal<Parameters<typeof requestAccountDeletion>["length"], 2>>;
 export type MarkRemovalRequiresExpectedActor = Assert<Equal<Parameters<typeof removeMark>["length"], 3>>;
 export type AdminRemoveRequiresExpectedActor = Assert<Equal<Parameters<typeof adminRemoveMark>["length"], 3>>;
 export type AdminSuspendRequiresExpectedActor = Assert<Equal<Parameters<typeof adminSuspendAccount>["length"], 3>>;
