@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Pressable, View, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
@@ -66,6 +67,7 @@ export function MarkCard({
   style,
 }: Props) {
   const rotation = useMemo(() => tiltFor(id), [id]);
+  const reducedMotion = useReducedMotion();
   const pressed = useSharedValue(0);
 
   const progress = useEnterProgress(enter, enterIndex);
@@ -78,7 +80,7 @@ export function MarkCard({
   const animatedStyle = useAnimatedStyle(() => {
     const p = progress.value;
     // p < 1 → still falling (above rest); p > 1 → overshoot (below rest).
-    const enterY = animated ? (1 - p) * -distance : 0;
+    const enterY = animated && !reducedMotion ? (1 - p) * -distance : 0;
     const enterOpacity = animated ? Math.min(1, Math.max(0, p * 1.5)) : 1;
     const shadowScale = animated ? Math.min(1, Math.max(0, p)) : 1;
     const scale = 1 + pulse.value * (motionTokens.highlight.scale - 1);
@@ -87,7 +89,7 @@ export function MarkCard({
       opacity: enterOpacity,
       transform: [
         { rotate: `${rotation}deg` },
-        { translateY: enterY + pressed.value * motionTokens.press.translate },
+        { translateY: enterY + (reducedMotion ? 0 : pressed.value * motionTokens.press.translate) },
         { scale },
       ],
       shadowOpacity: shadow.mark.shadowOpacity * (1 - pressed.value) * shadowScale,

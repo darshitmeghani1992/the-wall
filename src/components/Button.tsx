@@ -1,6 +1,7 @@
 import { Pressable, ActivityIndicator, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
@@ -29,16 +30,20 @@ export function Button({
   disabled = false,
   loading = false,
 }: Props) {
+  const reducedMotion = useReducedMotion();
   const pressed = useSharedValue(0);
 
   const bg =
     variant === "primary" ? colors.ink : variant === "yellow" ? markColors.brandYellow : "transparent";
   const fg = variant === "primary" ? colors.white : colors.ink;
 
-  const animated = useAnimatedStyle(() => ({
-    transform: [{ translateY: pressed.value * 2 }, { rotate: `${pressed.value * -1.5}deg` }],
-    shadowOpacity: (variant === "ghost" ? 0 : 0.16) * (1 - pressed.value),
-  }));
+  const animated = useAnimatedStyle(() => {
+    const progress = reducedMotion ? 0 : pressed.value;
+    return {
+      transform: [{ translateY: progress * 2 }, { rotate: `${progress * -1.5}deg` }],
+      shadowOpacity: (variant === "ghost" ? 0 : 0.16) * (1 - progress),
+    };
+  });
 
   return (
     <Pressable

@@ -21,6 +21,9 @@ minor version per shipped slice; note schema/doc changes.
 - Cleared the remaining lint backlog across auth callback, protected-media edge
   code/tests, worker types, and the static design reference; lint now has zero
   errors and zero warnings.
+- Corrected reduced-motion behavior so Mark entrances and tactile Button/Mark
+  presses no longer translate or rotate when the operating system requests
+  reduced motion; calm entrance opacity remains.
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).
