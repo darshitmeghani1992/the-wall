@@ -5,22 +5,23 @@
 
 ## Latest source-and-CI candidate — 2026-09-18
 
-Draft PR `#22` is at an estimated **70% production-ready MVP candidate** after completing reporting,
-Alert receipt reliability, actor-bound account recovery, and the admin moderation queue.
+Draft PR `#22` is at an estimated **78% source-and-CI MVP candidate** after completing Wall/social
+failure isolation, target-first picker recovery, public-handle fencing, and actor-bound profile and
+avatar persistence. This is not a production-readiness claim.
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate commit | `ccf38d54fc8f53eeeda9133d5f3ab224098a1163` |
-| Local equivalent commit | `6278a9b` |
-| Exact tree | `11f6e66e76bec41adf95e7be31c27d5fe7d7c791` |
-| CI | Run `143` (`35316271535`) — green |
-| Client/contract tests | 60/60 pass |
+| Remote candidate commit | `e5648248efde94a2ba9d4a59daa98d491bcb649e` |
+| Local equivalent commit | `63ce2a0` |
+| Exact tree | `07400dd7a392b38b43765ad990af36e5ca24435e` |
+| CI | Run `149` (`35319106280`) — green |
+| Local verification | TypeScript; lint 0/0; all dependency-free contracts; Expo config; iOS/Android exports; 31 media-worker tests |
 | Independent certification | Remains 65% pending a new exact-tree review/QA pass |
 | Delivery state | Draft, unmerged, undeployed |
 
 No hosted migration, production-data change, merge, deployment, or public release occurred. The next
-high-impact candidate slice is remaining Wall/Mark empty/loading/offline polish and follower/friend
-surface completion, followed by independent exact-tree review and QA.
+high-impact source-safe slice is the final account-purge contract/runbook, followed by universal-link
+and store-fallback completion. Hosted execution and physical-device validation remain later gates.
 
 ## Certified draft checkpoint — 2026-09-15
 

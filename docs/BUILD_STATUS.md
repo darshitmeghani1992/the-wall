@@ -10,25 +10,25 @@ _Last updated: 2026-09-18._
 
 ## Latest source-and-CI candidate
 
-The draft branch is now at an estimated **70% production-ready MVP candidate**. This candidate has
+The draft branch is now at an estimated **78% source-and-CI MVP candidate**. This candidate has
 author-side verification and green CI, but it has not yet received the independent exact-tree
 review/QA required to replace the separately recorded certified milestone below.
 
-- Remote candidate commit: `ccf38d54fc8f53eeeda9133d5f3ab224098a1163`
-- Local equivalent commit: `6278a9b`
-- Exact tree: `11f6e66e76bec41adf95e7be31c27d5fe7d7c791`
+- Remote candidate commit: `e5648248efde94a2ba9d4a59daa98d491bcb649e`
+- Local equivalent commit: `63ce2a0`
+- Exact tree: `07400dd7a392b38b43765ad990af36e5ca24435e`
 - Draft PR: `#22`
-- CI run `143` (`35316271535`): **green**
+- CI run `149` (`35319106280`): **green**
 - Independent certification: remains **65%** pending a new exact-tree review/QA pass
 - State: **draft, unmerged, undeployed**
 
-Since the last certified checkpoint, the candidate completed end-to-end user/Shared-Wall reporting,
-actor-bound Alert receipts, actor-bound account recovery, and an admin moderation queue. Migration
-`0030` binds privileged moderation to the expected administrator, rejects missing/administrator
-targets, makes retries receipt-safe, and audits only real transitions. The app now supports dismiss,
-resolve-only, remove-Mark-and-resolve, and suspend-user-and-resolve decisions with account-switch
-fencing. All 60 client/contract tests, TypeScript, lint, Expo config, platform exports, and the full
-PostgreSQL security suite pass.
+Since the prior candidate, primary Wall content now survives optional social/owner-enrichment
+failures; follower lists and counts have account/route fencing and retries; failed counts are not
+misreported as zero; and the contextual people picker opens the exact selected Wall in the Mark
+composer. Public-handle resolution, profile editing, profile/avatar persistence, and onboarding
+avatar selection are bound to the initiating account and suppress stale continuations. TypeScript,
+all dependency-free client/contract files, Expo config, iOS/Android exports, all 31 isolated media
+worker tests, warning-free lint, and the full PostgreSQL security suite pass.
 
 No hosted migration, production-data change, merge, deployment, or public release occurred.
 
@@ -154,8 +154,8 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Remaining 37%
 
-- Complete and polish follower/friend surfaces, remaining Status/Wall-switcher states, and any
-  incomplete Wall/Mark empty/loading/offline paths.
+- Complete the remaining visual/device-only follower, Status, Wall-switcher, and Wall/Mark polish
+  after physical-device evidence is available.
 - Complete Alerts beyond the Shared-Wall journeys, user/Wall reporting,
   moderation operations UI, and the full recoverable account-deletion experience.
 - Finish universal links, store fallback, sharing/install restoration, and missing/deleted
@@ -181,8 +181,9 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Next Actions
 
-1. Complete remaining Alerts plus reporting, moderation, and safety/account-lifecycle surfaces.
-2. Complete universal/deferred links and store fallback across all supported destinations.
+1. Finish the source contract for final account purge and its operational runbook without scheduling
+   or applying it to hosted infrastructure.
+2. Complete universal HTTPS links, store fallback, and install-intent restoration.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
 4. Run physical-device, accessibility, performance, lifecycle, and adversarial QA.
 5. Prepare internal iOS/Android builds and the plain-language Founder READY/NOT READY report.
