@@ -16,6 +16,7 @@ export function PersonRow({
   onAction,
   onSecondaryAction,
   onPress,
+  accessibilityLabel,
 }: {
   profile: PersonRowIdentity;
   detail?: string;
@@ -26,6 +27,7 @@ export function PersonRow({
   onAction?: () => void;
   onSecondaryAction?: () => void;
   onPress?: () => void;
+  accessibilityLabel?: string;
 }) {
   const identity = (
     <>
@@ -62,7 +64,7 @@ export function PersonRow({
       {onPress ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Open @${profile.handle}'s Wall`}
+          accessibilityLabel={accessibilityLabel ?? `Open @${profile.handle}'s Wall`}
           onPress={onPress}
           style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12, minHeight: 50 }}
         >

@@ -10,6 +10,8 @@ minor version per shipped slice; note schema/doc changes.
   profile enrichment fails; unavailable counts are no longer shown as zero.
 - Added a dependency-free optional-result contract test covering primary-content
   isolation and exact-zero preservation.
+- Fixed the contextual people picker so choosing a friend opens the Mark composer
+  for that exact Wall, with account-scoped stale-response protection and retry UI.
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).
