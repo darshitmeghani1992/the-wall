@@ -5,23 +5,24 @@
 
 ## Latest source-and-CI candidate — 2026-09-18
 
-Draft PR `#22` is at an estimated **78% source-and-CI MVP candidate** after completing Wall/social
-failure isolation, target-first picker recovery, public-handle fencing, and actor-bound profile and
-avatar persistence. This is not a production-readiness claim.
+Draft PR `#22` is at an estimated **80% source-and-CI MVP candidate** after completing Wall/social
+failure isolation, target-first picker recovery, public-handle fencing, actor-bound profile/avatar
+persistence, and recoverable account deletion. This is not a production-readiness claim.
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate commit | `e5648248efde94a2ba9d4a59daa98d491bcb649e` |
-| Local equivalent commit | `63ce2a0` |
-| Exact tree | `07400dd7a392b38b43765ad990af36e5ca24435e` |
-| CI | Run `149` (`35319106280`) — green |
-| Local verification | TypeScript; lint 0/0; all dependency-free contracts; Expo config; iOS/Android exports; 31 media-worker tests |
+| Remote candidate commit | `fb6de45db950ca54d5410da00e4b2e80037bf5c2` |
+| Local equivalent commit | `b846a85` |
+| Exact tree | `02b6fc6f26353fb06e1e6860a92801192d63a1a0` |
+| CI | Run `152` (`35328074331`) — green |
+| Local verification | TypeScript; lint 0/0; 65 dependency-free contracts; Expo config; iOS/Android exports; 31 media-worker tests |
 | Independent certification | Remains 65% pending a new exact-tree review/QA pass |
 | Delivery state | Draft, unmerged, undeployed |
 
-No hosted migration, production-data change, merge, deployment, or public release occurred. The next
-high-impact source-safe slice is the final account-purge contract/runbook, followed by universal-link
-and store-fallback completion. Hosted execution and physical-device validation remain later gates.
+No hosted migration, production-data change, merge, deployment, or public release occurred. The
+recoverable-deletion contract/runbook is complete and CI-verified. The next high-impact source-safe
+slice is universal-link and store-fallback completion, which requires the public domain selection.
+Hosted execution and physical-device validation remain later gates.
 
 ## Certified draft checkpoint — 2026-09-15
 

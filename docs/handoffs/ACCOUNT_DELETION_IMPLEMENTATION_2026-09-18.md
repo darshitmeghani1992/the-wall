@@ -21,8 +21,9 @@ Draft implementation is present on PR #22. Nothing has been applied to hosted Su
 - **Verified:** ESLint passes locally with zero errors and zero warnings.
 - **Verified:** all 65 dependency-free client/contract tests pass locally.
 - **Unverified locally:** PostgreSQL suite; this environment has no `psql` binary.
-- **Pending:** PR CI PostgreSQL execution, independent Reviewer, independent QA, hosted staging, and physical-device behavior.
+- **Verified:** draft PR CI run `152` (`35328074331`) passed migration load/replay, test `99`, type-check, and lint on exact tree `02b6fc6f...`.
+- **Pending:** independent Reviewer, independent QA, hosted staging, and physical-device behavior.
 
 ## Handoff
 
-Next: push the exact draft tree, require green CI for migration load/replay and test `99`, then route the unchanged commit to independent Reviewer and QA. Do not apply migration `0031` or configure the hosted worker before those gates and a new Founder authorization.
+Next: route exact tree `02b6fc6f...` to independent Reviewer and QA. Do not apply migration `0031` or configure the hosted worker before those gates and a new Founder authorization.
