@@ -12,6 +12,8 @@ minor version per shipped slice; note schema/doc changes.
   isolation and exact-zero preservation.
 - Fixed the contextual people picker so choosing a friend opens the Mark composer
   for that exact Wall, with account-scoped stale-response protection and retry UI.
+- Bound public `@handle` resolution and deferred-link claims to the focused account
+  and exact handle so delayed lookups cannot redirect a newer session or route.
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).

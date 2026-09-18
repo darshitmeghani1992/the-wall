@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
@@ -14,6 +14,8 @@ import {
 } from "@/lib/deferred-destination";
 import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
 import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
+import { TargetRouteFence } from "@/lib/relationship-ui";
+import { SessionFocusFence } from "@/lib/session-generation";
 import { colors, markColors } from "@/theme";
 
 function Spinner() {
@@ -32,12 +34,29 @@ export default function HandleLink() {
   const [retryable, setRetryable] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<ClaimedAttempt | null>(null);
-  const claimedReference = useRef<string | null>(null);
+  const claimedKey = useRef<string | null>(null);
+  const sessionFence = useRef(new SessionFocusFence());
+  const handleFence = useRef(new TargetRouteFence());
+  const currentUserId = useRef<string | null>(session?.user.id ?? null);
+  const currentHandle = useRef<string | null>(clean || null);
+  currentUserId.current = session?.user.id ?? null;
+  currentHandle.current = clean || null;
+
+  useFocusEffect(useCallback(() => {
+    const subject = session?.user.id ?? null;
+    sessionFence.current.focus(subject);
+    handleFence.current.focus(clean || null);
+    return () => {
+      sessionFence.current.blur();
+      handleFence.current.blur();
+    };
+  }, [clean, session?.user.id]));
 
   useEffect(() => {
     const subject = session?.user.id;
-    if (!reference || !subject || accountRoute !== "ready" || claimedReference.current === reference) return;
-    claimedReference.current = reference;
+    const key = reference && subject ? `${subject}:${clean}:${reference}` : null;
+    if (!reference || !subject || accountRoute !== "ready" || claimedKey.current === key) return;
+    claimedKey.current = key;
     setTarget(null);
     setNotFound(false);
     setRetryable(false);
@@ -51,7 +70,9 @@ export default function HandleLink() {
 
   const resolve = useCallback(async (capturedAttempt: ClaimedAttempt | null) => {
     const subject = session?.user.id;
-    if (!subject || accountRoute !== "ready") return;
+    const subjectToken = sessionFence.current.begin(subject ?? null);
+    const handleToken = handleFence.current.capture(clean);
+    if (!subject || !subjectToken || !handleToken || accountRoute !== "ready") return;
     setRetryable(false);
     setNotFound(false);
     const resolution = await resolveDeferredDestination(
@@ -59,6 +80,8 @@ export default function HandleLink() {
       subject,
       { profileByHandle: getProfileByHandle },
     );
+    if (!sessionFence.current.isCurrent(subjectToken, currentUserId.current)
+      || !handleFence.current.isCurrent(handleToken, currentHandle.current)) return;
     if (resolution.status === "terminal_unavailable") {
       if (capturedAttempt?.token) {
         const unavailable = transferDeferredAttemptToUnavailable(capturedAttempt.token);
