@@ -14,7 +14,7 @@ import {
   updatePersonalWallSetup,
   updateProfile,
 } from "@/lib/profiles";
-import { uploadImage } from "@/lib/upload";
+import { uploadProfileImage } from "@/lib/upload";
 import { clearOnboardingDraft, loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding";
 import {
   AccountRouteFence,
@@ -115,8 +115,12 @@ export default function ProfileSetup() {
     if (!draftReady || !userId) return;
     const timeout = setTimeout(() => {
       void saveOnboardingDraft(userId, draft).then(
-        () => setDraftWarning(null),
-        () => setDraftWarning("This step couldn't be saved on this device yet."),
+        () => { if (currentUserId.current === userId) setDraftWarning(null); },
+        () => {
+          if (currentUserId.current === userId) {
+            setDraftWarning("This step couldn't be saved on this device yet.");
+          }
+        },
       );
     }, 150);
     return () => clearTimeout(timeout);
@@ -128,7 +132,8 @@ export default function ProfileSetup() {
   }
 
   async function pickAvatar() {
-    if (submissionInFlight.current) return;
+    if (!userId || submissionInFlight.current) return;
+    const token = lifecycleFence.current.begin(userId);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -136,7 +141,7 @@ export default function ProfileSetup() {
         aspect: [1, 1],
         quality: 0.8,
       });
-      if (result.canceled) return;
+      if (!lifecycleFence.current.isCurrent(token, currentUserId.current) || result.canceled) return;
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) {
         Alert.alert("That photo is too big", "Please pick an image under 6 MB.");
@@ -144,7 +149,9 @@ export default function ProfileSetup() {
       }
       patchDraft({ avatarUri: asset.uri });
     } catch {
-      Alert.alert("Couldn't open your photos", "Check photo access and try again.");
+      if (lifecycleFence.current.isCurrent(token, currentUserId.current)) {
+        Alert.alert("Couldn't open your photos", "Check photo access and try again.");
+      }
     }
   }
 
@@ -171,7 +178,7 @@ export default function ProfileSetup() {
     setBusy(true);
     try {
       let avatarUrl = existingProfile?.avatar_url ?? null;
-      if (submission.avatarUri) avatarUrl = await uploadImage(submission.avatarUri, `avatars/${userId}`);
+      if (submission.avatarUri) avatarUrl = await uploadProfileImage(userId, submission.avatarUri);
       if (!lifecycleFence.current.isCurrent(token, currentUserId.current)) return;
 
       // Ordered, retry-safe persistence: profile first, Wall settings second, completion last.

@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import type { Profile, Wall } from "./types";
 import { updatePersonalWallSettings } from "./personal-wall-settings";
+import { executeProfileUpdate } from "./actor-bound-service-contract";
 
 /** Fetch the signed-in user's profile row, or null if they haven't set one up. */
 export async function getProfile(userId: string): Promise<Profile | null> {
@@ -52,15 +53,24 @@ export type PersonalWallSetup = {
  * `profiles update self` RLS policy — no schema change. Returns the fresh row.
  * The caller is responsible for refreshing any cached auth profile afterwards.
  */
-export async function updateProfile(userId: string, patch: ProfileUpdate): Promise<Profile> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .update(patch)
-    .eq("id", userId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as Profile;
+export async function updateProfile(expectedActorId: string, patch: ProfileUpdate): Promise<Profile> {
+  return executeProfileUpdate(expectedActorId, patch, {
+    getActorId: async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id;
+    },
+    update: async (actorId, confirmedPatch) => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .update(confirmedPatch)
+        .eq("id", actorId)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as Profile;
+    },
+  });
 }
 
 export type NewProfile = {

@@ -6,6 +6,7 @@ import {
   isAllowedProtectedResumeUrl, parseProtectedResumeIndex, protectedResumeEntryMatches, removeProtectedResumeScope,
   type MediaReservation, type MediaUploadTransport, type MediaWriterDraft, type ProtectedResumeIndexEntry,
 } from "./mark-media-writer";
+import { runExpectedActorMutation } from "./expected-actor";
 
 /**
  * Per-kind byte caps (client-side abuse safety, Master Spec §108). Server-side
@@ -60,12 +61,21 @@ async function uploadPublicAttachment(
 }
 
 /** Public avatars remain governed by ADR-006. Mark media must never use this path. */
-export async function uploadImage(
+export async function uploadProfileImage(
+  expectedActorId: string,
   localUri: string,
-  prefix: string,
   contentType = "image/jpeg",
 ): Promise<string> {
-  return uploadPublicAttachment(localUri, prefix, contentType, "image");
+  return runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to upload a profile photo.",
+    async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id;
+    },
+    async (actorId) => uploadPublicAttachment(localUri, `avatars/${actorId}`, contentType, "image"),
+  );
 }
 
 const STANDARD_UPLOAD_MAX = 6 * 1024 * 1024;

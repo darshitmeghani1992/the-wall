@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { mapActorBoundMutationError, requireExpectedActor } from "./expected-actor.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { executeAccountDeactivation, executeAccountReactivation, executeMarkRemoval } from "./actor-bound-service-contract.ts";
+import { executeAccountDeactivation, executeAccountReactivation, executeMarkRemoval, executeProfileUpdate } from "./actor-bound-service-contract.ts";
 
 assert.equal(
   requireExpectedActor("user-a", "user-a", "signed out"),
@@ -56,6 +56,40 @@ async function verifyDelayedAccountSwitch(): Promise<void> {
     /session changed/i,
     "a delayed mutation is rejected after the account switches",
   );
+}
+
+async function verifyDelayedProfileUpdate(): Promise<void> {
+  let currentActorId = "user-a";
+  let releaseActor!: () => void;
+  const delayedActor = new Promise<void>((resolve) => { releaseActor = resolve; });
+  const updates: { actorId: string; name: string }[] = [];
+  const operation = executeProfileUpdate("user-a", { name: "Alice" }, {
+    getActorId: async () => {
+      await delayedActor;
+      return currentActorId;
+    },
+    update: async (actorId, patch) => {
+      updates.push({ actorId, name: patch.name });
+      return patch;
+    },
+  });
+
+  currentActorId = "user-b";
+  releaseActor();
+  await assert.rejects(operation, /session changed/i, "profile update rejects a delayed account switch");
+  assert.deepEqual(updates, [], "profile update never reaches storage after the account switches");
+}
+
+async function verifyProfileActorPropagation(): Promise<void> {
+  const updates: { actorId: string; bio: string }[] = [];
+  await executeProfileUpdate("user-a", { bio: "Hello" }, {
+    getActorId: async () => "user-a",
+    update: async (actorId, patch) => {
+      updates.push({ actorId, bio: patch.bio });
+      return patch;
+    },
+  });
+  assert.deepEqual(updates, [{ actorId: "user-a", bio: "Hello" }]);
 }
 
 async function verifyDelayedAccountDeactivation(): Promise<void> {
@@ -193,9 +227,18 @@ assert.match(removeMarkSource, /p_mark_id: targetMarkId/);
 assert.match(removeMarkSource, /p_reason: removalReason/);
 assert.match(removeMarkSource, /throw mapActorBoundMutationError\(error\)/);
 assert.doesNotMatch(removeMarkSource, /\.from\("marks"\)/, "removal cannot fall back to a direct table update");
+const profilesSource = readFileSync("src/lib/profiles.ts", "utf8");
+assert.match(profilesSource, /executeProfileUpdate\(expectedActorId, patch/);
+assert.match(profilesSource, /\.eq\("id", actorId\)/);
+const uploadSource = readFileSync("src/lib/upload.ts", "utf8");
+assert.match(uploadSource, /uploadProfileImage/);
+assert.match(uploadSource, /runExpectedActorMutation\(/);
+assert.match(uploadSource, /`avatars\/\$\{actorId\}`/);
 
 void Promise.all([
   verifyDelayedAccountSwitch(),
+  verifyDelayedProfileUpdate(),
+  verifyProfileActorPropagation(),
   verifyDelayedAccountDeactivation(),
   verifyAccountActorPropagation(),
   verifyDelayedAccountReactivation(),

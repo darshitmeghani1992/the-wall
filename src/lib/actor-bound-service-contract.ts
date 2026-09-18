@@ -5,6 +5,23 @@ type ActorProvider = {
   getActorId: () => Promise<string | null | undefined>;
 };
 
+export type ProfileUpdatePort<Patch, Result> = ActorProvider & {
+  update: (expectedActorId: string, patch: Patch) => Promise<Result>;
+};
+
+export async function executeProfileUpdate<Patch, Result>(
+  expectedActorId: string,
+  patch: Patch,
+  port: ProfileUpdatePort<Patch, Result>,
+): Promise<Result> {
+  return runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to update your profile.",
+    port.getActorId,
+    async (actorId) => port.update(actorId, patch),
+  );
+}
+
 export type AccountDeactivationPort = ActorProvider & {
   deactivate: (expectedActorId: string) => Promise<void>;
 };
