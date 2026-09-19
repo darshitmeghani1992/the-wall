@@ -130,10 +130,7 @@ begin
    where id = v_actor;
 
   return jsonb_build_object(
-    'status', case
-      when v_request.purge_after <= clock_timestamp() then 'expired'
-      else 'scheduled'
-    end,
+    'status', 'scheduled',
     'requested_at', v_requested_at,
     'purge_after', v_requested_at + interval '30 days'
   );
@@ -170,7 +167,10 @@ begin
   end if;
 
   return jsonb_build_object(
-    'status', 'scheduled',
+    'status', case
+      when v_request.purge_after <= clock_timestamp() then 'expired'
+      else 'scheduled'
+    end,
     'requested_at', v_request.requested_at,
     'purge_after', v_request.purge_after
   );
