@@ -67,7 +67,7 @@ if ! grep -Fxq 'f' "$TMP_DIR/recover_b.out"; then cat "$TMP_DIR/recover_b.out"; 
 # complete idempotently without deadlock or widening authorization.
 requested_at="$(psql_test -Atc "select requested_at from account_deletion_requests where user_id='$PURGE';")"
 run_session purge_a service_role "$PURGE" \
-  "select 1 from profiles where id='$PURGE' for update; select pg_sleep(0.8); select prepare_account_deletion_for_purge('$PURGE','$requested_at');"
+  "reset role; select 1 from profiles where id='$PURGE' for update; select pg_sleep(0.8); set local role service_role; select prepare_account_deletion_for_purge('$PURGE','$requested_at');"
 p1=$LAST_PID; sleep 0.1
 run_session purge_b service_role "$PURGE" \
   "select prepare_account_deletion_for_purge('$PURGE','$requested_at');"
