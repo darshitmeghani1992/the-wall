@@ -105,25 +105,32 @@ test("lost completion response never changes the consumed token to a failure out
 });
 
 test("one attempt deadline aborts a never-settling source fetch", async () => {
+  // AbortSignal.timeout intentionally uses an unref'ed timer. Keep the test
+  // process alive long enough to observe the production deadline firing.
+  const keepAlive = setTimeout(() => undefined, 1_000);
   let observedSignal: AbortSignal | undefined;
   const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
     observedSignal = init?.signal ?? undefined;
     if (!observedSignal) return;
     observedSignal.addEventListener("abort", () => reject(observedSignal?.reason), { once: true });
   })) as typeof fetch;
-  const started = Date.now();
-  await assert.rejects(processEnvelope("signed", dependencies({
-    nonceRedeemer: { redeem: async () => true },
-    fetchImpl,
-    testOnlyAttemptTimeoutMs: 25,
-  })), (error: unknown) => {
-    assert.ok(error instanceof Error);
-    assert.equal(error.message.includes("token=secret"), false);
-    return true;
-  });
-  assert.ok(observedSignal, "Storage fetch receives an AbortSignal");
-  assert.equal(observedSignal.aborted, true);
-  assert.ok(Date.now() - started < 1_000, "deadline must terminate the hanging fetch promptly");
+  try {
+    const started = Date.now();
+    await assert.rejects(processEnvelope("signed", dependencies({
+      nonceRedeemer: { redeem: async () => true },
+      fetchImpl,
+      testOnlyAttemptTimeoutMs: 25,
+    })), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message.includes("token=secret"), false);
+      return true;
+    });
+    assert.ok(observedSignal, "Storage fetch receives an AbortSignal");
+    assert.equal(observedSignal.aborted, true);
+    assert.ok(Date.now() - started < 1_000, "deadline must terminate the hanging fetch promptly");
+  } finally {
+    clearTimeout(keepAlive);
+  }
 });
 
 test("unverified claims never reach redemption, callback, logs or network", async () => {

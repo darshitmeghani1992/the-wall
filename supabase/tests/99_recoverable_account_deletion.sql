@@ -173,6 +173,8 @@ insert into marks(id,wall_id,author_id,type,text)
 select '99000000-0000-4000-8000-000000000011',w.id,
        '99000000-0000-4000-8000-000000000003','text','on deleted personal wall'
   from walls w where w.owner_id='99000000-0000-4000-8000-000000000002' and w.type='personal';
+update walls set allow_anonymous=true
+ where owner_id='99000000-0000-4000-8000-000000000003' and type='personal';
 insert into marks(id,wall_id,author_id,type,text,anonymous)
 select '99000000-0000-4000-8000-000000000012',w.id,
        null,'text','anonymous authored elsewhere',true
