@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
+import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { applyNotificationReadReceipts, relativeNotificationTime } from "@/lib/notification-ui";
@@ -114,11 +115,15 @@ export default function AlertsScreen() {
           </Pressable>
         </View>
       ) : items.length === 0 ? (
-        <View style={{ paddingVertical: 48, alignItems: "center", gap: 6 }}>
+        <View style={{ paddingVertical: 48, gap: 12 }}>
           <Text variant="headline">No Alerts yet</Text>
-          <Text variant="body" color={colors.outline} style={{ textAlign: "center" }}>
+          <Text variant="body" color={colors.outline}>
             New Marks, reactions, friend requests, and Shared Wall invites will appear here.
           </Text>
+          <View style={{ gap: 8, marginTop: 8 }}>
+            <Button label="Go to My Wall" variant="yellow" onPress={() => router.push("/(tabs)/home")} />
+            <Button label="Discover people" variant="ghost" onPress={() => router.push("/(tabs)/discover")} />
+          </View>
         </View>
       ) : (
         <View accessibilityRole="list" style={{ gap: 10 }}>

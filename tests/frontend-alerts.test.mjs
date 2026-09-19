@@ -24,3 +24,9 @@ test("Alerts reconcile only returned receipt IDs while the account fence is curr
   assert.match(screen, /relativeNotificationTime/);
 });
 
+test("the empty Alerts state provides approved forward actions", () => {
+  const screen = read("app/(tabs)/alerts.tsx");
+  assert.match(screen, /No Alerts yet/);
+  assert.match(screen, /label="Go to My Wall"[\s\S]*router\.push\("\/\(tabs\)\/home"\)/);
+  assert.match(screen, /label="Discover people"[\s\S]*router\.push\("\/\(tabs\)\/discover"\)/);
+});

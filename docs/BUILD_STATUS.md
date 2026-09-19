@@ -17,8 +17,10 @@ evidence is absent. The last independently certified checkpoint remains **63%** 
 source-and-CI boundary. These figures measure different boundaries and must not be interchanged.
 
 - Draft PR: `#22`; the candidate is published only to the unmerged draft branch
-- Superseded CI evidence: run `163` (`35428360456`) passed all four jobs on tree
-  `46ea703cff38fa28947b6d5eddcc96191e5e526e`; later review remediations require their own exact-tree run
+- Prior exact-head CI evidence: run `167` (`35429610639`) passed all four jobs on remote head
+  `e7f27a773a1a082ece2037500fb2a84fd3968a89` (tree
+  `64feceb557755f5325ddf078330daa3795e45556`); the subsequent Alerts empty-state correction
+  requires a fresh exact-tree run and review
 - Certification rule: only the latest CI-green PR head with independent Reviewer approval and QA
   pass may become the next source-and-CI checkpoint; live evidence is tracked on draft PR `#22`
 - Delivery state: **draft, unmerged, undeployed**
@@ -184,10 +186,9 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Next Actions
 
-1. Complete universal HTTPS links, store fallback, and install-intent restoration after the public
-   domain is selected.
-2. Maintain green CI on the latest draft PR head and keep Reviewer/QA decisions bound to that
-   unchanged exact tree.
+1. Obtain fresh exact-tree CI and review for the Alerts empty-state correction.
+2. Select the public domain, then complete universal HTTPS links, store fallback, and
+   install-intent restoration.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
 4. Run physical-device, accessibility, performance, lifecycle, and adversarial QA.
 5. Prepare internal iOS/Android builds and the plain-language Founder READY/NOT READY report.
