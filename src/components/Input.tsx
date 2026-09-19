@@ -17,7 +17,7 @@ type Props = TextInputProps & {
  * (handoff §Buttons & Inputs). Uses the expression font for typed content so
  * writing on the wall feels handwritten.
  */
-export function Input({ label, hint, error, prefix, style, ...rest }: Props) {
+export function Input({ label, hint, error, prefix, style, accessibilityLabel, ...rest }: Props) {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -44,6 +44,7 @@ export function Input({ label, hint, error, prefix, style, ...rest }: Props) {
           </Text>
         ) : null}
         <TextInput
+          accessibilityLabel={accessibilityLabel ?? label}
           placeholderTextColor={colors.outline}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

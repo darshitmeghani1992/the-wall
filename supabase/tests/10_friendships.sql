@@ -114,9 +114,9 @@ ROLLBACK;
 -- ╭─────────────────────────────────────────────────────────────────────────╮
 -- │ 0008 hardening · status-unchanged pair reassignment (fail-open close)     │
 -- ╰─────────────────────────────────────────────────────────────────────────╯
--- Fixture: A↔G is ACCEPTED (requester A, addressee G); O↔C is ACCEPTED
--- (requester O, addressee C). The attack: a party rewrites the OTHER party of an
--- already-accepted friendship WITHOUT changing status, fabricating a
+-- Fixture: A↔G is ACCEPTED (requester A, addressee G). The attack: a party
+-- rewrites the OTHER party of an already-accepted friendship WITHOUT changing
+-- status, fabricating a
 -- non-consensual friendship. Pre-0008 the unchanged-status early return fired
 -- before the pair-identity check → the reassignment persisted. 0008 moves the
 -- immutability check ABOVE the early return, so both reassignments are rejected.
@@ -147,6 +147,16 @@ begin
                and addressee_id = '33333333-3333-3333-3333-333333333333') then
     raise exception 'AC-S1/0008 FAIL: A↔C row fabricated via addressee reassign';
   end if;
+end $$;
+reset role; -- protected contract-level verification; app roles cannot call are_friends(a,b)
+do $$
+begin
+  -- Positive control keeps the helper assertion non-vacuous: A↔G is an
+  -- accepted, unblocked friendship in 01_seed.sql.
+  if not are_friends('11111111-1111-1111-1111-111111111111',
+                     '88888888-8888-8888-8888-888888888888') then
+    raise exception 'AC-S1/0008 FIXTURE FAIL: are_friends(A,G) is not true';
+  end if;
   if are_friends('11111111-1111-1111-1111-111111111111',
                  '33333333-3333-3333-3333-333333333333') then
     raise exception 'AC-S1/0008 FAIL: are_friends(A,C) became true via addressee reassign';
@@ -155,19 +165,19 @@ end $$;
 ROLLBACK;
 \echo '0008 (addressee reassign)          : PASS  (rejected; are_friends(A,C) stays false)'
 
--- ── 0008 (b): requester reassign, status unchanged (C, addressee of O↔C, ──────
---     rewrites requester O→A) → DENIED. C stays a party (addressee) so RLS
+-- ── 0008 (b): requester reassign, status unchanged (G, addressee of A↔G, ──────
+--     rewrites requester A→C) → DENIED. G stays a party (addressee) so RLS
 --     WITH CHECK passes; the trigger's requester-immutability branch rejects.
 BEGIN;
 set local role authenticated;
-set local "test.uid" = '33333333-3333-3333-3333-333333333333';   -- C (addressee of O↔C)
+set local "test.uid" = '88888888-8888-8888-8888-888888888888';   -- G (addressee of A↔G)
 do $$
 declare denied boolean := false; v_sqlstate text := '';
 begin
   begin
-    update friendships set requester_id = '11111111-1111-1111-1111-111111111111'  -- O→A
-     where requester_id = '44444444-4444-4444-4444-444444444444'
-       and addressee_id = '33333333-3333-3333-3333-333333333333'
+    update friendships set requester_id = '33333333-3333-3333-3333-333333333333'  -- A→C
+     where requester_id = '11111111-1111-1111-1111-111111111111'
+       and addressee_id = '88888888-8888-8888-8888-888888888888'
        and status = 'accepted';   -- status left unchanged
   exception when others then
     denied := true;
@@ -175,13 +185,28 @@ begin
   end;
   if not denied then raise exception 'AC-S1/0008 FAIL: requester reassign (status unchanged) allowed'; end if;
   raise notice '0008 requester-reassign rejected SQLSTATE=%', v_sqlstate;
-  if are_friends('11111111-1111-1111-1111-111111111111',
-                 '33333333-3333-3333-3333-333333333333') then
-    raise exception 'AC-S1/0008 FAIL: are_friends(A,C) became true via requester reassign';
+  if exists (select 1 from friendships
+             where requester_id = '33333333-3333-3333-3333-333333333333'
+               and addressee_id = '88888888-8888-8888-8888-888888888888') then
+    raise exception 'AC-S1/0008 FAIL: C↔G row fabricated via requester reassign';
+  end if;
+end $$;
+reset role; -- protected contract-level verification; app roles cannot call are_friends(a,b)
+do $$
+begin
+  -- Repeat the positive control in this isolated transaction so a missing or
+  -- broken fixture cannot make the negative assertion pass trivially.
+  if not are_friends('11111111-1111-1111-1111-111111111111',
+                     '88888888-8888-8888-8888-888888888888') then
+    raise exception 'AC-S1/0008 FIXTURE FAIL: are_friends(A,G) is not true';
+  end if;
+  if are_friends('33333333-3333-3333-3333-333333333333',
+                 '88888888-8888-8888-8888-888888888888') then
+    raise exception 'AC-S1/0008 FAIL: are_friends(C,G) became true via requester reassign';
   end if;
 end $$;
 ROLLBACK;
-\echo '0008 (requester reassign)          : PASS  (rejected; are_friends(A,C) stays false)'
+\echo '0008 (requester reassign)          : PASS  (rejected; are_friends(C,G) stays false)'
 
 -- ── 0008 (c): identity-unchanged NO-OP accept still passes (regression) ───────
 -- A↔G already accepted; A re-sets status='accepted' (identity unchanged). Now

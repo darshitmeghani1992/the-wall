@@ -1,5 +1,10 @@
 # 07 · Engineering Plan
 
+> Scope reconciliation (2026-09-19): the Master Build Specification v1.1 is authoritative.
+> Comments, doodles, games, polls, awards, and predictions are not MVP backlog items. Live
+> implementation and certification status is maintained in `BUILD_STATUS.md` and
+> `handoffs/CURRENT.md`; this document records build order only.
+
 ## Working method — one screen at a time
 
 Each screen is a complete **vertical slice**:
@@ -27,16 +32,15 @@ Each screen is a complete **vertical slice**:
 
 ## Backlog (ordered)
 
-**A · Write-a-Mark (done)**
-- A1+A2 — Create picker → **Sticky writer** ✅
-- A3 — Roast & Secret (same Writer) ✅
-- A4 — Memory / Photo writer (camera/gallery + caption) ✅
-- (A5 Poll · A6 Award · A7 Prediction · A8 Doodle → moved to **A′** below, after friends)
+**A · Write-a-Mark (source implemented)**
+- Text composer and Anonymous/Secret modes ✅
+- Protected Photo writer, including ordered one-to-five photos ✅
+- Protected Voice and Video writers ✅
 
 > **Re-sequenced (per the Core interaction model):** the core act is marking
 > *others'* walls, so we prioritize the pieces that make that real next —
 > friends, the Friend Wall, and the target-first ✚ — before finishing the
-> remaining mark writers (Poll/Award/Prediction/Doodle).
+> the supported MVP Mark writers.
 
 **C · Friends & social (NEXT)** — C1 find/invite + search · C2 requests · C3 Friend
 Wall (permission-gated) with a pre-aimed "Leave a Mark" · C4 Discover
@@ -45,17 +49,13 @@ Wall (permission-gated) with a pre-aimed "Leave a Mark" · C4 Discover
 aimed at that wall; writer/`createMark` take a target `wallId`; own wall becomes
 receive-first (self-posts secondary). *(Depends on C1–C3.)*
 
-**A′ · Remaining mark writers** — A5 Poll · A6 Award · A7 Prediction · A8 Doodle
+**B · Mark interactions** — detail + reactions · report / hide / owner pin & approve
 
-**B · Mark interactions** — B1 detail (react + comment) · B2 report / hide / owner pin & approve
-
-**D · Feeds & identity** — D1 Home feed · D2 Profile edit · D3 Notifications + push (incl. DB notification producers)
-
-**E · Games (plugins)** — E1 Who Said This · E2 Roast Me · E3 Awards Night
+**D · Identity and Alerts** — Profile edit · in-app Alerts and valid destinations
 
 **F · Settings & moderation** — F1 Settings · F2 moderation queue · F3 privacy + block list
 
-**G · Ship** — G1 polish + tests + perf + security hardening · G2 EAS build + store submission
+**G · Ship** — polish + tests + accessibility/performance/security hardening · hosted integration · EAS builds + store submission
 
 ## First slice — Create → Sticky writer
 Files: `app/create.tsx` (wire tiles → `write/[type]`),

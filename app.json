@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "scheme": "thewall",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
     "splash": {
       "resizeMode": "cover",
       "backgroundColor": "#fbf9f4"
@@ -34,7 +33,13 @@
         "expo-image-picker",
         {
           "photosPermission": "The Wall needs access to your photos so you can share memories.",
-          "cameraPermission": "The Wall needs your camera so you can capture a memory."
+          "cameraPermission": "The Wall needs your camera so you can capture a photo or video Mark."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "The Wall needs your microphone so you can record a voice Mark."
         }
       ]
     ],

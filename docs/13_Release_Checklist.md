@@ -15,7 +15,8 @@ Steps to ship a build to the stores. Use per release; check as completed.
 - [ ] Permission strings (camera, photos, notifications) accurate & user-friendly
 - [ ] Deep-link redirect (`thewall://auth/callback`) registered in Supabase
 - [ ] Auth providers (Email, Apple, Google) enabled in Supabase
-- [ ] `attachments` storage bucket public + policies correct
+- [ ] Private protected-media Storage, signed-read, worker, cleanup, and legacy-reconciliation
+      controls verified in the hosted environment; do not restore the retired public Mark-media path
 - [ ] Production env vars set (EAS secrets)
 
 ## Build & submit (EAS)

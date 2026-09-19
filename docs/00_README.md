@@ -1,11 +1,13 @@
 # The Wall — Documentation
 
 Product-grade specification for **The Wall** (Social Wall): a native app where a
-person's identity is written by the people around them — friends leave **Marks**
-(sticky, roast, secret, memory, photo, award, poll, doodle, prediction) on a
-personal **Wall**.
+person's identity is written by the people around them — people leave persistent text,
+photo, voice, or video **Marks** on Personal and Shared **Walls**.
 
-> **Personal Wall = My Story.** Shared Wall = Our Story (later version).
+> **Personal Wall = My Story. Shared Wall = Our Story.**
+
+The authoritative product contract is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`. These supporting
+documents must be read consistently with it; excluded prototype features are not launch backlog.
 
 ## How these docs relate
 
@@ -16,7 +18,7 @@ personal **Wall**.
 | 03 | [Acceptance Criteria](03_Acceptance_Criteria.md) | *When* a feature is correct |
 | 04 | [Edge Cases & Errors](04_Edge_Cases_and_Errors.md) | *What can go wrong* and the intended behavior |
 | 05 | [Database](05_Database.md) | Tables, RLS, triggers |
-| 06 | [Tech Architecture](06_Tech_Architecture.md) | App structure, data layer, games-as-plugins |
+| 06 | [Tech Architecture](06_Tech_Architecture.md) | App structure and data-layer boundaries |
 | 07 | [Engineering Plan](07_Engineering_Plan.md) | Build order (screen-by-screen) + status |
 | 08 | [AI Coding Rules](08_AI_Coding_Rules.md) | Rules every contributor/agent follows |
 | 09 | [Definition of Done](09_Definition_of_Done.md) | The gate every feature passes |
@@ -26,14 +28,13 @@ personal **Wall**.
 | 13 | [Release Checklist](13_Release_Checklist.md) | Ship steps *(living)* |
 | 14 | [Changelog](14_Changelog.md) | Version-per-feature log *(living)* |
 
-**Core docs (01–09)** are the source of truth and should be kept current.
+**Core docs (01–09)** support the Master Build Specification and should be kept current.
 **Living docs (10–14)** are filled in as each feature ships.
 
 ## Conventions
 
-- **Terminology:** a *Mark* is any post on a wall. A *Wall* is owned by exactly
-  one user (Personal) — Shared Walls are a later version. A *contributor* can
-  leave marks; a *viewer* can only read.
+- **Terminology:** a *Mark* is a contribution on a Wall. A Personal Wall has one owner; a Shared
+  Wall has one owner and may have members. A *contributor* can leave Marks; a viewer can only read.
 - **Statuses of a Mark:** `active` (visible), `pending` (awaiting owner
   approval), `hidden` (soft-removed), `removed`.
 - **IDs & paths** reference this repo — a standalone Expo app (app code at the
