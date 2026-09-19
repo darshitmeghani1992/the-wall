@@ -58,6 +58,8 @@ jobs:
           node-version: 20
       - name: Install worker dependencies
         run: npm ci --no-audit --no-fund --prefix workers/media-processor
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Build and test worker
         run: npm test --prefix workers/media-processor
 
