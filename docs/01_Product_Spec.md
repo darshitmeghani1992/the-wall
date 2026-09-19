@@ -6,8 +6,8 @@ People don't just tell their own story — the people around them help write it.
 The Wall preserves **memories, not conversations**. Every important relationship,
 event, or community can have a wall that becomes more valuable over time.
 
-- **Personal Wall = My Story** (MVP focus)
-- **Shared Wall = Our Story** (later version; data model already supports it)
+- **Personal Wall = My Story**
+- **Shared Wall = Our Story**
 
 Audience: Gen-Z / late-millennial users who want authenticity over polished feeds.
 Aesthetic: tactile "physical digital" — paper surface, marks pinned with tape and
@@ -47,12 +47,11 @@ Consequences for the UI:
 | Object | Meaning |
 |---|---|
 | **User / Profile** | An account with a handle, display name, avatar, bio, interests |
-| **Wall** | A surface owned by one user. Type `personal` (one per user, auto-created) or `shared` (later) |
+| **Wall** | A surface with a Personal or Shared lifecycle |
 | **Mark** | A single contribution on a wall (see Mark Types) |
 | **Reaction** | An emoji response to a mark |
-| **Comment** | Text reply on a mark |
 | **Friendship** | A two-way accepted relationship; gates private walls & "friends-only" contribution |
-| **Notification** | An activity record for a user (mark left, reaction, comment, friend request…) |
+| **Notification** | An activity record for a user (Mark, reaction, friend request, Shared Wall activity…) |
 | **Report** | A safety flag raised on a mark |
 
 ## Wall types
@@ -62,10 +61,11 @@ Consequences for the UI:
 - Represents the person's identity; friends leave Marks.
 - Public or Private (visibility) with independent contribution rules.
 
-### Shared Wall (later)
-- Any user can create unlimited shared walls (family, trip, class, couple, club…).
-- Roles: Owner / Admin / Member / Viewer.
-- **Out of MVP scope**; shown only as a teaser. `walls.type='shared'` reserved.
+### Shared Wall (MVP)
+- Any user can create multiple Shared Walls (family, trip, class, team, event…).
+- Roles: Owner / Member. Non-members may view public Walls but cannot contribute.
+- Supports Public/Private visibility, Open Join for Public Walls, invitations, ownership transfer,
+  member leave/removal, and owner deletion.
 
 ## Permission model (two independent axes)
 
@@ -87,36 +87,32 @@ Additional per-wall toggles: **allow anonymous marks**, **require approval**
 
 | Type | Description | MVP |
 |---|---|---|
-| Sticky | A short colored note | ✅ |
-| Roast | A playful burn (orange, bordered) | ✅ |
-| Secret | Hidden until tapped to reveal | ✅ |
-| Memory | Photo + caption | ✅ |
-| Photo | A photo mark | ✅ |
-| Award | A recognition badge + note | ✅ |
-| Poll | A question with options + votes | ✅ |
-| Doodle | A freehand drawing | ✅ |
-| Prediction | Time-locked note that unlocks on a date | ✅ |
-| Voice / Video Memory | (future) | ⬜ |
+| Text | A text Mark with optional color treatment | ✅ |
+| Photo | One to five ordered photos with optional caption | ✅ |
+| Voice | A recorded voice Mark | ✅ |
+| Video | A selected or recorded short video Mark | ✅ |
+
+Anonymous and Secret are orthogonal modes, not separate Mark types. Doodles, polls, awards,
+predictions, and games are explicitly outside this MVP.
 
 ## Features
 
-Marks · Comments · Reactions · Pinning · Archiving/Hiding · Search · Sharing ·
+Marks · Reactions · Pinning · Hiding · Search · Sharing ·
 Privacy · Contribution permissions · Moderation (report/hide/approve) ·
-Notifications (in-app + push) · Friend system · Games (Who Said This, Roast Me,
-Awards Night — as plugins).
+in-app Alerts · Friend/follower system · Shared Walls · Settings · recoverable account deletion.
 
 ## MVP scope
 
-Authentication · Profiles · One Personal Wall · Friend system · Public & Private
-walls · Independent view/contribution permissions · All core Mark types ·
-Comments · Reactions · Notifications · Search · Discover · Basic moderation ·
-Privacy controls · The three launch games.
+Authentication · Profiles · Personal and Shared Walls · Friend/follower system · Public and
+Private visibility · independent view/contribution permissions · text/photo/voice/video Marks ·
+Anonymous and Secret modes · reactions · in-app Alerts · Search/Discover · basic moderation ·
+privacy controls · settings · account deletion.
 
-**Deferred (V2+):** Shared Wall management, Wall Wrapped, On-This-Day, Voice/Video
-marks, invite-only visibility, "selected people" contribution.
+**Deferred (V2+):** comments, doodles, games, polls, awards, predictions, algorithmic feeds,
+stories, DMs/chat, contact-book syncing, subscriptions/payments, live streaming, Wall Wrapped,
+and On-This-Day.
 
 ## Product evolution
 
-- **V1** — Personal Wall (this build)
-- **V2** — Archives, Wall Wrapped, more mark types
-- **V3** — Shared Walls (family, trip, class, community, events)
+- **V1** — approved MVP in the Master Build Specification v1.1
+- **V2+** — evidence-led additions after launch; excluded ideas do not become committed backlog

@@ -3,7 +3,16 @@
 Version-per-feature log for The Wall (Expo app). Newest first. Bump the
 minor version per shipped slice; note schema/doc changes.
 
+Historical entries describe what existed at that version. The Master Build Specification v1.1
+and current Product/Architecture documents supersede prototype-era scope such as comments, games,
+doodles, polls, awards, predictions, and public Mark-media storage.
+
 ## Unreleased
+- Reconciled Product, flow, acceptance, edge-case, database, and architecture summaries with the
+  Master Build Specification: comments, doodles, games, polls, awards, and predictions are no
+  longer presented as missing MVP launch work.
+- Removed the unused React Native Skia dependency retained from the excluded Doodle prototype.
+- Added a direct Discover action to empty Followers/Following lists.
 - Hardened Wall/social read resilience: follower lists and profile counts now
   reject stale account/route responses and expose retries; primary Marks remain
   readable when optional friend counts, follow state, social counts, or owner

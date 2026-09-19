@@ -35,16 +35,13 @@ by area; "Intended behavior" is the contract.
 | Image too large / wrong type | Rejected with size/type message |
 | Camera/gallery permission denied | Explain why + link to Settings; allow text-only fallback |
 | Upload interrupted | Retry; partial upload discarded |
-| Doodle empty | Cannot submit |
-| Prediction unlock date in the past | Block; require a future time |
-| Poll <2 options or blank option | Block submit |
+| Voice/video permission or capture fails | Explain, retry safely, and keep text-only fallback available |
+| Secret already consumed or expired | Never reveal content; show the exact unavailable state |
 
-## Reactions & comments
+## Reactions
 | Case | Intended behavior |
 |---|---|
 | Double-tap react | Idempotent (PK on mark+user+emoji); toggles, never duplicates |
-| Comment on a mark you can't view | Blocked by RLS |
-| Author deletes mark with comments | Comments cascade-delete |
 
 ## Friends
 | Case | Intended behavior |
@@ -61,12 +58,12 @@ by area; "Intended behavior" is the contract.
 | Wall owner blocks a viewer | Viewer loses view/contribute immediately |
 | Wall archived (future) | Read-only; no new marks |
 
-## Notifications & push
+## Alerts and destinations
 | Case | Intended behavior |
 |---|---|
-| Push permission denied | In-app notifications still work; prompt is not nagging |
 | Stale deep link (target deleted) | Land on a safe screen with "this is no longer available" |
 | Notify self | Never happens (guarded) |
+| Destination unavailable or unauthorized | Do not leak it; offer My Wall or Discover |
 
 ## Abuse / safety (see also `12_Security.md`)
 | Case | Intended behavior |

@@ -81,6 +81,9 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
   (product behavior already fixed by the Master Spec); hosted apply remains a deploy Gate.
 
 ## D-6 · 2026-08-20 · Voice/Video reuse the existing `attachments` bucket (no new storage surface)
+**Status:** Superseded by ADR-012 for all Mark media. Public `attachments` remains only for the
+explicit non-Mark uses retained by that architecture.
+
 - **Decision:** Voice + Video media use the already-verified public, path-scoped `attachments`
   bucket (ADR-006/0003) under `marks/<wallId>/…`, exactly like photos — no new bucket, policy,
   or migration. Client enforces per-kind byte caps + a MIME allowlist; server-side bucket

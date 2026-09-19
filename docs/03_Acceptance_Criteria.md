@@ -18,8 +18,8 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 ## My Wall `[built]`
 - ✓ Header shows avatar, wall name, `N marks · M friends`
 - ✓ Marks render in a 2-column masonry, each tilted with a pin/tape + hard shadow
-- ✓ Each mark type renders its own layout (sticky/roast/secret/photo/award/poll/doodle/prediction)
-- ✓ Filter chips (All/Roasts/Photos/Awards) narrow the list
+- ✓ Supported MVP Mark types render appropriately (text, photo, voice, video)
+- ✓ Filter chips (All/Notes/Photos) narrow the list without inventing excluded types
 - ✓ New marks arrive live and drop in at the top (realtime)
 - ✓ Empty wall shows "invite your crew" with a share action
 - ✓ Only `active` marks show to viewers; author & owner also see their `pending`
@@ -35,41 +35,30 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 - ✓ RLS: only a permitted contributor can insert (owner always can)
 - ⏳ Author can edit/delete their own mark; owner can pin/hide it *(UI in slice B2)*
 
-## Roast / Secret marks `[built]`
-- ✓ Roast: orange bg, 2px ink border, larger type; no color picker
-- ✓ Secret: purple; text hidden (blurred) until tapped; author line still shows
-- ✓ Both honor anonymous toggle and ≤500 chars
+## Anonymous / Secret modes `[built]`
+- ✓ Anonymous mode hides the author everywhere the Mark appears
+- ✓ Secret mode reveals only to the intended recipient, once, within its approved lifetime
+- ✓ Secret notification and list surfaces never leak protected content
+- ✓ Anonymous and Secret may be used together
 
 ## Memory / Photo mark `[built]`
 - ✓ Pick from gallery **or** capture with camera (permission requested)
 - ✓ Image ≤ 6 MB; over-limit rejected with a clear message
 - ✓ Optional caption ≤ 200 chars
-- ✓ Uploads to the `attachments` bucket; renders as a polaroid on the wall
+- ✓ Uses the private protected-media flow; no permanent public Mark-media URL is persisted
+- ✓ One to five photos retain their selected order and render on the Wall
 - ⏳ Upload progress: a "Posting…" busy state today; a % bar is a later polish. Failure re-enables the button to retry.
 
-## Poll mark `[ ]`
-- ✓ Question required; 2–4 options, each non-empty
-- ✓ One vote per user; tapping shows live percentages
-- ✓ Author cannot see who voted what (only counts)
+## Voice / Video marks `[built]`
+- ✓ Voice recording requires explicit microphone permission and supports preview before posting
+- ✓ Video can be selected or recorded with a maximum 30-second duration
+- ✓ Media failures are visible and retryable; text-only posting remains available
+- ✓ Playback uses authorized protected-media reads rather than unrestricted public URLs
 
-## Award mark `[ ]`
-- ✓ Choose an award from a preset list; optional note
-- ✓ Renders dark card + gold badge
-
-## Prediction mark `[ ]`
-- ✓ Text + a future unlock date/time required
-- ✓ Locked state hides text and shows "unlocks {date}"
-- ✓ Auto-reveals at/after unlock time
-
-## Doodle mark `[ ]`
-- ✓ Freehand drawing with at least stroke + clear + undo
-- ✓ Exports a PNG, uploads it, renders on the wall
-- ✓ Empty canvas cannot be submitted
-
-## Reactions & comments `[ ]`
+## Reactions `[built]`
 - ✓ React with an emoji; toggling adds/removes; counts update live
-- ✓ Comment ≤ 300 chars; appears live; author or wall owner can delete
-- ✓ Reacting/commenting notifies the mark's author
+- ✓ Reacting notifies the Mark's author without notifying the actor about their own action
+- ✓ No comment thread is exposed; a response is another eligible Mark or a reaction
 
 ## Friends `[ ]`
 - ✓ Search by handle/name; send request; can't friend yourself
@@ -80,11 +69,12 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 ## Notifications `[ ]`
 - ✓ Every relevant event creates a notification for the recipient
 - ✓ In-app badge count is accurate; opening marks them read
-- ✓ Push delivered to opted-in devices; tapping deep-links to the target
+- ✓ Tapping an in-app Alert routes to the target or a graceful fallback
 - ✓ A user never gets notified about their own actions
+- ⏳ Native push is a later capability and is not required for the first MVP implementation
 
 ## Discover / Friend Wall `[ ]`
-- ✓ Discover shows public/trending walls + search
+- ✓ Discover supports people search and public Shared Wall search
 - ✓ Friend Wall respects visibility (private walls blocked for non-friends)
 - ✓ Contribution rules enforced (e.g. friends-only)
 
@@ -94,8 +84,8 @@ are the concrete half of the Definition of Done (`09_`). `[built]` = shipped,
 - ✓ Block list add/remove; blocked users can't view/contribute/notify
 - ✓ Report creates a report row; reported content flagged for owner
 
-## Games (each plugin) `[ ]`
-- ✓ Registered via the plugin interface (metadata/entry/rules/scoring/rewards/analytics)
-- ✓ Entry, play, result, and "play again"/"home" all work
-- ✓ Emits its analytics events (started/finished)
-- ✓ Adding a game requires **no** change to wall/mark core
+## Explicit MVP non-goals
+
+Comments, doodles, games, polls, awards, predictions, algorithmic feeds, stories, DMs,
+contact-book syncing, subscriptions/payments, and live streaming are excluded from this MVP.
+They must not be treated as missing launch work unless the Founder approves a later scope change.
