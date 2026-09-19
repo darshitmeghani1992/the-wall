@@ -1,5 +1,6 @@
 import {
   createAccountDeletionWorkerHandler,
+  createSupabaseAccountDeletionAdapter,
   type AccountDeletionAdapter,
 // @ts-ignore Deno requires explicit extensions; Expo's root TS config does not enable them.
 } from "../account-deletion-worker/index.ts";
@@ -71,6 +72,78 @@ test("hostile avatar paths fail closed before prepare", async () => {
   const handler = createAccountDeletionWorkerHandler({ schedulerSecrets: [SECRET], adapterFactory: () => value });
   equal((await handler(request())).status, 204, "admitted tick acknowledged");
   equal(prepared, false, "preparation blocked");
+});
+
+test("one failed account does not starve later due deletions", async () => {
+  const secondUser = "22222222-2222-4222-8222-222222222222";
+  const deleted: string[] = [];
+  let failures = 0;
+  const value = adapter();
+  value.listDue = async () => [DUE, { ...DUE, user_id: secondUser }];
+  value.listAvatarPaths = async (userId) => {
+    if (userId === USER) throw new Error("storage unavailable");
+    return [];
+  };
+  value.deleteIdentity = async (userId) => { deleted.push(userId); };
+  const handler = createAccountDeletionWorkerHandler({
+    schedulerSecrets: [SECRET],
+    adapterFactory: () => value,
+    log: () => { failures += 1; },
+  });
+  equal((await handler(request())).status, 204, "admitted tick acknowledged");
+  equal(failures, 1, "failed row logged");
+  equal(deleted.join(","), secondUser, "later row completed");
+});
+
+test("Supabase adapter sends exact storage, RPC, and Auth Admin requests", async () => {
+  const calls: { url: string; method: string; body: unknown }[] = [];
+  const responses: unknown[] = [
+    [DUE],
+    [{ name: "avatar.jpg", id: "ignored" }],
+    null,
+    true,
+    null,
+  ];
+  const statuses = [200, 200, 200, 200, 404];
+  const fakeFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    calls.push({ url: String(input), method: init?.method ?? "GET", body });
+    const status = statuses.shift() ?? 500;
+    const responseBody = responses.shift();
+    return new Response(responseBody === null ? null : JSON.stringify(responseBody), {
+      status,
+      headers: responseBody === null ? undefined : { "Content-Type": "application/json" },
+    });
+  };
+  const value = createSupabaseAccountDeletionAdapter({
+    supabaseUrl: "https://project.supabase.co/",
+    serviceRoleKey: "k".repeat(32),
+    fetch: fakeFetch as typeof fetch,
+  });
+  await value.listDue(10);
+  const paths = await value.listAvatarPaths(USER, 100);
+  await value.removeAvatarPaths(USER, paths);
+  equal(await value.prepare(USER, DUE.requested_at), true, "preparation response");
+  await value.deleteIdentity(USER);
+  equal(calls.length, 5, "request count");
+  equal(calls[0].url, "https://project.supabase.co/rest/v1/rpc/list_due_account_deletions", "due RPC URL");
+  equal(calls[0].method, "POST", "due RPC method");
+  equal(JSON.stringify(calls[0].body), JSON.stringify({ p_limit: 10 }), "due RPC body");
+  equal(calls[1].url, "https://project.supabase.co/storage/v1/object/list/attachments", "list URL");
+  equal(JSON.stringify(calls[1].body), JSON.stringify({
+    prefix: `avatars/${USER}/`, limit: 100, offset: 0, sortBy: { column: "name", order: "asc" },
+  }), "list body");
+  equal(calls[1].method, "POST", "list method");
+  equal(calls[2].url, "https://project.supabase.co/storage/v1/object/attachments", "delete URL");
+  equal(calls[2].method, "DELETE", "delete method");
+  equal(JSON.stringify(calls[2].body), JSON.stringify({ prefixes: [`avatars/${USER}/avatar.jpg`] }), "delete body");
+  equal(calls[3].url, "https://project.supabase.co/rest/v1/rpc/prepare_account_deletion_for_purge", "prepare URL");
+  equal(calls[3].method, "POST", "prepare method");
+  equal(JSON.stringify(calls[3].body), JSON.stringify({
+    p_user_id: USER, p_expected_requested_at: DUE.requested_at,
+  }), "prepare body");
+  equal(calls[4].url, `https://project.supabase.co/auth/v1/admin/users/${USER}`, "Auth Admin URL");
+  equal(calls[4].method, "DELETE", "Auth Admin method");
 });
 
 for (const entry of tests) {

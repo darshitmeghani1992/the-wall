@@ -21,6 +21,17 @@ export type CurrentAccountDeletion = AccountDeletionSchedule | ExpiredAccountDel
   status: "none";
 }>;
 
+export type AccountDeletionStatusLoadState = "loading" | "ready" | "error";
+
+/** Recovery is fail-closed until the server authoritatively confirms a restorable state. */
+export function canOfferAccountRecovery(
+  loadState: AccountDeletionStatusLoadState,
+  deletion: CurrentAccountDeletion | null,
+): boolean {
+  return loadState === "ready"
+    && (deletion?.status === "none" || deletion?.status === "scheduled");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

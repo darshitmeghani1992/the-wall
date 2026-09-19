@@ -8,7 +8,7 @@
 
 _Last updated: 2026-09-19._
 
-## Corrective candidate in progress
+## Corrective candidate under exact-tree certification
 
 The source surface is still approximately **80% implemented**, but that is not a production-ready
 percentage. A third-party audit of the prior candidate estimated approximately **76% source + CI**
@@ -16,16 +16,20 @@ and **46% production readiness** because hosted, device, accessibility, operatio
 evidence is absent. The last independently certified checkpoint remains **63%** within its narrower
 source-and-CI boundary. These figures measure different boundaries and must not be interchanged.
 
-- Draft PR: `#22`, corrective commit and CI pending
-- Local verification: TypeScript; warning-free lint; 70 client/contract tests; 36 Edge-function
-  tests; 31 media-worker tests; Expo Doctor 17/17; iOS and Android production exports
-- Current exact-tree certification: pending corrected-tree CI, independent Reviewer, and QA
+- Draft PR: `#22`; the candidate is published only to the unmerged draft branch
+- Superseded CI evidence: run `163` (`35428360456`) passed all four jobs on tree
+  `46ea703cff38fa28947b6d5eddcc96191e5e526e`; later review remediations require their own exact-tree run
+- Certification rule: only the latest CI-green PR head with independent Reviewer approval and QA
+  pass may become the next source-and-CI checkpoint; live evidence is tracked on draft PR `#22`
 - Delivery state: **draft, unmerged, undeployed**
 
 The corrective slice closes audited account-deletion gaps: Anonymous-authored Marks are purged;
 expired requests cannot be restored; committed scheduling is not misreported when route refresh
 fails; deadline copy includes local time-zone context; a bounded authenticated worker and guarded
 rollback exist; privilege, search-path, late-owner, rollback, and two-session race tests were added.
+Review remediation also makes recovery fail closed until status is authoritative, serializes rollback
+against new requests, isolates worker failures per account, and associates visible input labels with
+their native controls.
 It also makes Edge tests executable instead of false-positive runners, expands CI to Edge/worker/
 Expo/export checks, corrects Expo configuration, removes the critical npm advisory, replaces
 placeholder glyph icons, and improves OTP recovery and account identity/help affordances.

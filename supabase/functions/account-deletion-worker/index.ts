@@ -47,10 +47,14 @@ export function createAccountDeletionWorkerHandler(options: Readonly<{
       const due = await adapter.listDue(limit);
       if (!Array.isArray(due) || due.length > limit) throw new Error("invalid due batch");
       for (const requestRow of due) {
-        validateDue(requestRow);
-        await removeAllAvatars(adapter, requestRow.user_id);
-        if (!await adapter.prepare(requestRow.user_id, requestRow.requested_at)) continue;
-        await adapter.deleteIdentity(requestRow.user_id);
+        try {
+          validateDue(requestRow);
+          await removeAllAvatars(adapter, requestRow.user_id);
+          if (!await adapter.prepare(requestRow.user_id, requestRow.requested_at)) continue;
+          await adapter.deleteIdentity(requestRow.user_id);
+        } catch {
+          options.log?.({ event: "account_deletion_failed" });
+        }
       }
     } catch {
       options.log?.({ event: "account_deletion_failed" });

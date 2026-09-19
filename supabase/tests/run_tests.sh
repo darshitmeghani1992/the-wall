@@ -215,6 +215,10 @@ echo "── assertion: 99_recoverable_account_deletion_races (two physical sess
 bash "$HERE/99_recoverable_account_deletion_races.sh"
 
 echo ""
+echo "── assertion: 99_recoverable_account_deletion_rollback_race (two physical sessions)"
+bash "$HERE/99_recoverable_account_deletion_rollback_race.sh"
+
+echo ""
 echo "── rollback: 0031_recoverable_account_deletion_preapply"
 psql_test -f "$HERE/../rollbacks/0031_recoverable_account_deletion_preapply.sql" >/dev/null
 psql_test -f "$HERE/99_recoverable_account_deletion_rollback.sql"

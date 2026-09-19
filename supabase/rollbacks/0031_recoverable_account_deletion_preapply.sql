@@ -5,6 +5,13 @@
 -- the request table or weakening recovery semantics.
 \set ON_ERROR_STOP on
 
+begin;
+
+-- Serialize the emptiness check with request inserts. The lock is held until
+-- every rollback statement commits, so an accepted request can never be
+-- inserted between the guard and DROP TABLE.
+lock table public.account_deletion_requests in access exclusive mode;
+
 do $$ begin
   if exists(select 1 from public.account_deletion_requests) then
     raise exception 'ROLLBACK_REQUIRES_EMPTY_ACCOUNT_DELETION_REQUESTS';
@@ -79,3 +86,5 @@ create policy "attachments modify own nonmark"
     and owner = auth.uid()
     and coalesce((storage.foldername(name))[1], '') <> 'marks'
   );
+
+commit;

@@ -5,21 +5,22 @@
 
 ## Corrective candidate — 2026-09-19
 
-Draft PR `#22` has a corrective candidate under verification. Source implementation remains about
+Draft PR `#22` has a corrective candidate under exact-tree certification. Source implementation remains about
 80%; the prior third-party audit estimated 76% source + CI and 46% production readiness because
 hosted/device/release evidence is absent. The last independent source-and-CI certification is 63%.
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate | Pending publication to the draft branch |
-| CI | Corrected-tree run pending |
-| Local verification | TypeScript; lint 0/0; 70 contracts; 36 Edge tests; 31 worker tests; Expo 17/17; iOS/Android exports |
-| Independent certification | Pending exact-tree Reviewer and QA |
+| Remote candidate | Published only to the unmerged draft PR; use its latest head as the exact target |
+| CI | Run `163` passed tree `46ea703c...`; subsequent review fixes require a fresh exact-tree run |
+| Certification | Requires CI green + independent Reviewer APPROVE + QA PASS on one unchanged PR head |
 | Delivery state | Draft, unmerged, undeployed |
 
 No hosted migration, production-data change, merge, deployment, or public release occurred. The
 corrective slice addresses audited deletion, executable-test, Expo/dependency, icon, OTP, and CI
-gaps. Universal-link/store-fallback work is blocked only on the public domain selection. Hosted
+gaps. Review remediation makes recovery fail closed until its server status is known, protects
+rollback from concurrent requests, continues deletion batches after a per-account failure, and
+associates input labels with native controls. Universal-link/store-fallback work is blocked only on the public domain selection. Hosted
 execution and physical-device validation remain later gates.
 
 ## Certified draft checkpoint — 2026-09-15

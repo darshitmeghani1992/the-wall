@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  canOfferAccountRecovery,
   parseAccountDeletionRequest,
   parseCurrentAccountDeletion,
   reconcileCommittedDeletion,
@@ -51,6 +52,23 @@ test("current deletion status is narrow and actor-relative", () => {
   assert.throws(() => parseCurrentAccountDeletion({ status: "none", user_id: "other" }), /invalid/);
 });
 
+test("recovery is offered only after an authoritative restorable status", () => {
+  assert.equal(canOfferAccountRecovery("loading", null), false);
+  assert.equal(canOfferAccountRecovery("error", null), false);
+  assert.equal(canOfferAccountRecovery("ready", null), false);
+  assert.equal(canOfferAccountRecovery("ready", {
+    status: "expired",
+    requestedAt: scheduled.requested_at,
+    purgeAfter: scheduled.purge_after,
+  }), false);
+  assert.equal(canOfferAccountRecovery("ready", { status: "none" }), true);
+  assert.equal(canOfferAccountRecovery("ready", {
+    status: "scheduled",
+    requestedAt: scheduled.requested_at,
+    purgeAfter: scheduled.purge_after,
+  }), true);
+});
+
 test("a post-commit refresh failure is never reported as a scheduling failure", async () => {
   let navigated = false;
   const failure = new Error("route refresh unavailable");
@@ -90,5 +108,13 @@ test("recovery tells scheduled deletion apart from ordinary deactivation", () =>
   assert.match(source, /Cancel deletion and restore/);
   assert.match(source, /deletion\.purgeAfter/);
   assert.match(source, /timeStyle: "long"/);
-  assert.match(source, /deletion\?\.status !== "expired"/);
+  assert.match(source, /canOfferAccountRecovery\(statusLoadState, deletion\)/);
+  assert.match(source, /statusLoadState === "error"/);
+  assert.match(source, /Retry status check/);
+  assert.doesNotMatch(source, /deletion\?\.status !== "expired" \? \(/);
+});
+
+test("input associates its visual label with the native control", () => {
+  const source = readFileSync("src/components/Input.tsx", "utf8");
+  assert.match(source, /accessibilityLabel=\{accessibilityLabel \?\? label\}/);
 });
