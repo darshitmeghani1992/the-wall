@@ -234,6 +234,7 @@ do $$ declare v_state text; v_message text; v_status jsonb; begin
   end;
 end $$;
 reset role;
+select set_config('test.uid','',true);
 insert into walls(id,owner_id,type,name,visibility,contribution_policy,allow_anonymous,require_approval)
 values('99000000-0000-4000-8000-000000000020',
        '99000000-0000-4000-8000-000000000003','shared','Late ownership',
