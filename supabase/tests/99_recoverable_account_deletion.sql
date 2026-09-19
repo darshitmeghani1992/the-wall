@@ -236,8 +236,20 @@ end $$;
 reset role;
 insert into walls(id,owner_id,type,name,visibility,contribution_policy,allow_anonymous,require_approval)
 values('99000000-0000-4000-8000-000000000020',
-       '99000000-0000-4000-8000-000000000002','shared','Late ownership',
+       '99000000-0000-4000-8000-000000000003','shared','Late ownership',
        'private','nobody',false,false);
+-- Model a defensive late-ownership anomaly through the same narrow transaction
+-- authorization required by the immutable-owner trigger. The public transfer
+-- RPC correctly refuses inactive targets; purge must still fail closed if an
+-- operator/backfill creates this state.
+insert into wall_ownership_transfer_authorizations(
+  transaction_id,wall_id,old_owner_id,new_owner_id
+) values(
+  txid_current(),'99000000-0000-4000-8000-000000000020',
+  '99000000-0000-4000-8000-000000000003','99000000-0000-4000-8000-000000000002'
+);
+update walls set owner_id='99000000-0000-4000-8000-000000000002'
+ where id='99000000-0000-4000-8000-000000000020';
 set local role service_role;
 do $$ begin
   if public.prepare_account_deletion_for_purge(
