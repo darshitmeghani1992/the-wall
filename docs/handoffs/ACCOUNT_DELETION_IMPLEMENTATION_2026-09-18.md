@@ -62,11 +62,11 @@ Draft implementation is present on PR #22. Nothing has been applied to hosted Su
 
 | Surface | Static/source | Bundle | Physical behavior |
 |---|---|---|---|
-| iOS | Pending corrected-tree CI | Local production export passed | Unverified |
-| Android | Pending corrected-tree CI | Local production export passed | Unverified |
+| iOS | Required on the certified exact head | Local production export passed | Unverified |
+| Android | Required on the certified exact head | Local production export passed | Unverified |
 | VoiceOver/TalkBack | Labels/roles present | N/A | Unverified |
 | Large text/keyboard/focus | Layout designed to scroll where destructive form needs it | N/A | Unverified |
 
 ## Handoff
 
-Next: publish the remediation to draft PR `#22`, obtain green exact-tree CI, route the unchanged tree to independent Reviewer, then QA. Do not apply migration `0031`, configure the hosted scheduler, merge, or deploy before those gates and a new Founder authorization.
+Keep the remediation on draft PR `#22` and require green CI, independent Reviewer approval, and QA pass on one unchanged exact head. Do not apply migration `0031`, configure the hosted scheduler, merge, or deploy before those gates and a new Founder authorization.

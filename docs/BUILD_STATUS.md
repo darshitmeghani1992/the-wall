@@ -186,7 +186,8 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 1. Complete universal HTTPS links, store fallback, and install-intent restoration after the public
    domain is selected.
-2. Obtain green corrected-tree CI, then route that exact tree through independent Reviewer and QA.
+2. Maintain green CI on the latest draft PR head and keep Reviewer/QA decisions bound to that
+   unchanged exact tree.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
 4. Run physical-device, accessibility, performance, lifecycle, and adversarial QA.
 5. Prepare internal iOS/Android builds and the plain-language Founder READY/NOT READY report.
