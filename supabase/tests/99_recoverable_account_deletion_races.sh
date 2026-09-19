@@ -50,11 +50,12 @@ SQL
 
 # Reactivation owns the profile lock first; delayed purge must observe the
 # committed active/no-request state and fail closed.
+recover_requested_at="$(psql_test -Atc "select requested_at from account_deletion_requests where user_id='$RECOVER';")"
 run_session recover_a authenticated "$RECOVER" \
   "select 1 from profiles where id='$RECOVER' for update; select pg_sleep(0.8); select reactivate_account('$RECOVER');"
 p1=$LAST_PID; sleep 0.1
 run_session recover_b service_role "$PURGE" \
-  "select prepare_account_deletion_for_purge('$RECOVER',(select requested_at from account_deletion_requests where user_id='$RECOVER'));"
+  "select prepare_account_deletion_for_purge('$RECOVER','$recover_requested_at');"
 p2=$LAST_PID
 await_success "$p1" recover_a
 await_success "$p2" recover_b
