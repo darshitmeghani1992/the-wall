@@ -30,22 +30,22 @@ Draft implementation is present on PR #22. Nothing has been applied to hosted Su
 
 | Approved contract | Implementation | Evidence | Result |
 |---|---|---|---|
-| Actor-bound exact confirmation | `request_account_deletion(uuid,text)` | SQL test 99 mismatch/confirmation cases | Verified locally by source; PostgreSQL CI pending |
-| Server-owned immutable 30-day deadline | request table CHECK + idempotent retry | SQL test 99 schedule/retry | PostgreSQL CI pending |
-| Zero owned Shared Walls at schedule and purge | initial count + locked purge recheck | initial and late-ownership tests | PostgreSQL CI pending |
-| Delete every authored Mark | normal author plus private Anonymous-author side table | normal/Anonymous purge assertions | PostgreSQL CI pending |
-| Deadline-safe recovery | locked profile/request transaction | expired status/recovery and near-deadline two-session race | PostgreSQL CI pending |
-| Service-only bounded finalization | exact grants, pinned search paths, worker secret | ACL/search-path tests + Edge tests | CI pending |
-| Avatar cleanup before identity deletion | Storage list/delete/re-list then prepare | worker operation-order tests | CI pending |
-| Reversibility before use | transactional guarded rollback + clean reapply | rollback/request race, refusal, and reapply assertions | PostgreSQL CI pending |
+| Actor-bound exact confirmation | `request_account_deletion(uuid,text)` | SQL test 99 mismatch/confirmation cases | Requires green CI on the certified exact head; live result on PR #22 |
+| Server-owned immutable 30-day deadline | request table CHECK + idempotent retry | SQL test 99 schedule/retry | Requires green CI on the certified exact head; live result on PR #22 |
+| Zero owned Shared Walls at schedule and purge | initial count + locked purge recheck | initial and late-ownership tests | Requires green CI on the certified exact head; live result on PR #22 |
+| Delete every authored Mark | normal author plus private Anonymous-author side table | normal/Anonymous purge assertions | Requires green CI on the certified exact head; live result on PR #22 |
+| Deadline-safe recovery | locked profile/request transaction | expired status/recovery and near-deadline two-session race | Requires green CI on the certified exact head; live result on PR #22 |
+| Service-only bounded finalization | exact grants, pinned search paths, worker secret | ACL/search-path tests + Edge tests | Requires green CI on the certified exact head; live result on PR #22 |
+| Avatar cleanup before identity deletion | Storage list/delete/re-list then prepare | worker operation-order tests | Requires green CI on the certified exact head; live result on PR #22 |
+| Reversibility before use | transactional guarded rollback + clean reapply | rollback/request race, refusal, and reapply assertions | Requires green CI on the certified exact head; live result on PR #22 |
 
 ## Frontend Consumption Compliance Check
 
 | Server result | Client behavior | Result |
 |---|---|---|
-| `scheduled` | exact time/time-zone shown; restoration offered | Verified by contract/source tests; device pending |
-| loading/error | no restoration; progress or retry/sign-out only | Verified by contract/source tests; device pending |
-| `expired` | authoritative non-restorable state; sign-out only | Verified by contract/source tests; device pending |
+| `scheduled` | exact time/time-zone shown; restoration offered | Verified by contract/source tests; physical device unverified |
+| loading/error | no restoration; progress or retry/sign-out only | Verified by contract/source tests; physical device unverified |
+| `expired` | authoritative non-restorable state; sign-out only | Verified by contract/source tests; physical device unverified |
 | `owner_action_required` | count-only ownership guidance | Verified by existing tests |
 | committed mutation + refresh failure | states deletion is scheduled; reconciliation guidance | Verified by behavioral dependency-free test |
 | actor/session switch | stale navigation and result suppressed | Verified by fence tests |
