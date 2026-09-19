@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Button } from "@/components/Button";
 import { PersonRow } from "@/components/PersonRow";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
@@ -95,6 +96,9 @@ export default function SocialListScreen() {
           <Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>
             {followersMode ? "Share your Wall to help people find you." : "Visit public Walls and follow people you care about."}
           </Text>
+          <View style={{ marginTop: 20, alignSelf: "stretch" }}>
+            <Button label="Discover people" variant="yellow" onPress={() => router.push("/(tabs)/discover")} />
+          </View>
         </View>
       )}
     </Screen>

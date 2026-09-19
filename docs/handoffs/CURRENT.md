@@ -11,8 +11,8 @@ hosted/device/release evidence is absent. The last independent source-and-CI cer
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate | Published only to the unmerged draft PR; use its latest head as the exact target |
-| CI | Run `163` passed tree `46ea703c...`; subsequent review fixes require a fresh exact-tree run |
+| Remote candidate | `edc11af2abfeca6b72ea2a239fd6dc41d2c1946d` (tree `f9bdc0598889030045a5db7eaa4951edee5091e8`) |
+| CI | Run `168` (`35435639819`) passed all four jobs on that exact remote head |
 | Certification | Requires CI green + independent Reviewer APPROVE + QA PASS on one unchanged PR head |
 | Delivery state | Draft, unmerged, undeployed |
 
@@ -22,6 +22,10 @@ gaps. Review remediation makes recovery fail closed until its server status is k
 rollback from concurrent requests, continues deletion batches after a per-account failure, and
 associates input labels with native controls. Universal-link/store-fallback work is blocked only on the public domain selection. Hosted
 execution and physical-device validation remain later gates.
+
+The next local Frontend candidate closes the remaining empty Followers/Following list dead end by
+linking directly to Discover. Its targeted test, TypeScript, lint, and all 74 client/contract tests
+pass; publish it to the draft PR, then bind fresh CI and independent review to the new exact head.
 
 ## Certified draft checkpoint — 2026-09-15
 
