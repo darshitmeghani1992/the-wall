@@ -45,9 +45,9 @@ update profiles set account_status='deactivated',deactivated_at=clock_timestamp(
  where id in('$RECOVER','$PURGE');
 with captured as (select clock_timestamp() as now_at)
 insert into account_deletion_requests(user_id,requested_at,purge_after)
-select '$RECOVER',now_at,now_at+interval '30 days' from captured
+select '$RECOVER'::uuid,now_at,now_at+interval '30 days' from captured
 union all
-select '$PURGE',now_at-interval '31 days',now_at-interval '1 day' from captured;
+select '$PURGE'::uuid,now_at-interval '31 days',now_at-interval '1 day' from captured;
 SQL
 
 # Reactivation owns the profile lock first; delayed purge must observe the
