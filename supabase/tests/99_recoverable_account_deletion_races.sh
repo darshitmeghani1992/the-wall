@@ -45,16 +45,16 @@ update profiles set account_status='deactivated',deactivated_at=clock_timestamp(
  where id in('$RECOVER','$PURGE');
 with captured as (select clock_timestamp() as now_at)
 insert into account_deletion_requests(user_id,requested_at,purge_after)
-select '$RECOVER'::uuid,now_at-interval '30 days'+interval '0.4 seconds',now_at+interval '0.4 seconds' from captured
+select '$RECOVER'::uuid,now_at-interval '30 days'+interval '2 seconds',now_at+interval '2 seconds' from captured
 union all
 select '$PURGE'::uuid,now_at-interval '31 days',now_at-interval '1 day' from captured;
 SQL
 
-# Reactivation owns the profile lock first; delayed purge must observe the
-# committed active/no-request state and fail closed.
+# Reactivation completes before the deadline, then keeps its transaction locks
+# past expiry; the waiting purge must observe committed active/no-request state.
 recover_requested_at="$(psql_test -Atc "select requested_at from account_deletion_requests where user_id='$RECOVER';")"
 run_session recover_a authenticated "$RECOVER" \
-  "select 1 from profiles where id='$RECOVER' for update; select pg_sleep(0.8); select reactivate_account('$RECOVER');"
+  "select reactivate_account('$RECOVER'); select pg_sleep(2.5);"
 p1=$LAST_PID; sleep 0.1
 run_session recover_b service_role "$PURGE" \
   "select prepare_account_deletion_for_purge('$RECOVER','$recover_requested_at');"
