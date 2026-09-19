@@ -3,26 +3,24 @@
 > Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
 > authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
-## Latest source-and-CI candidate — 2026-09-18
+## Corrective candidate — 2026-09-19
 
-Draft PR `#22` is at an estimated **80% source-and-CI MVP candidate** after completing Wall/social
-failure isolation, target-first picker recovery, public-handle fencing, actor-bound profile/avatar
-persistence, and recoverable account deletion. This is not a production-readiness claim.
+Draft PR `#22` has a corrective candidate under verification. Source implementation remains about
+80%; the prior third-party audit estimated 76% source + CI and 46% production readiness because
+hosted/device/release evidence is absent. The last independent source-and-CI certification is 63%.
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate commit | `fb6de45db950ca54d5410da00e4b2e80037bf5c2` |
-| Local equivalent commit | `b846a85` |
-| Exact tree | `02b6fc6f26353fb06e1e6860a92801192d63a1a0` |
-| CI | Run `152` (`35328074331`) — green |
-| Local verification | TypeScript; lint 0/0; 65 dependency-free contracts; Expo config; iOS/Android exports; 31 media-worker tests |
-| Independent certification | Remains 65% pending a new exact-tree review/QA pass |
+| Remote candidate | Pending publication to the draft branch |
+| CI | Corrected-tree run pending |
+| Local verification | TypeScript; lint 0/0; 70 contracts; 36 Edge tests; 31 worker tests; Expo 17/17; iOS/Android exports |
+| Independent certification | Pending exact-tree Reviewer and QA |
 | Delivery state | Draft, unmerged, undeployed |
 
 No hosted migration, production-data change, merge, deployment, or public release occurred. The
-recoverable-deletion contract/runbook is complete and CI-verified. The next high-impact source-safe
-slice is universal-link and store-fallback completion, which requires the public domain selection.
-Hosted execution and physical-device validation remain later gates.
+corrective slice addresses audited deletion, executable-test, Expo/dependency, icon, OTP, and CI
+gaps. Universal-link/store-fallback work is blocked only on the public domain selection. Hosted
+execution and physical-device validation remain later gates.
 
 ## Certified draft checkpoint — 2026-09-15
 

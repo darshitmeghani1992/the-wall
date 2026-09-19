@@ -435,6 +435,7 @@ const runtime = (globalThis as unknown as {
   Deno?: { serve?: (handler: (request: Request) => Promise<Response>) => void };
 }).Deno;
 
-if (runtime?.serve) runtime.serve(createMarkMediaHandler());
+// @ts-ignore Deno entrypoint guard; root Expo TypeScript uses CommonJS.
+if (import.meta.main && runtime?.serve) runtime.serve(createMarkMediaHandler());
 
 export { PRIVATE_RESPONSE_HEADERS };

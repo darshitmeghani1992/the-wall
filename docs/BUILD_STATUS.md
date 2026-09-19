@@ -6,32 +6,29 @@
 > **Next Actions**. Product authority remains the Master Build Spec. Governance authority remains
 > `docs/aios/`.
 
-_Last updated: 2026-09-18._
+_Last updated: 2026-09-19._
 
-## Latest source-and-CI candidate
+## Corrective candidate in progress
 
-The draft branch is now at an estimated **80% source-and-CI MVP candidate**. This candidate has
-author-side verification and green CI, but it has not yet received the independent exact-tree
-review/QA required to replace the separately recorded certified milestone below.
+The source surface is still approximately **80% implemented**, but that is not a production-ready
+percentage. A third-party audit of the prior candidate estimated approximately **76% source + CI**
+and **46% production readiness** because hosted, device, accessibility, operations, and release
+evidence is absent. The last independently certified checkpoint remains **63%** within its narrower
+source-and-CI boundary. These figures measure different boundaries and must not be interchanged.
 
-- Remote candidate commit: `fb6de45db950ca54d5410da00e4b2e80037bf5c2`
-- Local equivalent commit: `b846a85`
-- Exact tree: `02b6fc6f26353fb06e1e6860a92801192d63a1a0`
-- Draft PR: `#22`
-- CI run `152` (`35328074331`): **green**
-- Independent certification: remains **65%** pending a new exact-tree review/QA pass
-- State: **draft, unmerged, undeployed**
+- Draft PR: `#22`, corrective commit and CI pending
+- Local verification: TypeScript; warning-free lint; 70 client/contract tests; 36 Edge-function
+  tests; 31 media-worker tests; Expo Doctor 17/17; iOS and Android production exports
+- Current exact-tree certification: pending corrected-tree CI, independent Reviewer, and QA
+- Delivery state: **draft, unmerged, undeployed**
 
-Since the prior candidate, primary Wall content now survives optional social/owner-enrichment
-failures; follower lists and counts have account/route fencing and retries; failed counts are not
-misreported as zero; and the contextual people picker opens the exact selected Wall in the Mark
-composer. Public-handle resolution, profile editing, profile/avatar persistence, and onboarding
-avatar selection are bound to the initiating account and suppress stale continuations. Recoverable
-account deletion now includes a dedicated exact-confirmation screen, an immutable server-side
-30-day recovery window, Shared-Wall ownership blocking, account-switch fencing, reactivation
-cancellation, a service-only due-work/purge contract, and an operator runbook. TypeScript, all 65
-dependency-free client/contract tests, Expo config, iOS/Android exports, all 31 isolated media-worker
-tests, warning-free lint, and the full PostgreSQL security suite pass.
+The corrective slice closes audited account-deletion gaps: Anonymous-authored Marks are purged;
+expired requests cannot be restored; committed scheduling is not misreported when route refresh
+fails; deadline copy includes local time-zone context; a bounded authenticated worker and guarded
+rollback exist; privilege, search-path, late-owner, rollback, and two-session race tests were added.
+It also makes Edge tests executable instead of false-positive runners, expands CI to Edge/worker/
+Expo/export checks, corrects Expo configuration, removes the critical npm advisory, replaces
+placeholder glyph icons, and improves OTP recovery and account identity/help affordances.
 
 No hosted migration, production-data change, merge, deployment, or public release occurred.
 
@@ -185,7 +182,7 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 1. Complete universal HTTPS links, store fallback, and install-intent restoration after the public
    domain is selected.
-2. Route exact tree `02b6fc6f...` through independent Reviewer and QA certification.
+2. Obtain green corrected-tree CI, then route that exact tree through independent Reviewer and QA.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
 4. Run physical-device, accessibility, performance, lifecycle, and adversarial QA.
 5. Prepare internal iOS/Android builds and the plain-language Founder READY/NOT READY report.

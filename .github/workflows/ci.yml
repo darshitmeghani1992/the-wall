@@ -17,13 +17,49 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Type-check
         run: npx tsc --noEmit
 
       - name: Lint
         run: npx eslint .
+
+      - name: Client and contract tests
+        run: npm run test:contracts
+
+      - name: Expo health
+        run: npx expo-doctor
+
+      - name: Export iOS bundle
+        run: npm run export:ios
+
+      - name: Export Android bundle
+        run: npm run export:android
+
+  edge-functions:
+    name: Edge function contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run Edge function tests
+        run: deno test --no-check --allow-env supabase/functions/tests/*.test.ts
+
+  media-worker:
+    name: Media processor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install worker dependencies
+        run: npm ci --no-audit --no-fund --prefix workers/media-processor
+      - name: Build and test worker
+        run: npm test --prefix workers/media-processor
 
   security:
     name: DB security suite (SEC-001 + FP-C2)

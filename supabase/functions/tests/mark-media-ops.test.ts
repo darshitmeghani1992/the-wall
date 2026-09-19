@@ -210,12 +210,7 @@ test("multi-object cleanup finalizes all-or-nothing and never persists partial e
   equal(finalization.errorCode, "STORAGE_DELETE_FAILED", "fixed safe failure code");
 });
 
-async function run(): Promise<void> {
-  let failures = 0;
-  for (const entry of tests) {
-    try { await entry.run(); console.log(`ok - ${entry.name}`); }
-    catch (error) { failures += 1; console.error(`not ok - ${entry.name}`); console.error(error); }
-  }
-  if (failures) throw new Error(`${failures} mark-media-ops test(s) failed`);
+for (const entry of tests) {
+  // @ts-ignore Deno test registration is validated in the dedicated Edge CI job.
+  Deno.test(entry.name, entry.run);
 }
-void run();

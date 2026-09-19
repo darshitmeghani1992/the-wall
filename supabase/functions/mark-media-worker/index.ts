@@ -266,7 +266,8 @@ const runtime = (globalThis as unknown as {
   Deno?: { env?: { get(name: string): string | undefined }; serve?: (handler: (request: Request) => Promise<Response>) => void };
 }).Deno;
 
-if (runtime?.serve) {
+// @ts-ignore Deno entrypoint guard; root Expo TypeScript uses CommonJS.
+if (import.meta.main && runtime?.serve) {
   const currentSecret = runtime.env?.get("MARK_MEDIA_WORKER_GATEWAY_SECRET") ?? "";
   const previousSecret = runtime.env?.get("MARK_MEDIA_WORKER_GATEWAY_PREVIOUS_SECRET");
   const previousExpiresAt = Number(runtime.env?.get("MARK_MEDIA_WORKER_GATEWAY_PREVIOUS_EXPIRES_AT"));

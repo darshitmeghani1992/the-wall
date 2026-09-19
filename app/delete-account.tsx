@@ -6,6 +6,7 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { requestAccountDeletion } from "@/lib/account";
+import { reconcileCommittedDeletion } from "@/lib/account-deletion-contract";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { colors, radius, spacing } from "@/theme";
 
@@ -56,9 +57,17 @@ export default function DeleteAccountScreen() {
         Alert.alert("Deletion unavailable", "Your account cannot be scheduled for deletion right now.");
         return;
       }
-      await refreshAccountRoute();
-      if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
-      router.replace("/");
+      const reconciliation = await reconcileCommittedDeletion({
+        isCurrent: () => actionFence.current.isCurrent(token, currentActorId.current),
+        refreshAccountRoute,
+        navigateToCanonicalGate: () => router.replace("/"),
+      });
+      if (reconciliation.status === "refresh_failed") {
+        Alert.alert(
+          "Deletion scheduled",
+          "Your account is paused and the 30-day recovery period has started. We couldn't refresh this screen, so sign in again if the recovery screen does not appear.",
+        );
+      }
     } catch (cause) {
       if (actionFence.current.isCurrent(token, currentActorId.current)) {
         Alert.alert(

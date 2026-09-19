@@ -39,7 +39,7 @@ This must feel deliberate, understandable, and reversible until the exact deadli
 - Automatic or silent Shared-Wall ownership transfer.
 - Hosted scheduler configuration, production migration application, merge, or deployment in this draft slice.
 - A self-service export feature.
-- A legal-retention policy beyond retaining already-anonymized, content-free security/audit evidence where required.
+- Defining the jurisdiction-specific legal-retention policy. Because deletion touches personal data, hosted enablement remains blocked until the Founder records that policy with appropriate legal input.
 
 ## Assumptions and risks
 
@@ -47,6 +47,7 @@ This must feel deliberate, understandable, and reversible until the exact deadli
 - **Verified:** authored Marks currently use `ON DELETE SET NULL`; explicit pre-purge deletion is required to meet the approved full-deletion policy.
 - **Believed-likely:** 30 days is enough time for accidental-deletion recovery and matches the Master Build Spec.
 - **Risk:** final media removal still depends on the protected-media operations worker and a hosted scheduler; source readiness is not deployment readiness.
+- **Regulated-domain escalation:** legal/retention obligations are unresolved and tracked as `TD-005`; no hosted deletion may be enabled until that Founder gate is closed.
 
 ## Success and kill criteria
 

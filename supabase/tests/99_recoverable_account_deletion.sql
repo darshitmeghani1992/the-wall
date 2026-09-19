@@ -3,10 +3,10 @@
 
 -- Exact private-table and RPC surface.
 do $$ begin
-  if has_table_privilege('anon','public.account_deletion_requests','select')
-     or has_table_privilege('authenticated','public.account_deletion_requests','select')
-     or has_table_privilege('service_role','public.account_deletion_requests','select') then
-    raise exception '99 FAIL: private deletion requests are directly readable';
+  if has_table_privilege('anon','public.account_deletion_requests','select,insert,update,delete')
+     or has_table_privilege('authenticated','public.account_deletion_requests','select,insert,update,delete')
+     or has_table_privilege('service_role','public.account_deletion_requests','select,insert,update,delete') then
+    raise exception '99 FAIL: private deletion requests have direct DML access';
   end if;
   if has_function_privilege('anon','public.request_account_deletion(uuid,text)','execute')
      or not has_function_privilege('authenticated','public.request_account_deletion(uuid,text)','execute')
@@ -33,6 +33,22 @@ do $$ begin
      or not (select prosecdef from pg_proc where oid='public.list_due_account_deletions(integer)'::regprocedure)
      or not (select prosecdef from pg_proc where oid='public.prepare_account_deletion_for_purge(uuid,timestamptz)'::regprocedure) then
     raise exception '99 FAIL: deletion RPCs are not SECURITY DEFINER';
+  end if;
+  if exists (
+    select 1 from pg_proc
+     where oid in (
+       'public.request_account_deletion(uuid,text)'::regprocedure,
+       'public.get_my_account_deletion()'::regprocedure,
+       'public.list_due_account_deletions(integer)'::regprocedure,
+       'public.prepare_account_deletion_for_purge(uuid,timestamptz)'::regprocedure
+     )
+       and not (proconfig @> array['search_path=pg_catalog, public']
+         or proconfig @> array['search_path=pg_catalog, public, storage, auth'])
+  ) then
+    raise exception '99 FAIL: deletion RPC search_path is not pinned';
+  end if;
+  if to_regclass('public.account_deletion_requests_due_idx') is null then
+    raise exception '99 FAIL: due-work index is missing';
   end if;
 end $$;
 \echo '99 (private state + exact RPC ACLs) : PASS'
@@ -157,6 +173,13 @@ insert into marks(id,wall_id,author_id,type,text)
 select '99000000-0000-4000-8000-000000000011',w.id,
        '99000000-0000-4000-8000-000000000003','text','on deleted personal wall'
   from walls w where w.owner_id='99000000-0000-4000-8000-000000000002' and w.type='personal';
+insert into marks(id,wall_id,author_id,type,text,anonymous)
+select '99000000-0000-4000-8000-000000000012',w.id,
+       null,'text','anonymous authored elsewhere',true
+  from walls w where w.owner_id='99000000-0000-4000-8000-000000000003' and w.type='personal';
+insert into anonymous_mark_authors(mark_id,author_id)
+values('99000000-0000-4000-8000-000000000012','99000000-0000-4000-8000-000000000002')
+on conflict(mark_id) do update set author_id=excluded.author_id;
 set local role authenticated;
 set local "test.uid"='99000000-0000-4000-8000-000000000002';
 select public.request_account_deletion(
@@ -174,6 +197,15 @@ do $$ begin
   end if;
 end $$;
 reset role;
+set local role service_role;
+do $$ begin
+  if public.prepare_account_deletion_for_purge(
+      '99000000-0000-4000-8000-000000000002',
+      clock_timestamp()) then
+    raise exception '99 FAIL: wrong immutable request timestamp was accepted';
+  end if;
+end $$;
+reset role;
 update account_deletion_requests r
    set requested_at=t.value,
        purge_after=t.value+interval '30 days'
@@ -184,7 +216,11 @@ select set_config('test.delete99_requested_at',requested_at::text,true)
  where user_id='99000000-0000-4000-8000-000000000002';
 set local role authenticated;
 set local "test.uid"='99000000-0000-4000-8000-000000000002';
-do $$ declare v_state text; v_message text; begin
+do $$ declare v_state text; v_message text; v_status jsonb; begin
+  v_status:=public.get_my_account_deletion();
+  if v_status->>'status'<>'expired' then
+    raise exception '99 FAIL: expired server state was %',v_status;
+  end if;
   begin
     perform public.reactivate_account('99000000-0000-4000-8000-000000000002');
     raise exception '99 FAIL: expired deletion was restored';
@@ -196,6 +232,20 @@ do $$ declare v_state text; v_message text; begin
   end;
 end $$;
 reset role;
+insert into walls(id,owner_id,type,name,visibility,contribution_policy,allow_anonymous,require_approval)
+values('99000000-0000-4000-8000-000000000020',
+       '99000000-0000-4000-8000-000000000002','shared','Late ownership',
+       'private','nobody',false,false);
+set local role service_role;
+do $$ begin
+  if public.prepare_account_deletion_for_purge(
+      '99000000-0000-4000-8000-000000000002',
+      current_setting('test.delete99_requested_at')::timestamptz) then
+    raise exception '99 FAIL: purge ignored late Shared-Wall ownership';
+  end if;
+end $$;
+reset role;
+delete from walls where id='99000000-0000-4000-8000-000000000020';
 set local role service_role;
 do $$ begin
   if (select count(*) from public.list_due_account_deletions(10)
@@ -232,8 +282,12 @@ end $$;
 reset role;
 do $$ begin
   if not exists(select 1 from auth.users where id='99000000-0000-4000-8000-000000000002')
-     or exists(select 1 from marks where id='99000000-0000-4000-8000-000000000010') then
-    raise exception '99 FAIL: purge preparation did not preserve auth pending Admin API or delete authored Marks';
+     or exists(select 1 from marks where id in(
+       '99000000-0000-4000-8000-000000000010',
+       '99000000-0000-4000-8000-000000000012'))
+     or exists(select 1 from anonymous_mark_authors
+        where mark_id='99000000-0000-4000-8000-000000000012') then
+    raise exception '99 FAIL: purge preparation did not preserve auth or delete normal/anonymous Marks';
   end if;
 end $$;
 -- The hosted worker uses auth.admin.deleteUser(). The local shim has no Auth

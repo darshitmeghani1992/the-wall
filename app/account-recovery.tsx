@@ -46,7 +46,7 @@ export default function AccountRecovery() {
   }, [accountRoute, userId]);
 
   async function restore() {
-    if (!userId || inFlight.current) return;
+    if (!userId || deletion?.status === "expired" || inFlight.current) return;
     const token = fence.current.begin(userId);
     inFlight.current = true;
     setBusy(true);
@@ -75,26 +75,34 @@ export default function AccountRecovery() {
     <Screen scroll={false} dockInset={false}>
       <View style={{ flex: 1, justifyContent: "center", gap: 12 }}>
         <Text variant="label" color={colors.outline}>
-          {deletion?.status === "scheduled" ? "DELETION SCHEDULED" : "WELCOME BACK"}
+          {deletion?.status === "expired"
+            ? "RECOVERY WINDOW ENDED"
+            : deletion?.status === "scheduled" ? "DELETION SCHEDULED" : "WELCOME BACK"}
         </Text>
         <Text variant="display" style={{ fontSize: 32 }}>
-          {deletion?.status === "scheduled" ? "Your account is scheduled for deletion." : "Your Wall is paused."}
+          {deletion?.status === "expired"
+            ? "Your account is awaiting permanent deletion."
+            : deletion?.status === "scheduled" ? "Your account is scheduled for deletion." : "Your Wall is paused."}
         </Text>
         <Text variant="body" color={colors.onSurfaceVariant}>
-          {deletion?.status === "scheduled"
-            ? `Restore your account before ${new Date(deletion.purgeAfter).toLocaleDateString()} to cancel permanent deletion.`
+          {deletion?.status === "expired"
+            ? "The server-confirmed recovery deadline has passed. Restoration is no longer available."
+            : deletion?.status === "scheduled"
+            ? `Restore your account before ${new Date(deletion.purgeAfter).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "long" })} to cancel permanent deletion.`
             : deletionStatusUnavailable
               ? "Restore your account to return to your Wall and cancel any pending deletion."
               : "Restore your account to return to your Wall and connections."}
         </Text>
       </View>
       <View style={{ gap: 12, paddingBottom: 12 }}>
-        <Button
-          label={deletion?.status === "scheduled" ? "Cancel deletion and restore" : "Restore my account"}
-          variant="yellow"
-          loading={busy}
-          onPress={() => void restore()}
-        />
+        {deletion?.status !== "expired" ? (
+          <Button
+            label={deletion?.status === "scheduled" ? "Cancel deletion and restore" : "Restore my account"}
+            variant="yellow"
+            loading={busy}
+            onPress={() => void restore()}
+          />
+        ) : null}
         <Button label="Sign out" variant="ghost" disabled={busy} onPress={() => void signOut()} />
       </View>
     </Screen>

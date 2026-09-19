@@ -18,6 +18,9 @@ create table if not exists public.account_deletion_requests (
   check (purge_after = requested_at + interval '30 days')
 );
 
+create index if not exists account_deletion_requests_due_idx
+  on public.account_deletion_requests(purge_after, user_id);
+
 alter table public.account_deletion_requests enable row level security;
 revoke all on table public.account_deletion_requests
   from public, anon, authenticated, service_role;
@@ -127,7 +130,10 @@ begin
    where id = v_actor;
 
   return jsonb_build_object(
-    'status', 'scheduled',
+    'status', case
+      when v_request.purge_after <= clock_timestamp() then 'expired'
+      else 'scheduled'
+    end,
     'requested_at', v_requested_at,
     'purge_after', v_requested_at + interval '30 days'
   );
@@ -326,9 +332,18 @@ begin
     return false;
   end if;
 
-  -- This explicit delete is required because marks.author_id otherwise uses
-  -- ON DELETE SET NULL. Cascading mark_media deletes enqueue exact-path cleanup.
-  delete from public.marks where author_id = p_user_id;
+  -- Normal authors live on marks.author_id. Anonymous Marks deliberately keep
+  -- that public column NULL and store the true actor in the private side table.
+  -- Delete both forms before Auth Admin removal; otherwise anonymous content
+  -- would survive while its hidden author FK became NULL.
+  delete from public.marks m
+   where m.author_id = p_user_id
+      or exists (
+        select 1
+          from public.anonymous_mark_authors ama
+         where ama.mark_id = m.id
+           and ama.author_id = p_user_id
+      );
 
   -- Historical moderation receipts survive without retaining the deleted
   -- identity. This FK predates the explicit ON DELETE behavior used elsewhere.

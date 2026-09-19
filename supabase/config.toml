@@ -3,3 +3,9 @@ verify_jwt = true
 
 [functions.mark-media-worker]
 verify_jwt = false
+
+[functions.mark-media-ops]
+verify_jwt = false
+
+[functions.account-deletion-worker]
+verify_jwt = false

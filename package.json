@@ -9,7 +9,12 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:contracts": "node --experimental-strip-types --test tests/*.test.mjs src/lib/*.test.ts",
+    "test:worker": "npm test --prefix workers/media-processor",
+    "check:expo": "expo-doctor",
+    "export:ios": "expo export --platform ios --output-dir /tmp/the-wall-export-ios",
+    "export:android": "expo export --platform android --output-dir /tmp/the-wall-export-android"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
@@ -25,7 +30,7 @@
     "expo-constants": "~16.0.2",
     "expo-font": "~12.0.10",
     "expo-image": "~1.13.0",
-    "expo-image-picker": "~15.0.7",
+    "expo-image-picker": "~15.1.0",
     "expo-linking": "~6.3.1",
     "expo-notifications": "~0.28.19",
     "expo-router": "~3.5.23",
@@ -45,11 +50,15 @@
     "react-native-url-polyfill": "^2.0.0",
     "tus-js-client": "4.3.1"
   },
+  "overrides": {
+    "tar": "7.5.22"
+  },
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.79",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~7.1.2",
+    "expo-doctor": "1.20.4",
     "typescript": "~5.3.3"
   }
 }

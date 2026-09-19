@@ -83,10 +83,16 @@ export default function SettingsScreen() {
         Manage your profile session and account lifecycle.
       </Text>
 
+      <View style={{ marginBottom: 20 }}>
+        <Text variant="label" color={colors.outline}>SIGNED IN AS</Text>
+        <Text variant="body" style={{ marginTop: 6 }}>{session?.user.email ?? "Email unavailable"}</Text>
+      </View>
+
       <View style={{ gap: 12 }}>
         <Button label="Edit profile" variant="ghost" disabled={busy} onPress={() => router.push("/profile-edit")} />
         <Button label="Personal Wall settings" variant="ghost" disabled={busy} onPress={() => router.push("/personal-wall-settings")} />
         <Button label="Blocked users" variant="ghost" disabled={busy} onPress={() => router.push("/blocked-users")} />
+        <Button label="Help and quick tour" variant="ghost" disabled={busy} onPress={() => router.push("/help")} />
         {profile?.is_admin ? (
           <Button label="Moderation queue" variant="yellow" disabled={busy} onPress={() => router.push("/moderation")} />
         ) : null}

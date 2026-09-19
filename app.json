@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "scheme": "thewall",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
     "splash": {
       "resizeMode": "cover",
       "backgroundColor": "#fbf9f4"

@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   parseAccountDeletionRequest,
   parseCurrentAccountDeletion,
+  reconcileCommittedDeletion,
 } from "../src/lib/account-deletion-contract.ts";
 
 const scheduled = {
@@ -46,7 +47,31 @@ test("deletion responses accept only the exact server envelope", () => {
 test("current deletion status is narrow and actor-relative", () => {
   assert.deepEqual(parseCurrentAccountDeletion({ status: "none" }), { status: "none" });
   assert.equal(parseCurrentAccountDeletion(scheduled).status, "scheduled");
+  assert.equal(parseCurrentAccountDeletion({ ...scheduled, status: "expired" }).status, "expired");
   assert.throws(() => parseCurrentAccountDeletion({ status: "none", user_id: "other" }), /invalid/);
+});
+
+test("a post-commit refresh failure is never reported as a scheduling failure", async () => {
+  let navigated = false;
+  const failure = new Error("route refresh unavailable");
+  const result = await reconcileCommittedDeletion({
+    isCurrent: () => true,
+    refreshAccountRoute: async () => { throw failure; },
+    navigateToCanonicalGate: () => { navigated = true; },
+  });
+  assert.deepEqual(result, { status: "refresh_failed", cause: failure });
+  assert.equal(navigated, false);
+});
+
+test("committed deletion reconciliation suppresses stale navigation", async () => {
+  let navigated = false;
+  const result = await reconcileCommittedDeletion({
+    isCurrent: () => false,
+    refreshAccountRoute: async () => undefined,
+    navigateToCanonicalGate: () => { navigated = true; },
+  });
+  assert.deepEqual(result, { status: "stale" });
+  assert.equal(navigated, false);
 });
 
 test("delete-account screen requires strong confirmation and names destructive scope", () => {
@@ -55,7 +80,8 @@ test("delete-account screen requires strong confirmation and names destructive s
   assert.match(source, /requestAccountDeletion\(token\.userId, confirmation\)/);
   assert.match(source, /Every Mark you authored/);
   assert.match(source, /Resolve Shared Wall ownership/);
-  assert.match(source, /refreshAccountRoute\(\)/);
+  assert.match(source, /reconcileCommittedDeletion/);
+  assert.match(source, /Deletion scheduled/);
 });
 
 test("recovery tells scheduled deletion apart from ordinary deactivation", () => {
@@ -63,4 +89,6 @@ test("recovery tells scheduled deletion apart from ordinary deactivation", () =>
   assert.match(source, /getCurrentAccountDeletion\(\)/);
   assert.match(source, /Cancel deletion and restore/);
   assert.match(source, /deletion\.purgeAfter/);
+  assert.match(source, /timeStyle: "long"/);
+  assert.match(source, /deletion\?\.status !== "expired"/);
 });

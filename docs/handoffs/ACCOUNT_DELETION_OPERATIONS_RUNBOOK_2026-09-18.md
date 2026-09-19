@@ -1,6 +1,6 @@
 # Account deletion operations runbook
 
-**Status:** Draft source contract only — do not execute against hosted Supabase
+**Status:** Executable draft worker source present — do not execute against hosted Supabase
 **Migration:** `0031_recoverable_account_deletion.sql`
 **Architecture:** `ADR-016` / `FP-ACL-002`
 
@@ -11,6 +11,8 @@ Do not apply migration `0031`, configure a scheduler, prepare or delete a hosted
 ## Hosted worker contract
 
 Run from a private scheduled worker holding the Supabase service-role credential. Never expose that credential to the app.
+
+The source implementation is `supabase/functions/account-deletion-worker/index.ts`. It requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a minimum-32-character `ACCOUNT_DELETION_SCHEDULER_SECRET`. The endpoint accepts only authenticated `POST /functions/v1/account-deletion-worker/run` with exact JSON `{ "limit": 1..50 }`.
 
 1. Call `list_due_account_deletions(limit)` with a limit from 1 to 50.
 2. For each returned `{user_id, requested_at, purge_after}`:
@@ -33,7 +35,13 @@ The database refuses purge preparation unless all are true:
 - the account owns no Shared Wall;
 - no avatar Storage row remains under the deterministic prefix.
 
-It then deletes authored Marks first, clears the legacy report resolver reference, and removes any incomplete ownership-authorization row. The worker's subsequent Auth Admin deletion triggers existing cascades that remove the Personal Wall, content on that Wall, profile, relationships, memberships, notifications, and other identity-owned data. Existing Mark-media and unconsumed-upload triggers enqueue protected-object cleanup.
+It then deletes identified and Anonymous authored Marks first, clears the legacy report resolver reference, and removes any incomplete ownership-authorization row. The worker's subsequent Auth Admin deletion triggers existing cascades that remove the Personal Wall, content on that Wall, profile, relationships, memberships, notifications, and other identity-owned data. Existing Mark-media and unconsumed-upload triggers enqueue protected-object cleanup.
+
+## Rollback boundary
+
+- Before any request exists, execute `supabase/rollbacks/0031_recoverable_account_deletion_preapply.sql`; CI proves rollback followed by clean reapplication.
+- Once a request exists, never drop the request table. Disable admission, preserve schedules, and ship a forward corrective migration.
+- Never attempt rollback after any Auth Admin identity deletion; finalization is irreversible.
 
 ## Monitoring and failure handling
 

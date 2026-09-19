@@ -33,10 +33,13 @@
 | Purge before deadline | rejected; no data changed |
 | Avatar Storage row remains | rejected until Storage API cleanup completes |
 | Shared Wall appears unexpectedly | rejected; no cascade loss |
-| Valid due purge | authored Marks removed, then auth identity deleted |
+| Valid due purge | identified and Anonymous authored Marks removed, then auth identity deleted |
+| Deadline passed but worker delayed | server reports `expired`; UI offers no restoration |
+| Post-commit route refresh fails | UI states deletion is scheduled; never claims mutation failure |
 
 ## Rollout gates
 
 - Draft source and tests may be committed to PR #22 under the Founder's existing authorization.
 - Do not apply migration `0031`, configure a hosted scheduler, merge, or deploy without a later explicit gate.
 - Independent Reviewer approval and QA behavioral verification remain mandatory.
+- Hosted enablement additionally requires the Founder-approved retention/legal policy recorded in `docs/TECHNICAL_DEBT.md`.
