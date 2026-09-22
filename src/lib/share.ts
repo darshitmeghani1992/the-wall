@@ -1,6 +1,14 @@
 import { Share } from "react-native";
 import { track } from "./analytics";
 import type { MarkWithAuthor } from "./marks";
+import {
+  isMarkShareable,
+  markDeepLink,
+  markSharePreview,
+  type MarkShareDestination,
+} from "./share-contract";
+
+export { isMarkShareable, markDeepLink, type MarkShareDestination } from "./share-contract";
 
 /**
  * Sharing helpers use only installed-app custom-scheme routes. Universal HTTPS
@@ -67,24 +75,20 @@ export async function inviteToSharedWall(wallId: string, name: string): Promise<
   await shareSharedWall(wallId, name);
 }
 
-/** Can this Mark's content be reproduced in a share sheet? Secrets never can. */
-export function isMarkShareable(mark: MarkWithAuthor): boolean {
-  if (mark.secret) return false; // recipient-only by intent
-  return Boolean(mark.text?.trim()) || Boolean(mark.media_url);
-}
-
 export async function shareMark(
   mark: MarkWithAuthor,
   wallHandle?: string | null,
+  destination?: MarkShareDestination,
 ): Promise<void> {
-  if (!isMarkShareable(mark)) return;
+  if (!isMarkShareable(mark) || !destination) return;
+  const deepLink = markDeepLink(mark.id, destination);
+  if (!deepLink) return;
   const author = mark.anonymous ? "Anonymous" : mark.author?.display_name ?? "Someone";
   const body = mark.text?.trim();
-  const deepLink = wallDeepLink(wallHandle);
   const lines = [
-    body ? `“${body}”` : "📷 A memory on my Wall",
+    body ? `“${body}”` : markSharePreview(mark.type),
     `— ${author}, via The Wall${wallHandle ? ` (@${wallHandle})` : ""}`,
-    ...(deepLink ? [deepLink] : []),
+    deepLink,
   ];
   await Share.share({ message: lines.join("\n") });
   track("Mark Shared", { mark_type: mark.type, is_anonymous: mark.anonymous });

@@ -32,6 +32,7 @@ import type { ReactionEmoji, ReactionSummary } from "@/lib/reactions";
 import { TargetRouteFence } from "@/lib/relationship-ui";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { colors, markColors, radius, shadow, spacing } from "@/theme";
+import type { MarkShareDestination } from "@/lib/share";
 
 type Panel = "detail" | "edit" | "delete" | "remove" | "report";
 
@@ -40,6 +41,7 @@ type Props = {
   viewerId?: string;
   wallOwnerId?: string;
   wallHandle?: string | null;
+  shareDestination?: MarkShareDestination;
   reactions?: ReactionSummary;
   shareable?: boolean;
   onToggleReaction?: (emoji: ReactionEmoji) => void;
@@ -62,6 +64,7 @@ export function MarkDetailModal({
   viewerId,
   wallOwnerId,
   wallHandle,
+  shareDestination,
   reactions,
   shareable = false,
   onToggleReaction,
@@ -296,6 +299,7 @@ export function MarkDetailModal({
                     mark={mark}
                     shareable={shareable}
                     wallHandle={wallHandle}
+                    shareDestination={shareDestination}
                     reactions={reactions}
                     onToggleReaction={onToggleReaction}
                   />

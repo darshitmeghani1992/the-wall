@@ -6,7 +6,7 @@ import { MarkCard } from "@/components/MarkCard";
 import { Text } from "@/components/Text";
 import { colors, markColors, radius, type EnterMode } from "@/theme";
 import { revealSecret, type MarkWithAuthor } from "@/lib/marks";
-import { isMarkShareable, shareMark } from "@/lib/share";
+import { isMarkShareable, markDeepLink, shareMark, type MarkShareDestination } from "@/lib/share";
 import { formatDuration } from "@/lib/recording";
 import { REACTION_EMOJIS, type ReactionEmoji, type ReactionSummary } from "@/lib/reactions";
 import type { MarkType } from "@/lib/types";
@@ -34,13 +34,21 @@ function AuthorLine({ mark }: { mark: MarkWithAuthor }) {
 }
 
 /** A quiet "share this Mark" affordance shown for received, shareable Marks. */
-function ShareRow({ mark, wallHandle }: { mark: MarkWithAuthor; wallHandle?: string | null }) {
+function ShareRow({
+  mark,
+  wallHandle,
+  destination,
+}: {
+  mark: MarkWithAuthor;
+  wallHandle?: string | null;
+  destination: MarkShareDestination;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Share this Mark from ${authorName(mark)}`}
       onPress={() => {
-        void shareMark(mark, wallHandle);
+        void shareMark(mark, wallHandle, destination);
       }}
       hitSlop={8}
       style={{ marginTop: 10, alignSelf: "flex-start", minHeight: 32, justifyContent: "center" }}
@@ -672,6 +680,7 @@ export function MarkView({
   highlight = false,
   shareable = false,
   wallHandle,
+  shareDestination,
   isWallOwner = false,
   reactions,
   onToggleReaction,
@@ -684,6 +693,7 @@ export function MarkView({
   highlight?: boolean;
   shareable?: boolean;
   wallHandle?: string | null;
+  shareDestination?: MarkShareDestination;
   isWallOwner?: boolean;
   reactions?: ReactionSummary;
   onToggleReaction?: (emoji: ReactionEmoji) => void;
@@ -692,7 +702,9 @@ export function MarkView({
   mediaVisible?: boolean;
 }) {
   const chrome = chromeFor(mark);
-  const canShare = shareable && isMarkShareable(mark);
+  const canShare = shareable
+    && isMarkShareable(mark)
+    && Boolean(shareDestination && markDeepLink(mark.id, shareDestination));
   const [pickerOpen, setPickerOpen] = useState(false);
   // Reactions are opt-in and never applied to a preview (no callback wired).
   const canReact = Boolean(onToggleReaction);
@@ -729,7 +741,9 @@ export function MarkView({
       onLongPress={canReact ? () => setPickerOpen((o) => !o) : undefined}
     >
       {inner}
-      {canShare ? <ShareRow mark={mark} wallHandle={wallHandle} /> : null}
+      {canShare && shareDestination ? (
+        <ShareRow mark={mark} wallHandle={wallHandle} destination={shareDestination} />
+      ) : null}
       {canReact ? (
         <ReactionBar
           summary={reactions ?? { counts: {}, mine: null }}

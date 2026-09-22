@@ -434,6 +434,7 @@ export default function MyWall() {
               highlight={mark.id === highlightedMarkId}
               shareable
               wallHandle={profile?.handle}
+              shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined}
               isWallOwner
               reactions={summaries[mark.id]}
               onToggleReaction={(emoji) => toggle(mark.id, emoji)}
@@ -448,6 +449,7 @@ export default function MyWall() {
         viewerId={session?.user.id}
         wallOwnerId={wall?.owner_id}
         wallHandle={profile?.handle}
+        shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined}
         shareable
         reactions={selectedMark ? summaries[selectedMark.id] : undefined}
         onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined}

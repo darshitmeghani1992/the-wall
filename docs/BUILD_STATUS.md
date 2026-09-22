@@ -42,6 +42,15 @@ placeholder glyph icons, and improves OTP recovery and account identity/help aff
 
 No hosted migration, production-data change, merge, deployment, or public release occurred.
 
+## Exact Mark sharing source correction
+
+The source in this tree closes the remaining custom-scheme Mark-sharing gap: a received,
+non-Secret Mark now shares a strict focused-Mark destination rather than only the enclosing Wall.
+Personal and Shared destination builders reject malformed identifiers, protected media is referenced
+only by Mark ID (never by a signed or legacy public media URL), and Secret Marks remain excluded.
+Publication, CI, Reviewer, and QA state for this correction must be resolved from live draft PR
+`#22`; any verdict is valid only for its exact unchanged head/tree.
+
 ## Last independently certified milestone
 
 The project is at a conservative **63% production-ready MVP milestone**. This is a weighted
@@ -190,8 +199,8 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Next Actions
 
-1. Keep the live PR head unchanged during fresh exact-tree CI and independent Reviewer
-   certification; start QA only after Reviewer APPROVE on that same head.
+1. Publish the exact-Mark-sharing source correction when authorized, obtain fresh exact-tree CI,
+   then run independent Reviewer certification followed by QA on the same unchanged head.
 2. Select the public domain, then complete universal HTTPS links, store fallback, and
    install-intent restoration.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
