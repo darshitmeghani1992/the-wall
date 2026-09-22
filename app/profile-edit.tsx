@@ -1,15 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { View, Pressable, Alert, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { useAuth } from "@/lib/auth";
 import { updateProfile } from "@/lib/profiles";
-import { uploadImage } from "@/lib/upload";
+import { SessionFocusFence } from "@/lib/session-generation";
+import { uploadProfileImage } from "@/lib/upload";
 import { colors, markColors } from "@/theme";
 
 const MAX_BIO = 160;
@@ -27,6 +28,7 @@ const MAX_AVATAR_BYTES = 6 * 1024 * 1024;
 export default function ProfileEdit() {
   const router = useRouter();
   const { session, profile, refreshProfile } = useAuth();
+  const actorId = session?.user.id ?? null;
 
   const [name, setName] = useState(profile?.display_name ?? "");
   const [bio, setBio] = useState(profile?.bio ?? "");
@@ -40,6 +42,29 @@ export default function ProfileEdit() {
   // keep whatever avatar the profile already has.
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "uploading" | "saving">("idle");
+  const actionFence = useRef(new SessionFocusFence());
+  const currentActorId = useRef<string | null>(actorId);
+  const actionInFlight = useRef(false);
+  currentActorId.current = actorId;
+
+  useFocusEffect(useCallback(() => {
+    actionFence.current.focus(actorId);
+    actionInFlight.current = false;
+    setPhase("idle");
+    setName(profile?.display_name ?? "");
+    setBio(profile?.bio ?? "");
+    setInstagram(profile?.instagram ?? "");
+    setTiktok(profile?.tiktok ?? "");
+    setYoutube(profile?.youtube ?? "");
+    setX(profile?.x ?? "");
+    setWebsite(profile?.website ?? "");
+    setAvatarUri(null);
+    return () => {
+      actionFence.current.blur();
+      actionInFlight.current = false;
+      setPhase("idle");
+    };
+  }, [actorId, profile]));
 
   const busy = phase !== "idle";
   const trimmedName = name.trim();
@@ -54,47 +79,69 @@ export default function ProfileEdit() {
   );
 
   async function pickAvatar() {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (res.canceled) return;
-    const asset = res.assets[0];
-    if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) {
-      Alert.alert("That photo is too big", "Please pick an image under 6 MB.");
-      return;
+    const token = actionFence.current.begin(actorId);
+    if (!token || actionInFlight.current) return;
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!actionFence.current.isCurrent(token, currentActorId.current) || res.canceled) return;
+      const asset = res.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) {
+        Alert.alert("That photo is too big", "Please pick an image under 6 MB.");
+        return;
+      }
+      setAvatarUri(asset.uri);
+    } catch {
+      if (actionFence.current.isCurrent(token, currentActorId.current)) {
+        Alert.alert("Couldn't open your photos", "Check photo access and try again.");
+      }
     }
-    setAvatarUri(asset.uri);
   }
 
   async function save() {
-    if (!session?.user || !canSave) return;
+    const token = actionFence.current.begin(actorId);
+    if (!token || !canSave || actionInFlight.current) return;
+    const submission = {
+      display_name: trimmedName,
+      bio: bio.trim() || null,
+      instagram: instagram.trim() || null,
+      tiktok: tiktok.trim() || null,
+      youtube: youtube.trim() || null,
+      x: x.trim() || null,
+      website: website.trim() || null,
+    };
+    const selectedAvatarUri = avatarUri;
+    actionInFlight.current = true;
     try {
       let avatar_url: string | undefined;
-      if (avatarUri) {
+      if (selectedAvatarUri) {
         setPhase("uploading");
-        avatar_url = await uploadImage(avatarUri, `avatars/${session.user.id}`);
+        avatar_url = await uploadProfileImage(token.userId, selectedAvatarUri);
+        if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
       }
       setPhase("saving");
-      await updateProfile(session.user.id, {
-        display_name: trimmedName,
-        bio: bio.trim() || null,
-        instagram: instagram.trim() || null,
-        tiktok: tiktok.trim() || null,
-        youtube: youtube.trim() || null,
-        x: x.trim() || null,
-        website: website.trim() || null,
+      await updateProfile(token.userId, {
+        ...submission,
         ...(avatar_url ? { avatar_url } : {}),
       });
+      if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
       await refreshProfile();
+      if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
       if (router.canGoBack()) router.back();
       else router.replace("/profile");
     } catch (e: any) {
-      Alert.alert("Couldn't save your profile", e?.message ?? "Please try again.");
+      if (actionFence.current.isCurrent(token, currentActorId.current)) {
+        Alert.alert("Couldn't save your profile", e?.message ?? "Please try again.");
+      }
     } finally {
-      setPhase("idle");
+      if (actionFence.current.isCurrent(token, currentActorId.current)) {
+        actionInFlight.current = false;
+        setPhase("idle");
+      }
     }
   }
 
@@ -117,7 +164,7 @@ export default function ProfileEdit() {
 
       {/* Avatar */}
       <View style={{ alignItems: "center", marginBottom: 24 }}>
-        <Pressable onPress={pickAvatar} disabled={busy} accessibilityRole="button" accessibilityLabel="Change profile photo">
+        <Pressable onPress={() => void pickAvatar()} disabled={busy || !actorId} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: busy || !actorId }}>
           <View
             style={{
               width: 96,
@@ -260,8 +307,8 @@ export default function ProfileEdit() {
             label={phase === "uploading" ? "Uploading photo…" : phase === "saving" ? "Saving…" : "Save changes"}
             variant="primary"
             loading={busy}
-            disabled={!canSave}
-            onPress={save}
+            disabled={!canSave || !actorId}
+            onPress={() => void save()}
           />
         </View>
       </View>

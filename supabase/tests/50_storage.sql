@@ -18,7 +18,10 @@ insert into storage.objects (id, bucket_id, name, owner) values
      '11111111-1111-1111-1111-111111111111'),
   ('dddddddd-dddd-dddd-dddd-ddddddddddd2','attachments',
      'avatars/22222222-2222-2222-2222-222222222222/pic.png',
-     '22222222-2222-2222-2222-222222222222');
+     '22222222-2222-2222-2222-222222222222'),
+  ('dddddddd-dddd-dddd-dddd-ddddddddddd3','attachments',
+     'avatars/11111111-1111-1111-1111-111111111111/old.png',
+     '11111111-1111-1111-1111-111111111111');
 
 -- ── Reproducibility (F6): the bucket is defined in source and public ─────────
 do $$
@@ -76,16 +79,17 @@ BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
 do $$
+declare denied boolean := false;
 begin
-  insert into storage.objects (bucket_id, name)
-  values ('attachments','marks/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/y.png');
-  if not exists (select 1 from storage.objects
-                 where name = 'marks/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/y.png') then
-    raise exception 'STORAGE FAIL: authenticated could not write under marks/';
-  end if;
+  begin
+    insert into storage.objects (bucket_id, name)
+    values ('attachments','marks/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/y.png');
+  exception when others then denied := true;
+  end;
+  if not denied then raise exception 'STORAGE FAIL: legacy public marks/ upload remained writable'; end if;
 end $$;
 ROLLBACK;
-\echo 'STORAGE (write marks/ prefix)      : PASS  (marks/… allowed)'
+\echo 'STORAGE (legacy marks/ write)      : PASS  (denied pending private media)'
 
 -- ── Authenticated write to ANOTHER user's avatar folder → DENIED ─────────────
 BEGIN;
@@ -149,13 +153,17 @@ begin
   if not exists (select 1 from storage.objects where id = 'dddddddd-dddd-dddd-dddd-ddddddddddd2') then
     raise exception 'STORAGE FAIL: deleted another user''s object';
   end if;
-  -- A's own object: deletes
+  -- A's own legacy Mark object is frozen until protected-media migration.
   delete from storage.objects where id = 'dddddddd-dddd-dddd-dddd-ddddddddddd1';
-  if exists (select 1 from storage.objects where id = 'dddddddd-dddd-dddd-dddd-ddddddddddd1') then
-    raise exception 'STORAGE FAIL: could not delete own object';
+  if not exists (select 1 from storage.objects where id = 'dddddddd-dddd-dddd-dddd-ddddddddddd1') then
+    raise exception 'STORAGE FAIL: client deleted a legacy Mark object';
+  end if;
+  delete from storage.objects where id = 'dddddddd-dddd-dddd-dddd-ddddddddddd3';
+  if exists (select 1 from storage.objects where id = 'dddddddd-dddd-dddd-dddd-ddddddddddd3') then
+    raise exception 'STORAGE FAIL: could not delete own avatar object';
   end if;
 end $$;
 ROLLBACK;
-\echo 'STORAGE (delete own only)          : PASS  (own deleted; other''s protected)'
+\echo 'STORAGE (delete boundaries)        : PASS  (avatar own-only; legacy Mark frozen)'
 
 \echo '── 50_storage: ALL PASS (F6 storage + reproducibility) ──'

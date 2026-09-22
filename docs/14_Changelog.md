@@ -3,7 +3,36 @@
 Version-per-feature log for The Wall (Expo app). Newest first. Bump the
 minor version per shipped slice; note schema/doc changes.
 
+Historical entries describe what existed at that version. The Master Build Specification v1.1
+and current Product/Architecture documents supersede prototype-era scope such as comments, games,
+doodles, polls, awards, predictions, and public Mark-media storage.
+
 ## Unreleased
+- Reconciled Product, flow, acceptance, edge-case, database, and architecture summaries with the
+  Master Build Specification: comments, doodles, games, polls, awards, and predictions are no
+  longer presented as missing MVP launch work.
+- Removed the unused React Native Skia dependency retained from the excluded Doodle prototype.
+- Added a direct Discover action to empty Followers/Following lists.
+- Hardened Wall/social read resilience: follower lists and profile counts now
+  reject stale account/route responses and expose retries; primary Marks remain
+  readable when optional friend counts, follow state, social counts, or owner
+  profile enrichment fails; unavailable counts are no longer shown as zero.
+- Added a dependency-free optional-result contract test covering primary-content
+  isolation and exact-zero preservation.
+- Fixed the contextual people picker so choosing a friend opens the Mark composer
+  for that exact Wall, with account-scoped stale-response protection and retry UI.
+- Bound public `@handle` resolution and deferred-link claims to the focused account
+  and exact handle so delayed lookups cannot redirect a newer session or route.
+- Bound profile edits and avatar uploads to the account that initiated them,
+  suppressing stale picker, save, refresh, error, and navigation continuations
+  after blur, sign-out, or account switch. Onboarding now uses the same guarded
+  avatar upload boundary.
+- Cleared the remaining lint backlog across auth callback, protected-media edge
+  code/tests, worker types, and the static design reference; lint now has zero
+  errors and zero warnings.
+- Corrected reduced-motion behavior so Mark entrances and tactile Button/Mark
+  presses no longer translate or rotate when the operating system requests
+  reduced motion; calm entrance opacity remains.
 - **Product decision — core interaction model:** the primary action is leaving a
   Mark on *someone else's* wall, not your own. The dock ✚ becomes target-first
   ("whose wall?" → writer); your own wall is receive-first (self-posts secondary).

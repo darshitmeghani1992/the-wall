@@ -3,9 +3,9 @@
 --
 -- Secret = content hidden from all but the wall owner (+ service_role) and never
 -- streamed via realtime. Proves, as the acting roles:
---   • author sends `text` on a type='secret' mark → base marks.text is NULL
---   • a non-owner authenticated reader gets 0 rows from mark_secrets (RLS)
---   • the wall owner reads the content; service_role reads the content
+--   • author sends `text` on a secret=true mark → base marks.text is NULL
+--   • a non-owner is denied by the reveal RPC (0010 revoked direct client SELECT)
+--   • the wall owner reveals the content (RPC); service_role reads it directly
 --   • mark_secrets is ABSENT from supabase_realtime; marks is present
 --   • an anonymous+secret mark hides BOTH author and content on the base row
 --     while the owner reads content WITHOUT learning the author
@@ -20,48 +20,54 @@
 
 -- ── Core isolation + F1 lifecycle (one transaction, role switches) ───────────
 BEGIN;
--- A posts a plain secret on O's public shared wall (W_O; contribution 'everyone'),
--- explicitly sending the content in `text` to prove the SERVER moves it.
+-- A posts a plain secret on O's public shared wall through create_mark to prove
+-- the server moves content off the base row.
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author)
-insert into marks (id, wall_id, author_id, type, text, anonymous)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc60',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','super secret', false);
+do $$ declare result jsonb; begin
+ result:=create_mark('60000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','super secret',null,false,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '60 FAIL: secret creation returned %',result; end if;
+ perform set_config('test.mark60_secret',result->>'mark_id',true);
+end $$;
 
 -- Base row: text moved off at the write boundary.
 do $$
 begin
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
+  if (select text from marks where id = current_setting('test.mark60_secret')::uuid) is not null then
     raise exception '60 FAIL: secret base row text was not nulled';
   end if;
 end $$;
 \echo '60 (base marks.text NULL)          : PASS  (content moved off base row)'
 
--- Non-owner authenticated reader (B): 0 rows from the side table (RLS).
+-- Non-owner authenticated reader (B): the reveal RPC denies (0010 revoked the
+-- direct client SELECT, so the ONLY read path is reveal_secret, which is
+-- recipient-gated → not_authorized, never content).
 reset role;
 set local role authenticated;
 set local "test.uid" = '22222222-2222-2222-2222-222222222222';   -- B (not the owner)
 do $$
+declare r jsonb;
 begin
-  if (select count(*) from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') <> 0 then
-    raise exception '60 FAIL: non-owner read secret content from mark_secrets';
+  r := reveal_secret(current_setting('test.mark60_secret')::uuid);
+  if (r->>'reason') <> 'not_authorized' or r ? 'content' then
+    raise exception '60 FAIL: non-owner reveal_secret leaked content or was authorized: %', r;
   end if;
 end $$;
-\echo '60 (non-owner 0 rows)              : PASS  (RLS hides content from non-owner)'
+\echo '60 (non-owner denied)              : PASS  (reveal_secret gates non-owner; no content)'
 
--- Wall owner (O): reads the content.
+-- Wall owner (O): reveals the content via the one-time RPC.
 reset role;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (wall owner)
 do $$
+declare r jsonb;
 begin
-  if (select content from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc60')
-     is distinct from 'super secret' then
-    raise exception '60 FAIL: wall owner could not read the secret content';
+  r := reveal_secret(current_setting('test.mark60_secret')::uuid);
+  if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'super secret' then
+    raise exception '60 FAIL: wall owner could not reveal the secret content: %', r;
   end if;
 end $$;
-\echo '60 (owner reads content)           : PASS  (recipient sees the secret)'
+\echo '60 (owner reveals content)         : PASS  (recipient reveals the secret)'
 
 -- service_role (moderation path): reads the content via explicit grant.
 reset role;
@@ -69,7 +75,7 @@ set local role service_role;
 set local "test.uid" = '';
 do $$
 begin
-  if (select content from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc60')
+  if (select content from mark_secrets where mark_id = current_setting('test.mark60_secret')::uuid)
      is distinct from 'super secret' then
     raise exception '60 FAIL: moderation path could not read the secret content';
   end if;
@@ -101,17 +107,19 @@ do $$
 declare rejected boolean := false;
 begin
   begin
-    update marks set text = 'leak' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60';
+    update marks set text = 'leak' where id = current_setting('test.mark60_secret')::uuid;
   exception when check_violation then rejected := true;   -- marks_secret_text_null
   end;
   if not rejected then raise exception '60 FAIL: author UPDATE of secret text was not rejected'; end if;
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
+  if (select text from marks where id = current_setting('test.mark60_secret')::uuid) is not null then
     raise exception '60 FAIL: secret base text non-NULL after author UPDATE attempt';
   end if;
 end $$;
 \echo '60 (F1 author UPDATE rejected)     : PASS  (check_violation; base text stays NULL)'
 
 -- F1 lifecycle (owner): the wall owner cannot re-populate the secret's base text.
+-- (Now blocked even earlier by the authenticity guard MARK_CONTENT_AUTHOR_ONLY —
+-- an owner may never rewrite another author's content — before the secret CHECK.)
 reset role;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (wall owner)
@@ -119,21 +127,21 @@ do $$
 declare rejected boolean := false;
 begin
   begin
-    update marks set text = 'leak' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60';
-  exception when check_violation then rejected := true;   -- marks_secret_text_null
+    update marks set text = 'leak' where id = current_setting('test.mark60_secret')::uuid;
+  exception when others then rejected := true;   -- MARK_CONTENT_AUTHOR_ONLY or check_violation
   end;
   if not rejected then raise exception '60 FAIL: owner UPDATE of secret text was not rejected'; end if;
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc60') is not null then
+  if (select text from marks where id = current_setting('test.mark60_secret')::uuid) is not null then
     raise exception '60 FAIL: secret base text non-NULL after owner UPDATE attempt';
   end if;
 end $$;
-\echo '60 (F1 owner UPDATE rejected)      : PASS  (check_violation; base text stays NULL)'
+\echo '60 (F1 owner UPDATE rejected)      : PASS  (owner cannot rewrite content; base text stays NULL)'
 ROLLBACK;
 
 -- ── F1 positive: a NON-secret mark''s text UPDATE still succeeds ──────────────
 BEGIN;
 set local role authenticated;
-set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author of M_active, a sticky)
+set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A (author of M_active, a non-secret text mark)
 do $$
 begin
   update marks set text = 'edited active' where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1';
@@ -148,28 +156,30 @@ ROLLBACK;
 BEGIN;
 set local role authenticated;
 set local "test.uid" = '11111111-1111-1111-1111-111111111111';   -- A
-insert into marks (id, wall_id, author_id, type, text, anonymous)
-values ('cccccccc-cccc-cccc-cccc-cccccccccc61',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111','secret','anon super secret', true);
+do $$ declare result jsonb; begin
+ result:=create_mark('60000000-0000-4000-8000-000000000002','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','text','anon super secret',null,true,true,0,'{}'::uuid[]);
+ if result->>'status'<>'created' then raise exception '60 FAIL: Anonymous Secret creation returned %',result; end if;
+ perform set_config('test.mark60_anon_secret',result->>'mark_id',true);
+end $$;
 do $$
 begin
-  if (select author_id from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc61') is not null then
+  if (select author_id from marks where id = current_setting('test.mark60_anon_secret')::uuid) is not null then
     raise exception '60 FAIL: anon+secret base row leaks author_id';
   end if;
-  if (select text from marks where id = 'cccccccc-cccc-cccc-cccc-cccccccccc61') is not null then
+  if (select text from marks where id = current_setting('test.mark60_anon_secret')::uuid) is not null then
     raise exception '60 FAIL: anon+secret base row leaks text';
   end if;
 end $$;
--- Owner reads content WITHOUT learning the author (mark_secrets has no author col).
+-- Owner reveals content WITHOUT learning the author (mark_secrets has no author col).
 reset role;
 set local role authenticated;
 set local "test.uid" = '44444444-4444-4444-4444-444444444444';   -- O (owner)
 do $$
+declare r jsonb;
 begin
-  if (select content from mark_secrets where mark_id = 'cccccccc-cccc-cccc-cccc-cccccccccc61')
-     is distinct from 'anon super secret' then
-    raise exception '60 FAIL: owner could not read anon+secret content';
+  r := reveal_secret(current_setting('test.mark60_anon_secret')::uuid);
+  if (r->>'ok') <> 'true' or (r->>'content') is distinct from 'anon super secret' then
+    raise exception '60 FAIL: owner could not reveal anon+secret content: %', r;
   end if;
 end $$;
 ROLLBACK;

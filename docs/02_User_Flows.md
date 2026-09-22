@@ -6,7 +6,7 @@ Routes reference the Expo app under `app/`.
 ## Legend
 - `[Screen]` = a route the user sees
 - `{Decision}` = a branch
-- `(( ))` = a background/system action (DB write, realtime, push)
+- `(( ))` = a background/system action (DB write, realtime, notification)
 
 ---
 
@@ -23,24 +23,24 @@ flowchart TD
 ```
 Implemented in `app/index.tsx` (`useAuth` gate).
 
-## 2. Onboarding (signed-out → on your wall)
+## 2. Onboarding (signed-out → ready account)
 
 ```mermaid
 flowchart TD
-  D[Welcome] --> W[What is a Wall?]
-  W --> I[Choose interests]
-  I --> S[Sign in: email code OR Apple/Google]
+  D[Welcome] --> S[Sign in: email code OR Apple/Google]
   S --> V((Verify / OAuth exchange))
   V --> F[Profile setup: handle, name, bio, avatar]
   F --> X((Create profile → DB trigger auto-creates Personal Wall))
-  X --> G[Home]
+  X --> P[Choose whether to find or invite people]
+  P --> W[Short walkthrough]
+  W --> G[Original deep-link destination, Discover, or My Wall]
 ```
-Routes: `(onboarding)/welcome`, `about`, `interests`, `sign-in`, `profile-setup`.
+Legacy `about` and `interests` routes redirect into the approved activation flow.
 
 ## 3. Leave a Mark (the core loop — on SOMEONE ELSE'S wall)
 
 The primary action targets another person's wall (see `01 · Core interaction
-model`). Two entry points converge on the type picker; the target wall is always
+model`). Two entry points converge on the integrated composer; the target wall is always
 chosen *before* writing, never defaulted to self.
 
 ```mermaid
@@ -49,44 +49,24 @@ flowchart TD
   B[Any screen] --> P[Tap ✚ dock button]
   P --> WHO[Whose wall? pick a friend / search]
   WHO --> C
-  LM --> C[Create: choose Mark type]
-  C --> T{Type}
-  T -- Sticky/Roast/Secret --> WR[Writer: text + color + anonymous + live preview]
-  T -- Memory/Photo --> PH[Photo writer: pick/capture + caption]
-  T -- Poll --> PB[Poll builder: question + options]
-  T -- Award --> AW[Award picker + note]
-  T -- Prediction --> PR[Prediction: text + unlock date]
-  T -- Doodle --> DO[Doodle canvas]
-  WR --> SUB((Submit → insert Mark))
-  PH --> SUB
-  PB --> SUB
-  AW --> SUB
-  PR --> SUB
-  DO --> UP((Upload image)) --> SUB
+  LM --> C[Integrated composer]
+  C --> WR[Text plus optional Photo, Voice, or Video]
+  WR --> MODE[Optional Anonymous and Secret modes]
+  MODE --> SUB((Authorize, upload if needed, then create Mark))
   SUB --> RT((Realtime → drops onto the TARGET wall))
-  RT --> PU((Notify that wall's owner → push))
+  RT --> PU((Create in-app Alert for recipient))
   RT --> WALL[My Wall / target wall shows the new Mark]
 ```
-`✚` and Create exist; writers are the current build focus (`write/[type]`).
+The dock action opens the people picker; Wall actions open the same composer pre-aimed.
 
 ## 4. Secret reveal
 
 ```mermaid
 flowchart TD
-  M[Secret mark: blurred + '🤫 tap to reveal'] --> Tap{Tap}
-  Tap --> R[Text revealed]
-  R --> Tap2{Tap again} --> M
-```
-Implemented in `MarkView` (`SecretMark`).
-
-## 5. Prediction lifecycle
-
-```mermaid
-flowchart TD
-  C[Author writes prediction + unlock date] --> L[🔒 Locked: shows 'unlocks {date}']
-  L --> D{Now ≥ unlock date?}
-  D -- No --> L
-  D -- Yes --> U[🔮 Revealed: text shown]
+  M[Locked Secret Mark without payload] --> Tap{Recipient chooses reveal}
+  Tap --> R((Server authorizes one-time reveal before expiry))
+  R --> V[Content visible for the current reveal session]
+  R --> C((Secret becomes consumed))
 ```
 
 ## 6. Friend request
@@ -96,7 +76,7 @@ flowchart TD
   A[Find/Discover a person] --> B[Friend Wall / profile]
   B --> C[Tap Add friend]
   C --> D((Insert friendship: pending))
-  D --> E((Notify addressee → push))
+  D --> E((Create in-app Alert for addressee))
   E --> F[Addressee: Notifications / Requests]
   F --> G{Accept?}
   G -- Yes --> H((status=accepted)) --> I[Now friends: private walls + friends-only marks unlock]
@@ -121,24 +101,18 @@ flowchart TD
   end
 ```
 
-## 8. Notifications → push
+## 8. In-app Alerts
 
 ```mermaid
 flowchart TD
-  E((Someone reacts/comments/marks/requests)) --> N((Insert notification row))
-  N --> RT((Realtime → in-app badge))
-  N --> PUSH((Expo push to recipient's device))
-  PUSH --> O[Tap push] --> DEEP[Deep-link to the relevant mark/wall/request]
+  E((Someone reacts, leaves a Mark, or sends a request/invite)) --> N((Insert notification row))
+  N --> RT((In-app Alert list and unread state))
+  RT --> O[Open Alert] --> DEEP[Route to target or safe fallback]
 ```
 
-## 9. Games (plugin entry)
+Native push may be added later, but it is not a first-implementation MVP requirement.
 
-```mermaid
-flowchart TD
-  H[Home / Games] --> R[Game registry lists available games]
-  R --> S{Select game}
-  S --> E[Game EntryScreen (plugin)]
-  E --> PLAY[Play → scoring] --> REW((Reward hooks + analytics))
-  REW --> BACK[Back to Home]
-```
-See games-as-plugins in `06_Tech_Architecture.md`.
+## 9. Explicit flow exclusions
+
+Comments, games, and doodles have no MVP flow. Do not create placeholder navigation or dead-end
+entries for them.

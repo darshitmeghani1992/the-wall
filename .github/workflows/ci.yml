@@ -14,13 +14,87 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Type-check
         run: npx tsc --noEmit
 
       - name: Lint
         run: npx eslint .
+
+      - name: Client and contract tests
+        run: npm run test:contracts
+
+      - name: Expo health
+        run: npx expo-doctor
+
+      - name: Export iOS bundle
+        run: npm run export:ios
+
+      - name: Export Android bundle
+        run: npm run export:android
+
+  edge-functions:
+    name: Edge function contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run Edge function tests
+        run: deno test --no-check --allow-env supabase/functions/tests/*.test.ts
+
+  media-worker:
+    name: Media processor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install worker dependencies
+        run: npm ci --no-audit --no-fund --prefix workers/media-processor
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Build and test worker
+        run: npm test --prefix workers/media-processor
+
+  security:
+    name: DB security suite (SEC-001 + FP-C2)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The suite is pure psql/bash; the runner needs a psql client to reach the
+      # postgres service. run_tests.sh resets a throwaway DB and exits nonzero on
+      # the first failed assertion (RLS/anonymity/secret/membership are launch
+      # blockers — Master Spec §72/§100).
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run security suite
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          ADMIN_DB: postgres
+        run: bash supabase/tests/run_tests.sh

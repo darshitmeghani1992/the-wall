@@ -24,7 +24,7 @@ export default function AuthCallback() {
       }
       router.replace("/");
     })();
-  }, [code]);
+  }, [code, router]);
 
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, gap: 14 }}>

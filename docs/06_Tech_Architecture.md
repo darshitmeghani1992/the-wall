@@ -4,11 +4,10 @@
 - **Client:** Expo (React Native) + **expo-router** (file-based nav) — this repo
 - **Backend:** Supabase — Postgres, Auth, Realtime, Storage (`@supabase/supabase-js`)
 - **Animation:** react-native-reanimated (tilt, press, drop-in)
-- **Drawing:** @shopify/react-native-skia (Doodle)
 - **Lists:** @shopify/flash-list (masonry perf at scale)
-- **Media:** expo-image-picker / expo-camera / expo-image
+- **Media:** expo-image-picker / expo-camera / expo-av / expo-image + private protected-media services
 - **Blur:** expo-blur (secret reveal)
-- **Push:** expo-notifications
+- **Notifications:** in-app Alerts for MVP; push-capable architecture for later
 - **Fonts:** expo-font (Bricolage Grotesque, Geist, Space Mono)
 - **Analytics:** posthog-react-native
 - **Builds:** EAS Build / Submit
@@ -22,11 +21,11 @@ here so the two platforms are fully independent.)
 app/                       expo-router routes
   _layout.tsx              root stack, wrapped in <AuthProvider>
   index.tsx                auth gate → onboarding | setup | Home
-  (onboarding)/            welcome · about · interests · sign-in · profile-setup
-  (tabs)/                  home · walls · discover · profile (custom BottomDock)
-  create.tsx               "Leave a Mark" type picker (modal)
-  write/[type].tsx         the Writer (per-type)            [in progress]
-  wall.tsx                 My Wall (hero)
+  (onboarding)/            welcome · sign-in · profile-setup · find-people · walkthrough
+  (tabs)/                  home · discover · alerts · profile (custom BottomDock)
+  create.tsx               integrated text/photo/voice/video composer
+  people-picker.tsx        target-first global create entry
+  shared/                  Shared Wall lifecycle routes
   auth/callback.tsx        deep-link OAuth/magic-link landing
 src/
   theme/                   design tokens + type scale (single source of truth)
@@ -53,37 +52,17 @@ tilt ±2.5° with a pin/tape fastener and a 4px hard shadow.
 user's profile and exposes `signInWithEmail`/`verifyEmailOtp`/`signInWithOAuth`/
 `signOut`. The entry gate branches on `session` + `needsProfile`.
 
-## Games as plugins (architecture requirement)
+## Explicit architecture non-goals
 
-Games must **not** be wired into the wall/mark core. Each game is a self-contained
-plugin implementing a shared interface, registered in a registry the Games screen
-reads. Adding a future game = adding one plugin file + registering it; **zero**
-changes to walls/marks.
-
-```ts
-// src/games/types.ts
-export interface GamePlugin {
-  id: string;                       // 'who-said-this'
-  metadata: { title: string; blurb: string; icon: string; color: string };
-  EntryScreen: React.ComponentType<GameProps>;   // route target
-  rules: string;                                  // shown pre-game
-  score: (state: unknown) => number;              // pure scoring
-  rewardHooks?: (result: GameResult) => Promise<void>; // points/badges
-  analyticsEvents: { started: string; finished: string };
-}
-
-// src/games/registry.ts
-export const GAMES: GamePlugin[] = [whoSaidThis, roastMe, awardsNight];
-```
-- Route: `app/game/[id].tsx` looks the plugin up in `GAMES` and renders its
-  `EntryScreen`. The dock/Home lists `GAMES` metadata.
-- Reward hooks and analytics are the plugin's responsibility, keeping the core clean.
-- First three plugins: **Who Said This**, **Roast Me**, **Awards Night** (E1–E3).
+The MVP does not include comments, doodles, games, polls, awards, or predictions. Do not reserve
+routes, registries, dependencies, or core abstractions for them before a later approved scope and
+architecture decision exists.
 
 ## Environment
 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`,
 `EXPO_PUBLIC_AUTH_REDIRECT` (`thewall://auth/callback`). Providers (Email + Apple
-+ Google) and the `attachments` bucket configured in the shared Supabase project.
++ Google). Avatar storage and the private protected-media stack must follow the current migrations
+and ADR-012; public `attachments/marks/*` is retired.
 
 ## Build & release
 EAS Build produces iOS/Android binaries; EAS Submit uploads to TestFlight / Play

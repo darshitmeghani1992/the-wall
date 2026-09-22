@@ -70,6 +70,9 @@ if [ "$GUARD_HIT" -ne 0 ]; then
 fi
 echo "   PASS (no migration toggles RLS / ALTERs storage.objects)"
 
+echo "── contract: 59_media_writer_contract (Node static invariants)"
+node --test "$HERE/59_media_writer_contract.test.mjs"
+
 echo "── load: 00_bootstrap (Supabase-compat shim)"
 psql_test -f "$HERE/00_bootstrap.sql" >/dev/null
 echo "── load: 0001_init.sql"
@@ -90,22 +93,145 @@ echo "── load: 0008_friendships_guard_hardening.sql"
 psql_test -f "$MIG/0008_friendships_guard_hardening.sql" >/dev/null
 echo "── load: 0009_walls_view_membership.sql"
 psql_test -f "$MIG/0009_walls_view_membership.sql" >/dev/null
-echo "── load: 01_seed.sql"
+echo "── load: 0010_secret_reveal_lifecycle.sql"
+psql_test -f "$MIG/0010_secret_reveal_lifecycle.sql" >/dev/null
+echo "── load: 0011_mark_model_reconciliation.sql"
+psql_test -f "$MIG/0011_mark_model_reconciliation.sql" >/dev/null
+echo "── load: 0012_mark_lifecycle.sql"
+psql_test -f "$MIG/0012_mark_lifecycle.sql" >/dev/null
+echo "── load: 0013_account_lifecycle.sql"
+psql_test -f "$MIG/0013_account_lifecycle.sql" >/dev/null
+echo "── load: 0014_follows.sql"
+psql_test -f "$MIG/0014_follows.sql" >/dev/null
+echo "── load: 0015_approved_writers.sql"
+psql_test -f "$MIG/0015_approved_writers.sql" >/dev/null
+echo "── load: 0016_reactions_single.sql"
+psql_test -f "$MIG/0016_reactions_single.sql" >/dev/null
+echo "── load: 0017_moderation.sql"
+psql_test -f "$MIG/0017_moderation.sql" >/dev/null
+echo "── load: 0018_p0_authorization_contract.sql"
+psql_test -f "$MIG/0018_p0_authorization_contract.sql" >/dev/null
+echo "── load: 0019_disable_excluded_surfaces.sql"
+psql_test -f "$MIG/0019_disable_excluded_surfaces.sql" >/dev/null
+echo "── load: 0020_mark_media_foundation.sql"
+psql_test -f "$MIG/0020_mark_media_foundation.sql" >/dev/null
+echo "── load: 0021_media_worker_credentials.sql"
+psql_test -f "$MIG/0021_media_worker_credentials.sql" >/dev/null
+echo "── load: 0022_media_operations.sql"
+psql_test -f "$MIG/0022_media_operations.sql" >/dev/null
+echo "── load: 0023_mark_writer_contract.sql"
+psql_test -f "$MIG/0023_mark_writer_contract.sql" >/dev/null
+# The disposable suite has no legacy inventory, so complete the zero-row
+# reconciliation before exercising the guarded final cutover in release order.
+echo "── fixture: complete empty legacy-media reconciliation"
+psql_test -c "update media_legacy_reconciliation set state='complete', completed_at=clock_timestamp() where singleton;" >/dev/null
+echo "── load: 0024_mark_creation_cutover.sql"
+psql_test -f "$MIG/0024_mark_creation_cutover.sql" >/dev/null
+# This fixture exists before 0025 so the suite proves the established-account
+# backfill without changing the shared seed contract.
+echo "── fixture: pre-0025 established account"
+psql_test -c "insert into auth.users (id,email) values ('99999999-9999-9999-9999-999999999999','established@test'); insert into profiles (id,handle,display_name) values ('99999999-9999-9999-9999-999999999999','established','Established');" >/dev/null
+echo "── load: 0025_activation_foundation.sql"
+psql_test -f "$MIG/0025_activation_foundation.sql" >/dev/null
+echo "── load: 01_seed.sql (pre-lifecycle cutover fixtures)"
 psql_test -f "$HERE/01_seed.sql" >/dev/null
+echo "── assertion: 70_wall_members (legacy direct-write contract before cutover)"
+psql_test -f "$HERE/70_wall_members.sql" >/dev/null
+echo "── load: 0026_shared_wall_lifecycle.sql"
+psql_test -f "$MIG/0026_shared_wall_lifecycle.sql" >/dev/null
+echo "── load: 0027_actor_bound_safety_mutations.sql"
+psql_test -f "$MIG/0027_actor_bound_safety_mutations.sql" >/dev/null
+echo "── replay: 0027_actor_bound_safety_mutations.sql (idempotence)"
+psql_test -f "$MIG/0027_actor_bound_safety_mutations.sql" >/dev/null
+echo "── load: 0028_blocked_users_management.sql"
+psql_test -f "$MIG/0028_blocked_users_management.sql" >/dev/null
+echo "── replay: 0028_blocked_users_management.sql (idempotence)"
+psql_test -f "$MIG/0028_blocked_users_management.sql" >/dev/null
+echo "── load: 0029_actor_bound_account_reactivation.sql"
+psql_test -f "$MIG/0029_actor_bound_account_reactivation.sql" >/dev/null
+echo "── replay: 0029_actor_bound_account_reactivation.sql (idempotence)"
+psql_test -f "$MIG/0029_actor_bound_account_reactivation.sql" >/dev/null
+echo "── load: 0030_actor_bound_admin_moderation.sql"
+psql_test -f "$MIG/0030_actor_bound_admin_moderation.sql" >/dev/null
+echo "── replay: 0030_actor_bound_admin_moderation.sql (idempotence)"
+psql_test -f "$MIG/0030_actor_bound_admin_moderation.sql" >/dev/null
+echo "── load: 0031_recoverable_account_deletion.sql"
+psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
+echo "── replay: 0031_recoverable_account_deletion.sql (idempotence)"
+psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
-for area in 10_friendships 20_blocking 30_anonymity 40_mark_moderation 50_storage \
-            60_secret_marks 70_wall_members 80_notifications 90_profile_links; do
+for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 55_approved_writers 56_personal_contribution_contract 50_storage \
+            51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
+            58_activation_foundation \
+            60_secret_marks 61_secret_reveal 71_shared_wall_lifecycle 80_notifications 85_moderation 90_profile_links \
+            95_account_lifecycle 96_actor_bound_safety_mutations 97_actor_bound_account_reactivation 98_actor_bound_admin_moderation \
+            99_recoverable_account_deletion; do
   psql_test -f "$HERE/$area.sql"
   echo ""
 done
+
+echo ""
+echo "── assertion: 54_media_quota_concurrency (two physical sessions)"
+bash "$HERE/54_media_quota_concurrency.sh"
+
+echo ""
+echo "── assertion: 55_media_linearization (two physical sessions)"
+bash "$HERE/55_media_linearization.sh"
+
+echo ""
+echo "── assertion: 57_media_worker_credentials_races (two physical sessions)"
+bash "$HERE/57_media_worker_credentials_races.sh"
+
+echo ""
+echo "── assertion: 58_media_operations_races (two physical sessions)"
+bash "$HERE/58_media_operations_races.sh"
+
+echo ""
+echo "── assertion: 59_media_writer_races (two physical sessions)"
+bash "$HERE/59_media_writer_races.sh"
+
+echo ""
+echo "── assertion: 59_mark_creation_cutover (gate + post-cutover boundary)"
+bash "$HERE/59_mark_creation_cutover.sh"
+
+echo ""
+echo "── assertion: 71_shared_wall_upgrade (legacy reconciliation)"
+bash "$HERE/71_shared_wall_upgrade.sh"
+
+echo ""
+echo "── assertion: 72_shared_wall_races (two physical sessions)"
+bash "$HERE/72_shared_wall_races.sh"
+
+echo ""
+echo "── assertion: 96_actor_bound_safety_races (two physical sessions)"
+bash "$HERE/96_actor_bound_safety_races.sh"
+
+echo ""
+echo "── assertion: 99_recoverable_account_deletion_races (two physical sessions)"
+bash "$HERE/99_recoverable_account_deletion_races.sh"
+
+echo ""
+echo "── assertion: 99_recoverable_account_deletion_rollback_race (two physical sessions)"
+bash "$HERE/99_recoverable_account_deletion_rollback_race.sh"
+
+echo ""
+echo "── rollback: 0031_recoverable_account_deletion_preapply"
+psql_test -f "$HERE/../rollbacks/0031_recoverable_account_deletion_preapply.sql" >/dev/null
+psql_test -f "$HERE/99_recoverable_account_deletion_rollback.sql"
+echo "── reapply: 0031_recoverable_account_deletion.sql after rollback"
+psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
+psql_test -f "$HERE/99_recoverable_account_deletion.sql"
 
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ✔ ALL ASSERTIONS PASSED"
 echo "   SEC-001 (AC-S1…AC-S10 + moderator-read + storage)"
 echo "   FP-C2  (secret isolation + F1 lifecycle, membership gating, 5"
 echo "           notification triggers, profile links)"
+echo "   MEDIA-C1.1 (credential fence + key lifecycle + atomic callback receipts)"
+echo "   MEDIA-C1.3 (writer cancellation + caption/status contract + final cutover)"
+echo "   ACTOR-BOUND (account lifecycle + safety removal + audited admin moderation)"
 echo "══════════════════════════════════════════════════════════════════════"

@@ -38,7 +38,25 @@ insert into profiles (id, handle, display_name) values
   ('66666666-6666-6666-6666-666666666666','eve','Eve'),
   ('77777777-7777-7777-7777-777777777777','frank','Frank'),   -- [C2]
   ('88888888-8888-8888-8888-888888888888','grace','Grace');   -- [C2]
--- (profiles_personal_wall trigger creates one personal wall per user; ignored.)
+-- The activation trigger correctly creates new Personal Walls with production
+-- defaults (private/friends/Anonymous OFF). This shared legacy harness predates
+-- that change and its social/privacy suites intentionally use public Personal
+-- Walls with Anonymous enabled as their neutral baseline. Restore that fixture
+-- contract centrally; 58_activation_foundation creates separate new profiles
+-- and independently proves the production defaults without this override.
+update walls
+   set visibility='public', contribution_policy='friends', allow_anonymous=true
+ where type='personal'
+   and owner_id in (
+     '11111111-1111-1111-1111-111111111111',
+     '22222222-2222-2222-2222-222222222222',
+     '33333333-3333-3333-3333-333333333333',
+     '44444444-4444-4444-4444-444444444444',
+     '55555555-5555-5555-5555-555555555555',
+     '66666666-6666-6666-6666-666666666666',
+     '77777777-7777-7777-7777-777777777777',
+     '88888888-8888-8888-8888-888888888888'
+   );
 
 -- Explicit shared test wall: public, contribution 'everyone', allows anonymous.
 insert into walls (id, owner_id, type, name, visibility, contribution_policy, allow_anonymous, require_approval)
@@ -64,10 +82,10 @@ insert into blocks (blocker_id, blocked_id) values
 insert into marks (id, wall_id, author_id, type, text, anonymous, status) values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-   '11111111-1111-1111-1111-111111111111','sticky','active mark', false, 'active'),
+   '11111111-1111-1111-1111-111111111111','text','active mark', false, 'active'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-   '11111111-1111-1111-1111-111111111111','sticky','pending mark', false, 'pending');
+   '11111111-1111-1111-1111-111111111111','text','pending mark', false, 'pending');
 
 -- ── [C2] Batch-C fixtures (additive; existing fixtures above unchanged) ──────
 -- Private SHARED wall owned by O. visibility 'private' + contribution 'nobody'
@@ -89,6 +107,7 @@ values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
 -- Membership on W_PS: B accepted (view/contribute fixture), F pending (accept /
 -- invite-notification fixture). O needs no membership row (owner via walls.owner_id).
 insert into wall_members (wall_id, user_id, role, status) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','member','accepted'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','22222222-2222-2222-2222-222222222222','member','accepted'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','77777777-7777-7777-7777-777777777777','member','pending');
 

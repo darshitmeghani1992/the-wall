@@ -1,84 +1,38 @@
 # 05 · Database
 
-Postgres on Supabase. The Wall's schema is created by
-`supabase/migrations/0001_init.sql` (idempotent) in **The Wall's own Supabase
-project**.
+This file is a navigation summary, not a duplicate schema specification. The ordered files in
+`supabase/migrations/` are the executable database source of truth; the security suite in
+`supabase/tests/` is the executable authorization contract. Never apply only `0001_init.sql` or
+use this summary to recreate a hosted environment.
 
-## Enums
-`wall_type(personal|shared)` · `wall_visibility(public|private|invite_only)` ·
-`contribution_policy(everyone|friends|selected|nobody)` ·
-`mark_type(sticky|roast|secret|memory|photo|award|poll|doodle|prediction)` ·
-`mark_status(active|pending|hidden|removed)` ·
-`friendship_status(pending|accepted|blocked)`
+## Current stable boundaries
 
-## Tables
+- One Personal Wall is created per profile; users may also own and join Shared Walls.
+- Wall visibility and contribution permission are separate and enforced on the server.
+- Canonical Mark content types are `text`, `photo`, `voice`, and `video`.
+- Anonymous and Secret are modes. Secret payloads use their restricted one-time lifecycle and are
+  never copied into ordinary Mark or notification payloads.
+- Comments, polls, awards, predictions, doodles, and games are excluded from the MVP. Legacy
+  prototype tables or enum values may remain for migration compatibility but are not active
+  product contracts.
+- Friendships, follows, approved writers, blocking, reactions, Alerts, reports, Shared Wall
+  membership, moderation, and account lifecycle are server-authorized.
+- Client mutations that can cross an account switch are bound to the expected authenticated actor.
+- Mark media uses the private protected-media design in ADR-012. The public `attachments` bucket is
+  not a supported Mark-media path; retained avatar use follows the current migrations and runbooks.
+- Recoverable account deletion is defined by migration `0031` and its product/architecture
+  artifacts. Hosted application and scheduler configuration remain separate release gates.
 
-### `profiles`
-`id (=auth.users.id, PK)`, `handle (unique)`, `display_name`, `avatar_url`,
-`bio`, `interests text[]`, `created_at`.
+## Authoritative references
 
-### `walls`
-`id`, `owner_id`, `type`, `name`, `visibility`, `contribution_policy`,
-`allow_anonymous`, `require_approval`, `created_at`.
-Unique partial index: **one `personal` wall per owner**.
+- Product behavior: `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`
+- Ordered schema and RLS: `supabase/migrations/`
+- Executable database verification: `supabase/tests/run_tests.sh`
+- Protected media: `docs/architecture/ADR-012-protected-mark-media.md`
+- Deferred destinations: `docs/architecture/ADR-013-durable-deferred-destination.md`
+- Recoverable deletion: `docs/architecture/FP-ACL-002-recoverable-account-deletion.md`
+- Current evidence boundary: `docs/BUILD_STATUS.md`
 
-### `marks`
-`id`, `wall_id`, `author_id`, `type`, `text`, `color`, `anonymous`, `media_url`,
-`payload jsonb`, `rotation`, `pinned`, `status`, `created_at`.
-`payload` holds type-specifics: poll `{question, options}`, award `{award}`,
-prediction `{unlock_at}`, doodle `{width,height}`.
-Indexes: `(wall_id, created_at desc)`, `(author_id)`.
-
-### `mark_reactions`
-PK `(mark_id, user_id, emoji)`.
-
-### `comments`
-`id`, `mark_id`, `author_id`, `body`, `created_at`.
-
-### `poll_votes`
-PK `(mark_id, user_id)`, `option_index`.
-
-### `friendships`
-PK `(requester_id, addressee_id)`, `status`, `created_at`, check `requester ≠ addressee`.
-
-### `notifications`
-`id`, `user_id (recipient)`, `actor_id`, `kind`, `mark_id`, `wall_id`, `read`, `created_at`.
-
-### `reports`
-`id`, `reporter_id`, `mark_id`, `reason`, `created_at`.
-
-## Helper functions (SECURITY DEFINER)
-- `are_friends(a,b)` → accepted friendship either direction.
-- `can_view_wall(wid,uid)` → public OR owner OR (private AND friends).
-- `can_contribute(wid,uid)` → owner OR everyone OR (friends AND are_friends).
-
-## Triggers
-- `profiles_personal_wall` — after insert on `profiles`, auto-create the Personal Wall.
-- `marks_set_defaults` — before insert on `marks`: reject anonymous when the wall
-  forbids it; set `status` (`active` for owner, `pending` when the wall requires
-  approval, else `active`).
-
-## RLS (summary — see migration for exact policies)
-- **profiles:** world-readable; write only your own row.
-- **walls:** visible per visibility rules; only owner writes.
-- **marks:** viewable if you can view the wall AND (`active` OR you're the author
-  OR you own the wall); insert requires `author = you` AND `can_contribute`;
-  update/delete by author or wall owner.
-- **reactions/comments/poll_votes:** readable with the mark; write as yourself;
-  owner can also delete comments.
-- **friendships:** either party reads; requester inserts; either updates/deletes.
-- **notifications:** recipient reads/updates own; inserts via trigger/service role.
-- **reports:** insert as yourself; reads are service-role only.
-
-## Realtime
-Publication includes `marks`, `mark_reactions`, `comments`, `notifications`.
-
-## Storage
-Public bucket **`attachments`** holds avatars, mark photos,
-and doodle PNGs. Path convention: `avatars/{userId}/…`, `marks/{wallId}/…`.
-
-## Pending schema (add as features land)
-- Notification inserts: add DB triggers on marks/reactions/comments/friendships
-  (or a service-role writer) — currently the table & RLS exist, the producers do not.
-- Rate-limit / audit tables (see `12_Security.md`).
-- Editable-window + `edited_at` on marks (acceptance criteria for Sticky editing).
+Any schema change must be an additive-first migration, receive the applicable Two-Key review, pass
+the full database security suite and replay checks, and remain unapplied to hosted environments
+until separately authorized.

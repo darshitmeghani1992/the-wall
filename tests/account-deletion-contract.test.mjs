@@ -1,0 +1,120 @@
+/* eslint-disable import/namespace -- Node loads this dependency-free TypeScript module directly. */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import {
+  canOfferAccountRecovery,
+  parseAccountDeletionRequest,
+  parseCurrentAccountDeletion,
+  reconcileCommittedDeletion,
+} from "../src/lib/account-deletion-contract.ts";
+
+const scheduled = {
+  status: "scheduled",
+  requested_at: "2026-09-18T10:00:00.000Z",
+  purge_after: "2026-10-18T10:00:00.000Z",
+};
+
+test("deletion responses accept only the exact server envelope", () => {
+  assert.deepEqual(parseAccountDeletionRequest(scheduled), {
+    status: "scheduled",
+    requestedAt: scheduled.requested_at,
+    purgeAfter: scheduled.purge_after,
+  });
+  assert.deepEqual(parseAccountDeletionRequest({
+    status: "owner_action_required",
+    owned_shared_wall_count: 2,
+  }), { status: "owner_action_required", ownedSharedWallCount: 2 });
+  assert.deepEqual(parseAccountDeletionRequest({ status: "invalid_confirmation" }), {
+    status: "invalid_confirmation",
+  });
+  assert.throws(
+    () => parseAccountDeletionRequest({ ...scheduled, unexpected: true }),
+    /invalid/,
+  );
+  assert.throws(
+    () => parseAccountDeletionRequest({ status: "owner_action_required", owned_shared_wall_count: 0 }),
+    /invalid/,
+  );
+  assert.throws(
+    () => parseAccountDeletionRequest({
+      ...scheduled,
+      purge_after: "2026-09-17T10:00:00.000Z",
+    }),
+    /invalid/,
+  );
+});
+
+test("current deletion status is narrow and actor-relative", () => {
+  assert.deepEqual(parseCurrentAccountDeletion({ status: "none" }), { status: "none" });
+  assert.equal(parseCurrentAccountDeletion(scheduled).status, "scheduled");
+  assert.equal(parseCurrentAccountDeletion({ ...scheduled, status: "expired" }).status, "expired");
+  assert.throws(() => parseCurrentAccountDeletion({ status: "none", user_id: "other" }), /invalid/);
+});
+
+test("recovery is offered only after an authoritative restorable status", () => {
+  assert.equal(canOfferAccountRecovery("loading", null), false);
+  assert.equal(canOfferAccountRecovery("error", null), false);
+  assert.equal(canOfferAccountRecovery("ready", null), false);
+  assert.equal(canOfferAccountRecovery("ready", {
+    status: "expired",
+    requestedAt: scheduled.requested_at,
+    purgeAfter: scheduled.purge_after,
+  }), false);
+  assert.equal(canOfferAccountRecovery("ready", { status: "none" }), true);
+  assert.equal(canOfferAccountRecovery("ready", {
+    status: "scheduled",
+    requestedAt: scheduled.requested_at,
+    purgeAfter: scheduled.purge_after,
+  }), true);
+});
+
+test("a post-commit refresh failure is never reported as a scheduling failure", async () => {
+  let navigated = false;
+  const failure = new Error("route refresh unavailable");
+  const result = await reconcileCommittedDeletion({
+    isCurrent: () => true,
+    refreshAccountRoute: async () => { throw failure; },
+    navigateToCanonicalGate: () => { navigated = true; },
+  });
+  assert.deepEqual(result, { status: "refresh_failed", cause: failure });
+  assert.equal(navigated, false);
+});
+
+test("committed deletion reconciliation suppresses stale navigation", async () => {
+  let navigated = false;
+  const result = await reconcileCommittedDeletion({
+    isCurrent: () => false,
+    refreshAccountRoute: async () => undefined,
+    navigateToCanonicalGate: () => { navigated = true; },
+  });
+  assert.deepEqual(result, { status: "stale" });
+  assert.equal(navigated, false);
+});
+
+test("delete-account screen requires strong confirmation and names destructive scope", () => {
+  const source = readFileSync("app/delete-account.tsx", "utf8");
+  assert.match(source, /confirmation !== "DELETE"/);
+  assert.match(source, /requestAccountDeletion\(token\.userId, confirmation\)/);
+  assert.match(source, /Every Mark you authored/);
+  assert.match(source, /Resolve Shared Wall ownership/);
+  assert.match(source, /reconcileCommittedDeletion/);
+  assert.match(source, /Deletion scheduled/);
+});
+
+test("recovery tells scheduled deletion apart from ordinary deactivation", () => {
+  const source = readFileSync("app/account-recovery.tsx", "utf8");
+  assert.match(source, /getCurrentAccountDeletion\(\)/);
+  assert.match(source, /Cancel deletion and restore/);
+  assert.match(source, /deletion\.purgeAfter/);
+  assert.match(source, /timeStyle: "long"/);
+  assert.match(source, /canOfferAccountRecovery\(statusLoadState, deletion\)/);
+  assert.match(source, /statusLoadState === "error"/);
+  assert.match(source, /Retry status check/);
+  assert.doesNotMatch(source, /deletion\?\.status !== "expired" \? \(/);
+});
+
+test("input associates its visual label with the native control", () => {
+  const source = readFileSync("src/components/Input.tsx", "utf8");
+  assert.match(source, /accessibilityLabel=\{accessibilityLabel \?\? label\}/);
+});

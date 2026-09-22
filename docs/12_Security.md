@@ -1,7 +1,8 @@
 # 12 · Security *(living)*
 
-Security is specified here, not left to implementation. Items are marked
-`[in place]` when built.
+This is a human-readable checklist. Executable authority lives in ordered migrations, the complete
+database security suite, Edge/worker contracts, and the approved architecture records. Current
+evidence and unverified hosted boundaries are tracked in `BUILD_STATUS.md`.
 
 ## Access control
 - **RLS is the boundary** — every table denies by default; policies grant the
@@ -13,16 +14,19 @@ Security is specified here, not left to implementation. Items are marked
 ## Abuse prevention
 | Control | Intent | Status |
 |---|---|---|
-| Rate limiting | Cap marks/comments/requests per user per window | ⬜ |
+| Rate limiting | Cap Marks and relationship requests per user per window | ⬜ |
 | Spam detection | Flag repeated/near-duplicate content | ⬜ |
 | Profanity/slur filter | Block or flag per policy (configurable) | ⬜ |
 | Report flow | Users flag marks; owner/mods review | ⬜ (table exists) |
 | Moderation queue | Owner approves pending marks | ⬜ |
 
 ## Media
-- **Type validation** — images only for photo/avatar/doodle. ⬜ enforce server-side
-- **Size limits** — ≤6 MB profile/mark images. `[partial]` client-checked in `upload.ts`
+- **Type validation** — protected photo/voice/video processing is allowlisted and validated. `[in source/CI]`
+- **Size limits** — per-kind reservation and processing limits are server-enforced. `[in source/CI]`
 - **Content scanning** — consider on-upload checks for disallowed content. ⬜
+
+Hosted Storage/worker interoperability, cleanup, signed reads, and legacy reconciliation remain
+release gates; green source CI is not evidence that they ran in a hosted environment.
 
 ## Platform / transport
 - HTTPS everywhere via the agent/Supabase; never disable TLS verification.
