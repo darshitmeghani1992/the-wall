@@ -6,7 +6,7 @@
 > **Next Actions**. Product authority remains the Master Build Spec. Governance authority remains
 > `docs/aios/`.
 
-_Last updated: 2026-09-19._
+_Last updated: 2026-09-22._
 
 ## Corrective candidate under exact-tree certification
 
@@ -17,10 +17,12 @@ evidence is absent. The last independently certified checkpoint remains **63%** 
 source-and-CI boundary. These figures measure different boundaries and must not be interchanged.
 
 - Draft PR: `#22`; the candidate is published only to the unmerged draft branch
-- Latest exact-head CI evidence: run `169` (`35436137965`) passed all four jobs on remote head
-  `4d5636cd0844639c4c54ffcf142e0d7ef05dbd05` (tree
-  `788ff3d37eb73ac186dbe644acc66a74ff931698`); the subsequent product/architecture scope
-  reconciliation and unused-Skia removal require their own exact-tree run and review
+- Latest published candidate: remote head `b1ee22ff70a3b0f9ad6ee27e462a2f8b5a9b58d4`
+  (tree `0deab208e5e5b54f12b8312239a84ed32cd92bb8`)
+- Exact-head CI evidence: run `171` (`35437580725`) passed all four jobs on that candidate
+- Independent Reviewer decision: **REQUEST CHANGES** on 2026-09-22, bound to the exact head/tree
+  above, because this file and `docs/handoffs/CURRENT.md` still described already-published work
+  as a future candidate; executable checks otherwise passed
 - Certification rule: only the latest CI-green PR head with independent Reviewer approval and QA
   pass may become the next source-and-CI checkpoint; live evidence is tracked on draft PR `#22`
 - Delivery state: **draft, unmerged, undeployed**
@@ -186,8 +188,8 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Next Actions
 
-1. Publish the scope/documentation reconciliation and unused dependency removal, then obtain
-   fresh exact-tree CI and independent review.
+1. Publish the documentation-only continuity correction, obtain fresh exact-tree CI, and restart
+   independent Reviewer certification followed by QA on the unchanged new head.
 2. Select the public domain, then complete universal HTTPS links, store fallback, and
    install-intent restoration.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.

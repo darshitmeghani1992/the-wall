@@ -3,7 +3,7 @@
 > Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
 > authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
-## Corrective candidate — 2026-09-19
+## Corrective candidate — 2026-09-22
 
 Draft PR `#22` has a corrective candidate under exact-tree certification. Source implementation remains about
 80%; the prior third-party audit estimated 76% source + CI and 46% production readiness because
@@ -11,8 +11,9 @@ hosted/device/release evidence is absent. The last independent source-and-CI cer
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate | `4d5636cd0844639c4c54ffcf142e0d7ef05dbd05` (tree `788ff3d37eb73ac186dbe644acc66a74ff931698`) |
-| CI | Run `169` (`35436137965`) passed all four jobs on that exact remote head |
+| Remote candidate | `b1ee22ff70a3b0f9ad6ee27e462a2f8b5a9b58d4` (tree `0deab208e5e5b54f12b8312239a84ed32cd92bb8`) |
+| CI | Run `171` (`35437580725`) passed all four jobs on that exact remote head |
+| Independent review | **REQUEST CHANGES** on 2026-09-22: canonical continuity files were stale; executable checks passed |
 | Certification | Requires CI green + independent Reviewer APPROVE + QA PASS on one unchanged PR head |
 | Delivery state | Draft, unmerged, undeployed |
 
@@ -23,11 +24,14 @@ rollback from concurrent requests, continues deletion batches after a per-accoun
 associates input labels with native controls. Universal-link/store-fallback work is blocked only on the public domain selection. Hosted
 execution and physical-device validation remain later gates.
 
-The next local candidate reconciles the supporting Product/Architecture documents with the Master
+The published candidate reconciles the supporting Product/Architecture documents with the Master
 Build Specification, removes excluded prototype features from the launch backlog, and removes the
-unused Skia native dependency left by the excluded Doodle feature. TypeScript, lint, all 74
-client/contract tests, Expo Doctor 17/17, and iOS/Android exports pass locally; publish it to the
-draft PR, then bind fresh CI and independent review to the new exact head.
+unused Skia native dependency left by the excluded Doodle feature. Fresh independent verification
+on 2026-09-22 passed TypeScript, lint, all 74 client/contract tests, Expo Doctor 17/17, both mobile
+exports, and all 31 media-worker tests. This documentation-only remediation corrects this handoff,
+`docs/BUILD_STATUS.md`, and the dependency-risk wording in `docs/TECHNICAL_DEBT.md`. GitHub is
+authoritative for the resulting exact commit/tree; bind fresh CI, Reviewer, and QA decisions to
+that unchanged published head.
 
 ## Certified draft checkpoint — 2026-09-15
 
