@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-22
 **Role:** Frontend
-**Base:** draft PR `#22` certified head `5a8db8042c9cc5e22aeadf55860d5a0a847ea500`
+**Built from:** draft PR `#22` parent `5a8db8042c9cc5e22aeadf55860d5a0a847ea500`
 
 ## Built
 
@@ -38,9 +38,10 @@ native configuration, domain, external service, dependency, or protected-media c
   it was not exercised on a physical device in this pass.
 - Universal HTTPS/App Links, install/store fallback, and public-domain association remain separate
   work and are not claimed complete.
-- Publication, CI, independent Reviewer approval, and QA must bind to one unchanged future PR head;
-  read that state from live PR `#22` rather than this file.
+- The correction is published to draft PR `#22`. Its current head, CI, independent Reviewer, and QA
+  state must be read from the live PR; verdicts never carry across a head change.
 
 ## Recommended Next Role
 
-Independent Reviewer, followed by QA only after Reviewer approval on the exact unchanged tree.
+Resolve the live PR state. Certification requires green CI, independent Reviewer approval, and then
+QA PASS on one exact unchanged head/tree.

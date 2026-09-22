@@ -35,14 +35,15 @@ parent as current. This self-stable correction removes that stale label and the 
 publish instruction. GitHub is authoritative for the resulting exact commit/tree and CI; bind
 fresh Reviewer and QA decisions to that unchanged live PR head.
 
-## Next source correction — exact Mark sharing
+## Published source correction — exact Mark sharing
 
 This tree adds strict focused-Mark share links for received, non-Secret Marks. The share boundary
 uses the existing durable deferred-destination contract, rejects malformed Mark/container IDs,
 keeps Secret Marks unshareable, and never copies protected-media URLs. Contract tests round-trip
 both Personal and Shared destinations through the existing parser. See
 `docs/handoffs/FRONTEND_EXACT_MARK_SHARING_2026-09-22.md` for the implementation evidence and honest
-device/domain boundary. Resolve publication, CI, Reviewer, and QA state from live draft PR `#22`.
+device/domain boundary. Publication is complete; resolve the current head, CI, Reviewer, and QA
+state from live draft PR `#22`, and do not reuse verdicts from an earlier head.
 
 ## Certified draft checkpoint — 2026-09-15
 

@@ -199,8 +199,8 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 ## Next Actions
 
-1. Publish the exact-Mark-sharing source correction when authorized, obtain fresh exact-tree CI,
-   then run independent Reviewer certification followed by QA on the same unchanged head.
+1. Keep the live draft PR head unchanged while exact-tree CI, independent Reviewer certification,
+   and then QA run in that order; restart certification if the head changes.
 2. Select the public domain, then complete universal HTTPS links, store fallback, and
    install-intent restoration.
 3. Stand up a non-production hosted Supabase/worker environment and execute full multi-user tests.
