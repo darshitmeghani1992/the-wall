@@ -11,9 +11,10 @@ hosted/device/release evidence is absent. The last independent source-and-CI cer
 
 | Evidence | Exact value |
 |---|---|
-| Remote candidate | `b1ee22ff70a3b0f9ad6ee27e462a2f8b5a9b58d4` (tree `0deab208e5e5b54f12b8312239a84ed32cd92bb8`) |
-| CI | Run `171` (`35437580725`) passed all four jobs on that exact remote head |
-| Independent review | **REQUEST CHANGES** on 2026-09-22: canonical continuity files were stale; executable checks passed |
+| Current exact candidate | Resolve the live PR `#22` head/tree from GitHub before acting; a commit cannot embed its own final SHA |
+| Current CI and review | Resolve from live PR `#22`; keep its head unchanged throughout Reviewer → QA certification |
+| Historical parent | `b1ee22ff70a3b0f9ad6ee27e462a2f8b5a9b58d4` (tree `0deab208e5e5b54f12b8312239a84ed32cd92bb8`), CI run `171` passed |
+| Latest recorded review | Review `5275238121` blocked the first continuity correction because it still called the historical parent current |
 | Certification | Requires CI green + independent Reviewer APPROVE + QA PASS on one unchanged PR head |
 | Delivery state | Draft, unmerged, undeployed |
 
@@ -28,10 +29,11 @@ The published candidate reconciles the supporting Product/Architecture documents
 Build Specification, removes excluded prototype features from the launch backlog, and removes the
 unused Skia native dependency left by the excluded Doodle feature. Fresh independent verification
 on 2026-09-22 passed TypeScript, lint, all 74 client/contract tests, Expo Doctor 17/17, both mobile
-exports, and all 31 media-worker tests. This documentation-only remediation corrects this handoff,
-`docs/BUILD_STATUS.md`, and the dependency-risk wording in `docs/TECHNICAL_DEBT.md`. GitHub is
-authoritative for the resulting exact commit/tree; bind fresh CI, Reviewer, and QA decisions to
-that unchanged published head.
+exports, and all 31 media-worker tests. The first published documentation correction then passed
+CI, but independent review correctly blocked it because this handoff still labeled its historical
+parent as current. This self-stable correction removes that stale label and the already-completed
+publish instruction. GitHub is authoritative for the resulting exact commit/tree and CI; bind
+fresh Reviewer and QA decisions to that unchanged live PR head.
 
 ## Certified draft checkpoint — 2026-09-15
 
