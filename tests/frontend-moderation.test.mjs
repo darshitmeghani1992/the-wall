@@ -88,7 +88,13 @@ test("moderation surface is admin-gated and wired to actor-bound services", () =
   assert.match(settings, /profile\?\.is_admin/);
   assert.match(screen, /!isAdmin/);
   assert.match(screen, /runModerationActionFlow/);
+  assert.match(screen, /listModerationActions\(token\.userId\)/);
+  assert.match(screen, /Promise\.allSettled/);
+  assert.match(screen, /The open queue is still available/);
+  assert.match(screen, /groupModerationReports\(reports\)/);
+  assert.match(screen, /accessibilityRole="tablist"/);
   assert.match(service, /p_expected_actor_id: actorId/);
+  assert.match(service, /listModerationActions\(expectedActorId: string\)/);
   assert.doesNotMatch(service, /rpc\("admin_remove_mark", \{ p_mark_id/);
   assert.doesNotMatch(service, /rpc\("admin_suspend_account", \{ p_user_id/);
   assert.doesNotMatch(service, /rpc\("admin_resolve_report", \{\s*p_report_id/);

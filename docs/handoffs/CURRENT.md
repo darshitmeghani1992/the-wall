@@ -45,6 +45,15 @@ both Personal and Shared destinations through the existing parser. See
 device/domain boundary. Publication is complete; resolve the current head, CI, Reviewer, and QA
 state from live draft PR `#22`, and do not reuse verdicts from an earlier head.
 
+## Active source scope — moderation operations history
+
+This working tree adds Open, Closed, and Audit views to the existing protected moderation surface.
+It reuses the current admin-only report/action-log policies, binds both reads to the initiating
+account, and does not change schema, RPCs, dependencies, deployment, or production data. See
+`docs/handoffs/FRONTEND_MODERATION_HISTORY_2026-09-22.md`. Determine publication, CI, Reviewer, and
+QA state by comparing the exact Git tree with live draft PR `#22`; never carry verdicts across a
+head change.
+
 ## Certified draft checkpoint — 2026-09-15
 
 The authorized draft integration branch `codex/integrated-mvp-resume` is now at a conservative

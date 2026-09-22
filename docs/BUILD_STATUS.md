@@ -51,6 +51,16 @@ only by Mark ID (never by a signed or legacy public media URL), and Secret Marks
 Publication, CI, Reviewer, and QA state for this correction must be resolved from live draft PR
 `#22`; any verdict is valid only for its exact unchanged head/tree.
 
+## Moderation operations history source correction
+
+The source in this tree completes the existing minimal moderation operations surface without adding
+privilege: administrators can separate open and closed reports and inspect the existing admin-only
+action log. Reads are bound to the initiating account, Anonymous-author identity remains protected,
+successful actions reconcile from server truth, and failed actions keep their visible error. The
+open queue also remains available when optional history loading fails. The slice adds no schema,
+migration, RPC, dependency, deployment, or production-data change. Resolve its
+publication and certification state from the exact Git tree and live draft PR `#22`.
+
 ## Last independently certified milestone
 
 The project is at a conservative **63% production-ready MVP milestone**. This is a weighted

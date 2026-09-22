@@ -9,10 +9,19 @@ import {
   adminRemoveMark,
   adminResolveReport,
   adminSuspendAccount,
+  listModerationActions,
   listReports,
+  type ModerationAction,
   type ReportRow,
 } from "@/lib/moderation";
 import { runModerationActionFlow, type ModerationTargetAction } from "@/lib/moderation-flow";
+import {
+  groupModerationReports,
+  moderationActionLabel,
+  moderationActionTarget,
+  moderationReportTarget,
+  type ModerationQueueTab,
+} from "@/lib/moderation-ui";
 import { relativeNotificationTime } from "@/lib/notification-ui";
 import { SessionFocusFence, type SessionGenerationToken } from "@/lib/session-generation";
 import { colors, markColors, spacing } from "@/theme";
@@ -28,9 +37,12 @@ export default function ModerationScreen() {
   const loadInFlight = useRef(false);
   const actionInFlight = useRef(false);
   const [reports, setReports] = useState<readonly ReportRow[]>([]);
+  const [actions, setActions] = useState<readonly ModerationAction[]>([]);
+  const [tab, setTab] = useState<ModerationQueueTab>("open");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!actorId || !isAdmin || loadInFlight.current) {
@@ -42,9 +54,26 @@ export default function ModerationScreen() {
     loadInFlight.current = true;
     setLoading(true);
     setError(null);
+    setHistoryError(null);
     try {
-      const rows = await listReports(token.userId, "open");
-      if (fence.current.isCurrent(token, currentActorId.current)) setReports(rows);
+      const [openResult, resolvedResult, dismissedResult, actionResult] = await Promise.allSettled([
+        listReports(token.userId, "open"),
+        listReports(token.userId, "resolved"),
+        listReports(token.userId, "dismissed"),
+        listModerationActions(token.userId),
+      ]);
+      if (openResult.status === "rejected") throw openResult.reason;
+      if (fence.current.isCurrent(token, currentActorId.current)) {
+        setReports([
+          ...openResult.value,
+          ...(resolvedResult.status === "fulfilled" ? resolvedResult.value : []),
+          ...(dismissedResult.status === "fulfilled" ? dismissedResult.value : []),
+        ]);
+        setActions(actionResult.status === "fulfilled" ? actionResult.value : []);
+        if (resolvedResult.status === "rejected" || dismissedResult.status === "rejected" || actionResult.status === "rejected") {
+          setHistoryError("Some moderation history couldn't be loaded. The open queue is still available.");
+        }
+      }
     } catch (cause) {
       if (fence.current.isCurrent(token, currentActorId.current)) {
         setError(cause instanceof Error ? cause.message : "Couldn't load the moderation queue.");
@@ -62,8 +91,11 @@ export default function ModerationScreen() {
     loadInFlight.current = false;
     actionInFlight.current = false;
     setReports([]);
+    setActions([]);
+    setTab("open");
     setBusyId(null);
     setError(null);
+    setHistoryError(null);
     if (actorId && isAdmin) void load();
     else setLoading(false);
     return () => {
@@ -113,6 +145,7 @@ export default function ModerationScreen() {
     const targetId = targetAction === "remove_mark" ? report.mark_id
       : targetAction === "suspend_user" ? report.reported_user_id : null;
     const reason = `Report ${report.id}: ${report.reason}`;
+    let completed = false;
     await runModerationActionFlow({
       expectedActorId,
       reportId: report.id,
@@ -124,14 +157,20 @@ export default function ModerationScreen() {
       removeMark: adminRemoveMark,
       suspendAccount: adminSuspendAccount,
       resolveReport: adminResolveReport,
-      onComplete: (reportId) => setReports((current) => current.filter((item) => item.id !== reportId)),
+      onComplete: (reportId) => {
+        completed = true;
+        setReports((current) => current.filter((item) => item.id !== reportId));
+      },
       onError: (cause) => setError(cause instanceof Error ? cause.message : "The moderation action failed."),
       onFinally: () => {
         actionInFlight.current = false;
         setBusyId(null);
+        if (completed) void load();
       },
     });
   }
+
+  const groupedReports = groupModerationReports(reports);
 
   return (
     <Screen dockInset={false}>
@@ -156,7 +195,7 @@ export default function ModerationScreen() {
         </View>
       ) : loading ? (
         <ActivityIndicator accessibilityLabel="Loading moderation queue" color={markColors.brandYellow} style={{ marginTop: 36 }} />
-      ) : error && reports.length === 0 ? (
+      ) : error && reports.length === 0 && actions.length === 0 ? (
         <View style={{ marginTop: 24, gap: 12 }}>
           <Text accessibilityRole="alert" variant="body" color={colors.error}>{error}</Text>
           <Button label="Try again" variant="yellow" onPress={() => void load()} />
@@ -164,19 +203,43 @@ export default function ModerationScreen() {
       ) : (
         <View style={{ marginTop: 24, gap: 16 }}>
           {error ? <Text accessibilityRole="alert" variant="body" color={colors.error}>{error}</Text> : null}
-          {reports.length === 0 ? (
+          <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8 }}>
+            <QueueTab label={`OPEN ${groupedReports.open.length}`} selected={tab === "open"} onPress={() => setTab("open")} />
+            <QueueTab label={`CLOSED ${groupedReports.closed.length}`} selected={tab === "closed"} onPress={() => setTab("closed")} />
+            <QueueTab label={`AUDIT ${actions.length}`} selected={tab === "audit"} onPress={() => setTab("audit")} />
+          </View>
+          {tab !== "open" && historyError ? (
+            <View style={{ gap: 10 }}>
+              <Text accessibilityRole="alert" variant="body" color={colors.error}>{historyError}</Text>
+              <Button label="Try history again" variant="ghost" onPress={() => void load()} />
+            </View>
+          ) : null}
+          {tab === "open" && groupedReports.open.length === 0 ? (
             <View style={{ alignItems: "center", paddingVertical: 40 }}>
               <Text variant="headline">Queue clear</Text>
               <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 8 }}>There are no open reports.</Text>
             </View>
-          ) : reports.map((report) => (
+          ) : null}
+          {tab === "open" ? groupedReports.open.map((report) => (
             <ReportCard
               key={report.id}
               report={report}
               busy={busyId !== null}
               onAction={(action, status) => confirmAction(report, action, status)}
             />
-          ))}
+          )) : null}
+          {tab === "closed" && groupedReports.closed.length === 0 && !historyError ? (
+            <EmptyHistory label="No closed reports yet." onOpen={() => setTab("open")} />
+          ) : null}
+          {tab === "closed" ? groupedReports.closed.map((report) => (
+            <ClosedReportCard key={report.id} report={report} />
+          )) : null}
+          {tab === "audit" && actions.length === 0 && !historyError ? (
+            <EmptyHistory label="No moderation actions yet." onOpen={() => setTab("open")} />
+          ) : null}
+          {tab === "audit" ? actions.map((action) => (
+            <AuditCard key={action.id} action={action} />
+          )) : null}
         </View>
       )}
     </Screen>
@@ -192,7 +255,7 @@ function ReportCard({
   busy: boolean;
   onAction: (action: ModerationTargetAction, status: "resolved" | "dismissed") => void;
 }) {
-  const target = report.mark_id ? "MARK" : report.reported_user_id ? "ACCOUNT" : "SHARED WALL";
+  const target = moderationReportTarget(report);
   return (
     <View style={{ backgroundColor: colors.card, borderWidth: 2, borderColor: colors.ink, padding: 16, gap: 10 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
@@ -211,6 +274,63 @@ function ReportCard({
         <Button label="Resolve without target action" variant="ghost" disabled={busy} onPress={() => onAction("none", "resolved")} />
         <Button label="Dismiss report" variant="ghost" disabled={busy} onPress={() => onAction("none", "dismissed")} />
       </View>
+    </View>
+  );
+}
+
+function QueueTab({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={{
+        flex: 1,
+        minHeight: 44,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1.5,
+        borderColor: colors.ink,
+        backgroundColor: selected ? markColors.brandYellow : colors.surface,
+      }}
+    >
+      <Text variant="label">{label}</Text>
+    </Pressable>
+  );
+}
+
+function EmptyHistory({ label, onOpen }: { label: string; onOpen: () => void }) {
+  return (
+    <View style={{ paddingVertical: 36, gap: 12 }}>
+      <Text variant="headline" style={{ textAlign: "center" }}>{label}</Text>
+      <Button label="View open queue" variant="ghost" onPress={onOpen} />
+    </View>
+  );
+}
+
+function ClosedReportCard({ report }: { report: ReportRow }) {
+  return (
+    <View style={{ backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.outlineVariant, padding: 16, gap: 8 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+        <Text variant="label">{moderationReportTarget(report)} · {report.status.toUpperCase()}</Text>
+        <Text variant="label" color={colors.outline}>{relativeNotificationTime(report.resolved_at ?? report.created_at)}</Text>
+      </View>
+      <Text variant="body">{report.reason.replaceAll("_", " ")}</Text>
+      <Text variant="body" color={colors.onSurfaceVariant}>{report.details?.trim() || "No additional details."}</Text>
+      <Text variant="label" color={colors.outline}>REPORT {report.id.slice(0, 8)}</Text>
+    </View>
+  );
+}
+
+function AuditCard({ action }: { action: ModerationAction }) {
+  return (
+    <View style={{ backgroundColor: colors.surfaceContainerLow, borderWidth: 1.5, borderColor: colors.ink, padding: 16, gap: 8 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+        <Text variant="headline">{moderationActionLabel(action.action)}</Text>
+        <Text variant="label" color={colors.outline}>{relativeNotificationTime(action.created_at)}</Text>
+      </View>
+      <Text variant="label">{moderationActionTarget(action)}</Text>
+      {action.reason?.trim() ? <Text variant="body" color={colors.onSurfaceVariant}>{action.reason.trim()}</Text> : null}
     </View>
   );
 }

@@ -107,11 +107,23 @@ export async function listReports(expectedActorId: string, status?: ReportRow["s
 }
 
 /** Admin: the moderation action log (RLS is admin-only). */
-export async function listModerationActions(): Promise<ModerationAction[]> {
-  const { data, error } = await supabase
-    .from("moderation_actions")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as ModerationAction[];
+export async function listModerationActions(expectedActorId: string): Promise<ModerationAction[]> {
+  return runExpectedActorMutation(
+    expectedActorId,
+    "You need to be signed in to review moderation history.",
+    async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return data.user?.id;
+    },
+    async () => {
+      const { data, error } = await supabase
+        .from("moderation_actions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []) as ModerationAction[];
+    },
+  );
 }
