@@ -12,14 +12,17 @@ import {
   listModerationActions,
   listReports,
   type ModerationAction,
+  type ModerationActionCursor,
   type ReportRow,
 } from "@/lib/moderation";
 import { runModerationActionFlow, type ModerationTargetAction } from "@/lib/moderation-flow";
 import {
+  appendUniqueModerationActions,
   groupModerationReports,
   moderationActionLabel,
   moderationActionTarget,
   moderationReportTarget,
+  reconcileModerationLoad,
   type ModerationQueueTab,
 } from "@/lib/moderation-ui";
 import { relativeNotificationTime } from "@/lib/notification-ui";
@@ -35,14 +38,18 @@ export default function ModerationScreen() {
   currentActorId.current = actorId;
   const fence = useRef(new SessionFocusFence());
   const loadInFlight = useRef(false);
+  const historyLoadToken = useRef<SessionGenerationToken | null>(null);
   const actionInFlight = useRef(false);
   const [reports, setReports] = useState<readonly ReportRow[]>([]);
   const [actions, setActions] = useState<readonly ModerationAction[]>([]);
+  const [nextActionCursor, setNextActionCursor] = useState<ModerationActionCursor | null>(null);
   const [tab, setTab] = useState<ModerationQueueTab>("open");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [olderActionsError, setOlderActionsError] = useState<string | null>(null);
+  const [loadingOlderActions, setLoadingOlderActions] = useState(false);
 
   const load = useCallback(async () => {
     if (!actorId || !isAdmin || loadInFlight.current) {
@@ -51,6 +58,8 @@ export default function ModerationScreen() {
     }
     const token = fence.current.begin(actorId);
     if (!token) return;
+    historyLoadToken.current = null;
+    setLoadingOlderActions(false);
     loadInFlight.current = true;
     setLoading(true);
     setError(null);
@@ -62,15 +71,12 @@ export default function ModerationScreen() {
         listReports(token.userId, "dismissed"),
         listModerationActions(token.userId),
       ]);
-      if (openResult.status === "rejected") throw openResult.reason;
+      const result = reconcileModerationLoad(openResult, resolvedResult, dismissedResult, actionResult);
       if (fence.current.isCurrent(token, currentActorId.current)) {
-        setReports([
-          ...openResult.value,
-          ...(resolvedResult.status === "fulfilled" ? resolvedResult.value : []),
-          ...(dismissedResult.status === "fulfilled" ? dismissedResult.value : []),
-        ]);
-        setActions(actionResult.status === "fulfilled" ? actionResult.value : []);
-        if (resolvedResult.status === "rejected" || dismissedResult.status === "rejected" || actionResult.status === "rejected") {
+        setReports(result.reports);
+        setActions(result.actionPage.items);
+        setNextActionCursor(result.actionPage.nextCursor);
+        if (result.historyIncomplete) {
           setHistoryError("Some moderation history couldn't be loaded. The open queue is still available.");
         }
       }
@@ -86,21 +92,51 @@ export default function ModerationScreen() {
     }
   }, [actorId, isAdmin]);
 
+  const loadOlderActions = useCallback(async () => {
+    if (!actorId || !isAdmin || !nextActionCursor || loadInFlight.current || actionInFlight.current || historyLoadToken.current) return;
+    const token = fence.current.begin(actorId);
+    if (!token) return;
+    historyLoadToken.current = token;
+    setLoadingOlderActions(true);
+    setOlderActionsError(null);
+    try {
+      const page = await listModerationActions(token.userId, nextActionCursor);
+      if (fence.current.isCurrent(token, currentActorId.current)) {
+        setActions((current) => appendUniqueModerationActions(current, page.items));
+        setNextActionCursor(page.nextCursor);
+      }
+    } catch (cause) {
+      if (fence.current.isCurrent(token, currentActorId.current)) {
+        setOlderActionsError(cause instanceof Error ? cause.message : "Couldn't load older moderation actions.");
+      }
+    } finally {
+      if (historyLoadToken.current === token) {
+        historyLoadToken.current = null;
+        setLoadingOlderActions(false);
+      }
+    }
+  }, [actorId, isAdmin, nextActionCursor]);
+
   useFocusEffect(useCallback(() => {
     fence.current.focus(actorId);
     loadInFlight.current = false;
+    historyLoadToken.current = null;
     actionInFlight.current = false;
     setReports([]);
     setActions([]);
+    setNextActionCursor(null);
     setTab("open");
     setBusyId(null);
     setError(null);
     setHistoryError(null);
+    setOlderActionsError(null);
+    setLoadingOlderActions(false);
     if (actorId && isAdmin) void load();
     else setLoading(false);
     return () => {
       fence.current.blur();
       loadInFlight.current = false;
+      historyLoadToken.current = null;
       actionInFlight.current = false;
     };
   }, [actorId, isAdmin, load]));
@@ -206,7 +242,7 @@ export default function ModerationScreen() {
           <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8 }}>
             <QueueTab label={`OPEN ${groupedReports.open.length}`} selected={tab === "open"} onPress={() => setTab("open")} />
             <QueueTab label={`CLOSED ${groupedReports.closed.length}`} selected={tab === "closed"} onPress={() => setTab("closed")} />
-            <QueueTab label={`AUDIT ${actions.length}`} selected={tab === "audit"} onPress={() => setTab("audit")} />
+            <QueueTab label={`AUDIT ${actions.length}${nextActionCursor ? "+" : ""}`} selected={tab === "audit"} onPress={() => setTab("audit")} />
           </View>
           {tab !== "open" && historyError ? (
             <View style={{ gap: 10 }}>
@@ -240,6 +276,17 @@ export default function ModerationScreen() {
           {tab === "audit" ? actions.map((action) => (
             <AuditCard key={action.id} action={action} />
           )) : null}
+          {tab === "audit" && olderActionsError ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.error}>{olderActionsError}</Text>
+          ) : null}
+          {tab === "audit" && nextActionCursor ? (
+            <Button
+              label={loadingOlderActions ? "Loading older actions…" : "Load older actions"}
+              variant="ghost"
+              disabled={loadingOlderActions || busyId !== null}
+              onPress={() => void loadOlderActions()}
+            />
+          ) : null}
         </View>
       )}
     </Screen>

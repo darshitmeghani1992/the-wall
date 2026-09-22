@@ -61,6 +61,13 @@ open queue also remains available when optional history loading fails. The slice
 migration, RPC, dependency, deployment, or production-data change. Resolve its
 publication and certification state from the exact Git tree and live draft PR `#22`.
 
+The local continuation removes the action log's former newest-200 ceiling. It adds deterministic
+50-row keyset pagination with validated cursors, duplicate-safe append, account/session fencing,
+isolated pagination errors, and behavioral coverage for every closed/audit partial-failure
+combination. It remains a client/service correction with no schema, migration, RPC, dependency,
+hosted, deployment, or production-data change. This continuation is not published or certified
+unless and until the live PR head/tree proves it.
+
 ## Last independently certified milestone
 
 The project is at a conservative **63% production-ready MVP milestone**. This is a weighted
@@ -185,7 +192,8 @@ boundaries have not been exercised. The evidence discount keeps the claim honest
 
 - Complete the remaining visual/device-only follower, Status, Wall-switcher, and Wall/Mark polish
   after physical-device evidence is available.
-- Complete Alerts beyond the Shared-Wall journeys and finish moderation operations UI.
+- Complete Alerts beyond the Shared-Wall journeys and the remaining hosted/device moderation
+  operations validation.
 - Finish universal links, store fallback, sharing/install restoration, and missing/deleted
   destination handling across every supported link type.
 - Deploy and validate the complete protected-media stack in non-production hosted infrastructure;

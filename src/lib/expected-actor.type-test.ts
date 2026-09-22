@@ -2,7 +2,7 @@ import { blockUser, unblockUser } from "./blocks";
 import { deactivateAccount, reactivateAccount, requestAccountDeletion } from "./account";
 import { followUser, unfollowUser } from "./follows";
 import { removeMark } from "./marks";
-import { adminRemoveMark, adminResolveReport, adminSuspendAccount, listReports } from "./moderation";
+import { adminRemoveMark, adminResolveReport, adminSuspendAccount, listModerationActions, listReports } from "./moderation";
 import { createReport } from "./reports";
 
 type Equal<Left, Right> =
@@ -23,3 +23,4 @@ export type AdminRemoveRequiresExpectedActor = Assert<Equal<Parameters<typeof ad
 export type AdminSuspendRequiresExpectedActor = Assert<Equal<Parameters<typeof adminSuspendAccount>["length"], 3>>;
 export type AdminResolveRequiresExpectedActor = Assert<Equal<Parameters<typeof adminResolveReport>["length"], 4>>;
 export type ReportListRequiresExpectedActor = Assert<Equal<Parameters<typeof listReports>["length"], 1 | 2>>;
+export type ActionListRequiresExpectedActor = Assert<Equal<Parameters<typeof listModerationActions>["length"], 1 | 2>>;

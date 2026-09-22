@@ -17,6 +17,11 @@
   remains available and names the partial failure.
 - Successful actions refresh server truth; failed actions preserve their visible error instead of
   clearing it through an unconditional refresh.
+- The action log uses deterministic 50-row keyset pages ordered by creation time and action ID.
+  Administrators can load older actions until the log is exhausted; the count shows `+` while
+  older actions remain.
+- Cursor values are validated before entering the PostgREST filter expression, duplicate action
+  IDs are suppressed when pages are appended, and a delayed page cannot repaint another account.
 
 ## Architecture Boundary
 
@@ -26,12 +31,14 @@ deployment, or production-data change.
 
 ## Verification Boundary
 
-The pure UI contract covers open/closed grouping, all audit action labels, report target labels, and
-target references. Static integration coverage verifies the admin-gated screen uses the actor-bound
-history service and exposes the tab contract. Current publication, CI, Reviewer, and QA state must
+The pure UI contract covers open/closed grouping, all eight optional-history success/failure
+combinations, open-queue failure, duplicate-safe page append, all audit action labels, report target
+labels, and target references. Static integration coverage verifies the admin-gated screen uses the
+actor-bound history service, deterministic two-column ordering, one-row lookahead, validated
+keyset filtering, and the load-older control. Current publication, CI, Reviewer, and QA state must
 be resolved from the live draft PR and exact Git tree; verdicts never transfer across a head change.
 
 ## Honest Boundary
 
-Physical-device layout, screen-reader behavior, hosted RLS behavior, and real administrator data
-volume remain unverified until their later device/hosted gates.
+Physical-device layout, screen-reader behavior, hosted RLS behavior, concurrent database inserts,
+and real administrator data volume remain unverified until their later device/hosted gates.

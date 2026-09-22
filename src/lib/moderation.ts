@@ -34,6 +34,23 @@ export type ModerationAction = {
   created_at: string;
 };
 
+export type ModerationActionCursor = Pick<ModerationAction, "created_at" | "id">;
+
+export type ModerationActionPage = {
+  items: ModerationAction[];
+  nextCursor: ModerationActionCursor | null;
+};
+
+export const MODERATION_ACTION_PAGE_SIZE = 50;
+
+function moderationActionCursorFilter(cursor: ModerationActionCursor): string {
+  const validTimestamp = /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})$/.test(cursor.created_at)
+    && Number.isFinite(Date.parse(cursor.created_at));
+  const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id);
+  if (!validTimestamp || !validUuid) throw new Error("The moderation history cursor is invalid.");
+  return `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`;
+}
+
 /** Admin: remove a Mark (moderation removal — never quota-limited). */
 async function runAdminMutation(
   expectedActorId: string,
@@ -106,8 +123,11 @@ export async function listReports(expectedActorId: string, status?: ReportRow["s
   );
 }
 
-/** Admin: the moderation action log (RLS is admin-only). */
-export async function listModerationActions(expectedActorId: string): Promise<ModerationAction[]> {
+/** Admin: a deterministic page of the moderation action log (RLS is admin-only). */
+export async function listModerationActions(
+  expectedActorId: string,
+  cursor?: ModerationActionCursor,
+): Promise<ModerationActionPage> {
   return runExpectedActorMutation(
     expectedActorId,
     "You need to be signed in to review moderation history.",
@@ -117,13 +137,24 @@ export async function listModerationActions(expectedActorId: string): Promise<Mo
       return data.user?.id;
     },
     async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("moderation_actions")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(200);
+        .order("id", { ascending: false })
+        .limit(MODERATION_ACTION_PAGE_SIZE + 1);
+      if (cursor) query = query.or(moderationActionCursorFilter(cursor));
+      const { data, error } = await query;
       if (error) throw error;
-      return (data ?? []) as ModerationAction[];
+      const rows = (data ?? []) as ModerationAction[];
+      const items = rows.slice(0, MODERATION_ACTION_PAGE_SIZE);
+      const last = items.at(-1);
+      return {
+        items,
+        nextCursor: rows.length > MODERATION_ACTION_PAGE_SIZE && last
+          ? { created_at: last.created_at, id: last.id }
+          : null,
+      };
     },
   );
 }

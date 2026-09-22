@@ -45,14 +45,18 @@ both Personal and Shared destinations through the existing parser. See
 device/domain boundary. Publication is complete; resolve the current head, CI, Reviewer, and QA
 state from live draft PR `#22`, and do not reuse verdicts from an earlier head.
 
-## Active source scope — moderation operations history
+## Active source scope — moderation operations history pagination
 
 This working tree adds Open, Closed, and Audit views to the existing protected moderation surface.
 It reuses the current admin-only report/action-log policies, binds both reads to the initiating
 account, and does not change schema, RPCs, dependencies, deployment, or production data. See
 `docs/handoffs/FRONTEND_MODERATION_HISTORY_2026-09-22.md`. Determine publication, CI, Reviewer, and
 QA state by comparing the exact Git tree with live draft PR `#22`; never carry verdicts across a
-head change.
+head change. The local continuation replaces the former 200-action ceiling with deterministic
+50-row keyset pages, validates the cursor before constructing the PostgREST filter, suppresses
+duplicates across page boundaries, isolates older-page failures from the open queue, and directly
+tests all optional-history rejection combinations. It remains unpublished until the exact tree is
+present on the draft PR.
 
 ## Certified draft checkpoint — 2026-09-15
 

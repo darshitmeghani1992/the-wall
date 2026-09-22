@@ -1,6 +1,42 @@
-import type { ModerationAction, ReportRow } from "./moderation";
+import type { ModerationAction, ModerationActionPage, ReportRow } from "./moderation";
 
 export type ModerationQueueTab = "open" | "closed" | "audit";
+
+export type ModerationLoadResult = {
+  reports: ReportRow[];
+  actionPage: ModerationActionPage;
+  historyIncomplete: boolean;
+};
+
+export function reconcileModerationLoad(
+  openResult: PromiseSettledResult<ReportRow[]>,
+  resolvedResult: PromiseSettledResult<ReportRow[]>,
+  dismissedResult: PromiseSettledResult<ReportRow[]>,
+  actionResult: PromiseSettledResult<ModerationActionPage>,
+): ModerationLoadResult {
+  if (openResult.status === "rejected") throw openResult.reason;
+  return {
+    reports: [
+      ...openResult.value,
+      ...(resolvedResult.status === "fulfilled" ? resolvedResult.value : []),
+      ...(dismissedResult.status === "fulfilled" ? dismissedResult.value : []),
+    ],
+    actionPage: actionResult.status === "fulfilled"
+      ? actionResult.value
+      : { items: [], nextCursor: null },
+    historyIncomplete: resolvedResult.status === "rejected"
+      || dismissedResult.status === "rejected"
+      || actionResult.status === "rejected",
+  };
+}
+
+export function appendUniqueModerationActions(
+  current: readonly ModerationAction[],
+  older: readonly ModerationAction[],
+): ModerationAction[] {
+  const knownIds = new Set(current.map((action) => action.id));
+  return [...current, ...older.filter((action) => !knownIds.has(action.id))];
+}
 
 export function groupModerationReports(reports: readonly ReportRow[]): {
   open: ReportRow[];
