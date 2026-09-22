@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { applyNotificationReadReceipts, relativeNotificationTime } from "./notification-ui.ts";
+import { appendUniqueNotifications, applyNotificationReadReceipts, relativeNotificationTime } from "./notification-ui.ts";
 
 const now = Date.parse("2026-09-17T12:00:00.000Z");
 
@@ -31,3 +31,8 @@ test("receipt reconciliation changes only exact returned unread rows", () => {
   assert.deepEqual(applyNotificationReadReceipts(rows, []), rows);
 });
 
+test("older Alert pages append in order without duplicate rows", () => {
+  const current = [{ id: "newest", read: true }, { id: "boundary", read: true }];
+  const older = [{ id: "boundary", read: true }, { id: "older", read: false }];
+  assert.deepEqual(appendUniqueNotifications(current, older), [current[0], current[1], older[1]]);
+});

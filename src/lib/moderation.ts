@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { mapActorBoundMutationError, runExpectedActorMutation } from "./expected-actor";
+import { descendingCreatedAtIdFilter, type CreatedAtIdCursor } from "./created-at-pagination";
 
 /**
  * Moderation / admin data layer (Master Spec §53). All privileged actions go
@@ -34,7 +35,7 @@ export type ModerationAction = {
   created_at: string;
 };
 
-export type ModerationActionCursor = Pick<ModerationAction, "created_at" | "id">;
+export type ModerationActionCursor = CreatedAtIdCursor;
 
 export type ModerationActionPage = {
   items: ModerationAction[];
@@ -42,14 +43,6 @@ export type ModerationActionPage = {
 };
 
 export const MODERATION_ACTION_PAGE_SIZE = 50;
-
-function moderationActionCursorFilter(cursor: ModerationActionCursor): string {
-  const validTimestamp = /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})$/.test(cursor.created_at)
-    && Number.isFinite(Date.parse(cursor.created_at));
-  const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id);
-  if (!validTimestamp || !validUuid) throw new Error("The moderation history cursor is invalid.");
-  return `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`;
-}
 
 /** Admin: remove a Mark (moderation removal — never quota-limited). */
 async function runAdminMutation(
@@ -143,7 +136,7 @@ export async function listModerationActions(
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(MODERATION_ACTION_PAGE_SIZE + 1);
-      if (cursor) query = query.or(moderationActionCursorFilter(cursor));
+      if (cursor) query = query.or(descendingCreatedAtIdFilter(cursor, "The moderation history cursor is invalid."));
       const { data, error } = await query;
       if (error) throw error;
       const rows = (data ?? []) as ModerationAction[];

@@ -58,6 +58,18 @@ duplicates across page boundaries, isolates older-page failures from the open qu
 tests all optional-history rejection combinations. It remains unpublished until the exact tree is
 present on the draft PR.
 
+## Source continuation — complete Alert history
+
+The working tree extends actor-bound in-app Alerts from a silent newest-100 cap to deterministic
+50-row keyset pages. Older-page failures preserve visible Alerts and remain retryable; optional
+actor/Wall metadata failures no longer erase the primary recipient-owned rows; shared cursor
+validation rejects malformed and injectable values; and delayed pages cannot cross account or
+focus boundaries. Existing receipt, trigger, RLS, Anonymous/Secret, and routing contracts remain
+unchanged. See `docs/product/PRD-ALT-002-alert-history-pagination.md`,
+`docs/architecture/FP-ALT-002-alert-history-pagination.md`, and
+`docs/handoffs/FRONTEND_ALERT_HISTORY_2026-09-22.md`. Resolve publication, CI, Reviewer, and QA
+state only by comparing this exact tree with live draft PR `#22`.
+
 ## Certified draft checkpoint — 2026-09-15
 
 The authorized draft integration branch `codex/integrated-mvp-resume` is now at a conservative

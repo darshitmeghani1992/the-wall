@@ -68,6 +68,16 @@ combination. It remains a client/service correction with no schema, migration, R
 hosted, deployment, or production-data change. This continuation is not published or certified
 unless and until the live PR head/tree proves it.
 
+## Complete Alert history source correction
+
+The source in this tree removes the in-app Alerts list's former newest-100 ceiling. It adds
+deterministic 50-row keyset pages, validated shared cursors, duplicate-safe append, isolated retry,
+account/session fencing, and partial actor/Wall-enrichment fallback. Existing exact read receipts,
+notification triggers, RLS, Anonymous/Secret privacy, and destination rules remain unchanged. This
+is a client/service correction with no schema, migration, RPC, dependency, hosted, deployment, or
+production-data change. See `docs/handoffs/FRONTEND_ALERT_HISTORY_2026-09-22.md`. Resolve its
+publication, CI, Reviewer, and QA state only from the exact tree and live draft PR `#22`.
+
 ## Last independently certified milestone
 
 The project is at a conservative **63% production-ready MVP milestone**. This is a weighted

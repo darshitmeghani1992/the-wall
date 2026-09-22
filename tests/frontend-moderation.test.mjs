@@ -101,7 +101,7 @@ test("moderation surface is admin-gated and wired to actor-bound services", () =
   assert.match(service, /cursor\?: ModerationActionCursor/);
   assert.match(service, /\.order\("created_at", \{ ascending: false \}\)\s*\.order\("id", \{ ascending: false \}\)/);
   assert.match(service, /MODERATION_ACTION_PAGE_SIZE \+ 1/);
-  assert.match(service, /query\.or\(moderationActionCursorFilter\(cursor\)\)/);
+  assert.match(service, /query\.or\(descendingCreatedAtIdFilter\(cursor/);
   assert.doesNotMatch(service, /\.limit\(200\)/);
   assert.doesNotMatch(service, /rpc\("admin_remove_mark", \{ p_mark_id/);
   assert.doesNotMatch(service, /rpc\("admin_suspend_account", \{ p_user_id/);

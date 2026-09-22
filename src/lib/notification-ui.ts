@@ -24,3 +24,10 @@ export function applyNotificationReadReceipts<T extends { id: string; read: bool
   ));
 }
 
+export function appendUniqueNotifications<T extends { id: string }>(
+  current: readonly T[],
+  older: readonly T[],
+): T[] {
+  const knownIds = new Set(current.map((notification) => notification.id));
+  return [...current, ...older.filter((notification) => !knownIds.has(notification.id))];
+}

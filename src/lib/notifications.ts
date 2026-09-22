@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import type { Notification } from "./types";
 import { requireExpectedActor } from "./expected-actor";
 import { requireMutationRow } from "./result-contract";
+import { descendingCreatedAtIdFilter, type CreatedAtIdCursor } from "./created-at-pagination";
 export { notificationRoute } from "./notification-route";
 
 /**
@@ -20,12 +21,25 @@ export type NotificationWithActor = Notification & {
   wall_owner_id: string | null;
 };
 
+export type NotificationCursor = CreatedAtIdCursor;
+
+export type NotificationPage = {
+  items: NotificationWithActor[];
+  nextCursor: NotificationCursor | null;
+  metadataIncomplete: boolean;
+};
+
+export const NOTIFICATION_PAGE_SIZE = 50;
+
 /**
  * List the signed-in user's notifications, newest first, with actor profiles
  * hydrated in one query. RLS already restricts rows to `user_id = auth.uid()`;
  * the explicit `.eq` mirrors that and lets the index do the work.
  */
-export async function listNotifications(expectedActorId: string): Promise<NotificationWithActor[]> {
+export async function listNotifications(
+  expectedActorId: string,
+  cursor?: NotificationCursor,
+): Promise<NotificationPage> {
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) throw authError;
   const userId = requireExpectedActor(
@@ -33,50 +47,61 @@ export async function listNotifications(expectedActorId: string): Promise<Notifi
     auth.user?.id,
     "You need to be signed in to view Alerts.",
   );
-  const { data, error } = await supabase
+  let query = supabase
     .from("notifications")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .order("id", { ascending: false })
+    .limit(NOTIFICATION_PAGE_SIZE + 1);
+  if (cursor) query = query.or(descendingCreatedAtIdFilter(cursor, "The Alerts history cursor is invalid."));
+  const { data, error } = await query;
   if (error) throw error;
 
   const rows = (data ?? []) as Notification[];
+  const pageRows = rows.slice(0, NOTIFICATION_PAGE_SIZE);
   const actorIds = Array.from(
-    new Set(rows.map((n) => n.actor_id).filter((id): id is string => Boolean(id))),
+    new Set(pageRows.map((n) => n.actor_id).filter((id): id is string => Boolean(id))),
   );
-
-  const actors: Record<
-    string,
-    { id: string; display_name: string; handle: string; avatar_url: string | null }
-  > = {};
-  if (actorIds.length) {
-    const { data: profiles } = await supabase
+  const wallIds = Array.from(new Set(pageRows.map((row) => row.wall_id).filter((id): id is string => Boolean(id))));
+  const [actorResult, wallResult] = await Promise.allSettled([
+    actorIds.length ? supabase
       .from("profiles")
       .select("id, display_name, handle, avatar_url")
-      .in("id", actorIds);
-    for (const p of (profiles ?? []) as (typeof actors)[string][]) actors[p.id] = p;
-  }
-
-  const wallIds = Array.from(new Set(rows.map((row) => row.wall_id).filter((id): id is string => Boolean(id))));
-  const wallMetadata: Record<string, { type: "personal" | "shared"; ownerId: string }> = {};
-  if (wallIds.length) {
-    const { data: walls, error: wallsError } = await supabase
+      .in("id", actorIds) : Promise.resolve({ data: [], error: null }),
+    wallIds.length ? supabase
       .from("walls")
       .select("id, type, owner_id")
-      .in("id", wallIds);
-    if (wallsError) throw wallsError;
-    for (const wall of (walls ?? []) as { id: string; type: "personal" | "shared"; owner_id: string }[]) {
+      .in("id", wallIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const actors: Record<string, { id: string; display_name: string; handle: string; avatar_url: string | null }> = {};
+  const wallMetadata: Record<string, { type: "personal" | "shared"; ownerId: string }> = {};
+  const actorResponse = actorResult.status === "fulfilled" ? actorResult.value : null;
+  const wallResponse = wallResult.status === "fulfilled" ? wallResult.value : null;
+  if (actorResponse && !actorResponse.error) {
+    for (const profile of (actorResponse.data ?? []) as (typeof actors)[string][]) actors[profile.id] = profile;
+  }
+  if (wallResponse && !wallResponse.error) {
+    for (const wall of (wallResponse.data ?? []) as { id: string; type: "personal" | "shared"; owner_id: string }[]) {
       wallMetadata[wall.id] = { type: wall.type, ownerId: wall.owner_id };
     }
   }
-
-  return rows.map((notification) => ({
-    ...notification,
-    actor: notification.actor_id ? actors[notification.actor_id] ?? null : null,
-    wall_type: notification.wall_id ? wallMetadata[notification.wall_id]?.type ?? null : null,
-    wall_owner_id: notification.wall_id ? wallMetadata[notification.wall_id]?.ownerId ?? null : null,
-  }));
+  const last = pageRows.at(-1);
+  return {
+    items: pageRows.map((notification) => ({
+      ...notification,
+      actor: notification.actor_id ? actors[notification.actor_id] ?? null : null,
+      wall_type: notification.wall_id ? wallMetadata[notification.wall_id]?.type ?? null : null,
+      wall_owner_id: notification.wall_id ? wallMetadata[notification.wall_id]?.ownerId ?? null : null,
+    })),
+    nextCursor: rows.length > NOTIFICATION_PAGE_SIZE && last
+      ? { created_at: last.created_at, id: last.id }
+      : null,
+    metadataIncomplete: Boolean(
+      (actorIds.length && (!actorResponse || actorResponse.error))
+      || (wallIds.length && (!wallResponse || wallResponse.error)),
+    ),
+  };
 }
 
 /** Mark one notification read (RLS: only the recipient can update their own). */

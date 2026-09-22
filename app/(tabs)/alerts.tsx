@@ -7,13 +7,14 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { SessionFocusFence } from "@/lib/session-generation";
-import { applyNotificationReadReceipts, relativeNotificationTime } from "@/lib/notification-ui";
+import { appendUniqueNotifications, applyNotificationReadReceipts, relativeNotificationTime } from "@/lib/notification-ui";
 import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   notificationMessage,
   notificationRoute,
+  type NotificationCursor,
   type NotificationWithActor,
 } from "@/lib/notifications";
 import { colors, markColors, radius } from "@/theme";
@@ -24,30 +25,41 @@ export default function AlertsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
   const [items, setItems] = useState<NotificationWithActor[]>([]);
+  const [nextCursor, setNextCursor] = useState<NotificationCursor | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [olderError, setOlderError] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
+  const pageLoadToken = useRef<ReturnType<SessionFocusFence["begin"]>>(null);
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
 
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null);
     if (!token) return;
+    pageLoadToken.current = null;
+    setLoadingOlder(false);
     setLoading(true);
     setError(null);
+    setDetailsError(null);
+    setOlderError(null);
     try {
-      const rows = await listNotifications(token.userId);
+      const page = await listNotifications(token.userId);
       if (!fence.isCurrent(token, currentUserId.current)) return;
-      setItems(rows);
-      if (rows.some((row) => !row.read)) {
-        try {
-          if (!fence.isCurrent(token, currentUserId.current)) return;
-          const readIds = await markAllNotificationsRead(token.userId);
-          if (!fence.isCurrent(token, currentUserId.current)) return;
-          setItems((current) => applyNotificationReadReceipts(current, readIds));
-        } catch {
-          // Reading Alerts remains available if the non-critical receipt fails.
-        }
+      setItems(page.items);
+      setNextCursor(page.nextCursor);
+      if (page.metadataIncomplete) {
+        setDetailsError("Some Alert details couldn't be loaded. Your Alerts are still available.");
+      }
+      try {
+        if (!fence.isCurrent(token, currentUserId.current)) return;
+        const readIds = await markAllNotificationsRead(token.userId);
+        if (!fence.isCurrent(token, currentUserId.current)) return;
+        setItems((current) => applyNotificationReadReceipts(current, readIds));
+      } catch {
+        // Reading Alerts remains available if the non-critical receipt fails.
       }
     } catch (cause: any) {
       if (fence.isCurrent(token, currentUserId.current)) {
@@ -58,20 +70,57 @@ export default function AlertsScreen() {
     }
   }, [fence, userId]);
 
+  const loadOlder = useCallback(async () => {
+    if (!userId || !nextCursor || loading || pageLoadToken.current) return;
+    const token = fence.begin(userId);
+    if (!token) return;
+    pageLoadToken.current = token;
+    setLoadingOlder(true);
+    setOlderError(null);
+    try {
+      const page = await listNotifications(token.userId, nextCursor);
+      if (!fence.isCurrent(token, currentUserId.current)) return;
+      setItems((current) => appendUniqueNotifications(current, page.items));
+      setNextCursor(page.nextCursor);
+      if (page.metadataIncomplete) {
+        setDetailsError("Some Alert details couldn't be loaded. Your Alerts are still available.");
+      }
+    } catch (cause) {
+      if (fence.isCurrent(token, currentUserId.current)) {
+        setOlderError(cause instanceof Error ? cause.message : "Couldn't load older Alerts.");
+      }
+    } finally {
+      if (pageLoadToken.current === token) {
+        pageLoadToken.current = null;
+        setLoadingOlder(false);
+      }
+    }
+  }, [fence, loading, nextCursor, userId]);
+
   useFocusEffect(
     useCallback(() => {
       fence.focus(userId ?? null);
+      pageLoadToken.current = null;
       if (!userId) {
         setItems([]);
+        setNextCursor(null);
         setError(null);
+        setDetailsError(null);
+        setOlderError(null);
+        setLoadingOlder(false);
         setLoading(false);
       } else {
         void load();
       }
       return () => {
         fence.blur();
+        pageLoadToken.current = null;
         setItems([]);
+        setNextCursor(null);
         setError(null);
+        setDetailsError(null);
+        setOlderError(null);
+        setLoadingOlder(false);
         setLoading(true);
       };
     }, [fence, load, userId]),
@@ -127,6 +176,9 @@ export default function AlertsScreen() {
         </View>
       ) : (
         <View accessibilityRole="list" style={{ gap: 10 }}>
+          {detailsError ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.outline}>{detailsError}</Text>
+          ) : null}
           {items.map((notification) => (
             <Pressable
               key={notification.id}
@@ -184,6 +236,17 @@ export default function AlertsScreen() {
               ) : null}
             </Pressable>
           ))}
+          {olderError ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.error}>{olderError}</Text>
+          ) : null}
+          {nextCursor ? (
+            <Button
+              label={loadingOlder ? "Loading older Alerts…" : "Load older Alerts"}
+              variant="ghost"
+              disabled={loadingOlder}
+              onPress={() => void loadOlder()}
+            />
+          ) : null}
         </View>
       )}
     </Screen>
