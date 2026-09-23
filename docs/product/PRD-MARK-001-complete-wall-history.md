@@ -1,6 +1,6 @@
 # PRD-MARK-001: Complete Wall Mark History
 
-**Status:** Proposed for Founder review; no implementation approval inferred
+**Status:** Authorized product scope for a draft client-only implementation on 2026-09-23; independent review and device QA still required
 **Scope owner:** Product
 **Validation tier:** Spec-ready reliability correction within the existing Wall and exact-Mark journeys
 
