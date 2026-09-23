@@ -4,11 +4,13 @@ import { executeMarkRemoval, type MarkRemovalReason } from "./actor-bound-servic
 import { mapActorBoundMutationError } from "./expected-actor";
 import type { Mark } from "./types";
 import type { MediaWriterRpc } from "./mark-media-writer";
+import { readMarkHistoryPage, type MarkCursor } from "./mark-history-cursor";
 import {
   executeTextMarkSubmission,
   type CreateTextMarkResult,
   type PreparedTextMarkSubmission,
 } from "./mark-writer-contract";
+export { WALL_MARK_PAGE_SIZE } from "./mark-history-cursor";
 
 /** Exact actor-bound C4 writer surface shipped by migrations 0023/0024. */
 export const protectedMediaWriterRpc: MediaWriterRpc = {
@@ -62,18 +64,31 @@ export type MarkWithAuthor = Mark & { author: Author | null };
  * Load a wall's active marks, newest first (pinned marks float to the top),
  * then hydrate authors. Anonymous marks never carry author info to the client.
  */
-export async function getWallMarks(wallId: string): Promise<MarkWithAuthor[]> {
-  const { data, error } = await supabase
-    .from("marks")
-    .select("*")
-    .eq("wall_id", wallId)
-    .eq("status", "active")
-    .order("pinned", { ascending: false })
-    .order("created_at", { ascending: false });
-  if (error) throw error;
+export type WallMarkPage = { items: MarkWithAuthor[]; nextCursor: MarkCursor | null };
+/** Two ordered phases avoid a raw PostgREST expression across the pinned boundary. */
+export async function listWallMarks(wallId: string, cursor?: MarkCursor): Promise<WallMarkPage> {
+  async function phase(pinned: boolean, limit: number, after?: string): Promise<Mark[]> {
+    let query = supabase.from("marks").select("*")
+      .eq("wall_id", wallId).eq("status", "active").eq("pinned", pinned)
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(limit);
+    if (after) query = query.or(after);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as Mark[];
+  }
 
-  const marks = (data ?? []) as Mark[];
-  return hydrateAuthors(marks);
+  const page = await readMarkHistoryPage(phase, cursor);
+  return { items: await hydrateAuthors(page.items), nextCursor: page.nextCursor };
+}
+
+/** Exact authorized read; absence is distinct from a transport/hydration failure. */
+export async function getWallMark(wallId: string, markId: string): Promise<MarkWithAuthor | null> {
+  const { data, error } = await supabase.from("marks").select("*")
+    .eq("wall_id", wallId).eq("id", markId).eq("status", "active").maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const [mark] = await hydrateAuthors([data as Mark]);
+  return mark;
 }
 
 /** Resolve author profiles for a batch of marks in one query. */

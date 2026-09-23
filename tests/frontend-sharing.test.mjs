@@ -11,8 +11,8 @@ test("received Marks share an exact focused destination instead of only the encl
 
   assert.equal(
     (home.match(/shareDestination=\{userId \? \{ kind: "personal", ownerId: userId \} : undefined\}/g) ?? []).length,
-    2,
-    "both the Wall card and detail modal receive the exact Personal Wall owner",
+    3,
+    "the Wall card, linked focus card, and detail modal receive the exact Personal Wall owner",
   );
   assert.match(markView, /markDeepLink\(mark\.id, shareDestination\)/);
   assert.match(markView, /shareMark\(mark, wallHandle, destination\)/);

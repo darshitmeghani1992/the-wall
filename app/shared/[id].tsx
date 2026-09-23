@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
@@ -9,7 +9,8 @@ import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { useAuth } from "@/lib/auth";
 import { getWall, getWallCapabilities, joinSharedWall, leaveSharedWall, type WallCapabilities } from "@/lib/walls";
-import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getProfile } from "@/lib/profiles";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { settleOptional } from "@/lib/optional-result";
@@ -47,6 +48,12 @@ export default function SharedWallScreen() {
   const [owner, setOwner] = useState<Profile | null>(null);
   const [capabilities, setCapabilities] = useState<WallCapabilities | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
+  const [nextCursor, setNextCursor] = useState<MarkCursor | null>(null);
+  const [olderBusy, setOlderBusy] = useState(false);
+  const [olderError, setOlderError] = useState(false);
+  const [focusedMark, setFocusedMark] = useState<MarkWithAuthor | null>(null);
+  const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
+  const pageGeneration = useRef(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"join" | "leave" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +92,7 @@ export default function SharedWallScreen() {
   }, [deferredReadyToken]);
 
   const load = useCallback(async () => {
+    const generation = ++pageGeneration.current;
     const token = fence.begin(userId ?? null);
     const requestedWallId = wallId;
     if (!token || !requestedWallId) return;
@@ -93,10 +101,12 @@ export default function SharedWallScreen() {
     setDeferredReadyToken(null);
     setError(null);
     setFocusedMarkUnavailable(false);
+    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    setLoadedIdentity(null);
     try {
       const wallPromise = getWall(requestedWallId);
       const capabilitiesPromise = getWallCapabilities(requestedWallId);
-      let marksPromise: Promise<MarkWithAuthor[]> | null = null;
+      let markPromise: Promise<MarkWithAuthor | null> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
           ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "shared" as const, wallId: requestedWallId } }
@@ -106,9 +116,9 @@ export default function SharedWallScreen() {
             const [wall, wallCapabilities] = await Promise.all([wallPromise, capabilitiesPromise]);
             return wall?.type === "shared" && wallCapabilities?.wallType === "shared" ? wall : null;
           },
-          wallMarks: async (resolvedWallId) => {
-            marksPromise ??= getWallMarks(resolvedWallId);
-            return marksPromise;
+          wallMark: async (resolvedWallId, markId) => {
+            markPromise ??= getWallMark(resolvedWallId, markId);
+            return markPromise;
           },
         });
         if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId) return;
@@ -129,19 +139,22 @@ export default function SharedWallScreen() {
         setError("This Shared Wall isn't available.");
         return;
       }
-      const [ownerResult, nextMarks] = await Promise.all([
+      const [ownerResult, page, exactMark] = await Promise.all([
         settleOptional(getProfile(nextWall.owner_id)),
-        marksPromise ?? getWallMarks(nextWall.id),
+        listWallMarks(nextWall.id),
+        focusMarkId ? (markPromise ?? getWallMark(nextWall.id, focusMarkId)) : Promise.resolve(null),
       ]);
-      if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId) return;
+      if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId || generation !== pageGeneration.current) return;
       setWall(nextWall);
       setCapabilities(nextCapabilities);
       setOwner(ownerResult.available ? ownerResult.value : null);
-      setMarks(nextMarks);
+      setMarks(page.items);
+      setLoadedIdentity(`${userId}:${requestedWallId}:${focusMarkId ?? ""}`);
+      setNextCursor(page.nextCursor);
       if (focusMarkId) {
-        const focused = nextMarks.find((mark) => mark.id === focusMarkId) ?? null;
-        setSelectedMark(focused);
-        setFocusedMarkUnavailable(!focused);
+        setFocusedMark(exactMark);
+        setSelectedMark(exactMark?.secret ? null : exactMark);
+        setFocusedMarkUnavailable(!exactMark);
       }
       if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
     } catch (cause: any) {
@@ -159,14 +172,19 @@ export default function SharedWallScreen() {
     fence.focus(userId ?? null);
     setWall(null); setOwner(null); setCapabilities(null); setMarks([]); setSelectedMark(null); setBusy(null);
     if (userId && accountRoute === "ready" && wallId && (!reference || deferredAttempt?.reference === reference)) void load(); else if (!reference && accountRoute === "ready") setLoading(false);
-    return () => { fence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
+    return () => { pageGeneration.current++; fence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
   }, [accountRoute, deferredAttempt?.reference, fence, load, reference, userId, wallId]));
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
-    setMarks((current) => current.some((item) => item.id === mark.id) ? current : [mark, ...current]);
+    setMarks((current) => mergeWallMarks(current, [mark]));
   });
-  const { summaries, toggle } = useWallReactions(marks, userId);
+  const gridMarks = focusedMark?.secret ? marks.filter((mark) => mark.id !== focusedMark.id) : marks;
+  const reactionMarks = useMemo(
+    () => focusedMark && !marks.some((mark) => mark.id === focusedMark.id) ? [...marks, focusedMark] : marks,
+    [focusedMark, marks],
+  );
+  const { summaries, toggle } = useWallReactions(reactionMarks, userId);
 
   async function join() {
     if (!userId || busy || capabilities?.wallType !== "shared" || !capabilities.canJoin || !beginExclusiveMutation(mutationInFlight)) return;
@@ -229,10 +247,28 @@ export default function SharedWallScreen() {
     await load();
   }
 
+  async function loadOlder() {
+    if (!wall || !userId || !nextCursor || olderBusy) return;
+    const requestedWall = wall.id;
+    const generation = pageGeneration.current;
+    setOlderBusy(true); setOlderError(false);
+    try {
+      const page = await listWallMarks(requestedWall, nextCursor);
+      if (generation !== pageGeneration.current || currentUserId.current !== userId || currentWallId.current !== requestedWall) return;
+      setMarks((current) => mergeWallMarks(current, page.items));
+      setNextCursor(page.nextCursor);
+    } catch {
+      if (generation === pageGeneration.current && currentUserId.current === userId) setOlderError(true);
+    } finally {
+      if (generation === pageGeneration.current) setOlderBusy(false);
+    }
+  }
+
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (!session) return <Redirect href="/welcome" />;
   if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (loadedIdentity && loadedIdentity !== `${userId}:${wallId}:${focusMarkId ?? ""}`) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
@@ -254,7 +290,7 @@ export default function SharedWallScreen() {
       </View>
       <Text variant="display" style={{ fontSize: 26 }}>{wall.name}</Text>
       <Text variant="body" color={colors.outline} style={{ marginTop: 4 }}>
-        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} marks · {isOwner ? "owner" : isMember ? "member" : "viewer"}
+        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {gridMarks.length} {nextCursor ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
       </Text>
 
       {error ? <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: 12 }}>{error}</Text> : null}
@@ -275,14 +311,26 @@ export default function SharedWallScreen() {
       {joinState === "invite_required" ? <StateNotice text={wall.visibility === "public" ? "You can view this Wall. Joining requires an invitation from the owner." : "Only accepted members can open this Wall."} /> : null}
       {joinState === "invited" ? <StateNotice text="You have an invitation waiting. Accept it before leaving Marks." /> : null}
 
-      {marks.length ? (
-        <Masonry data={marks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
-          <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
+      {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
+        <View style={{ marginBottom: 16 }}>
+          <Text variant="label">LINKED MARK</Text>
+          <MarkView mark={focusedMark} highlight isWallOwner={isOwner} reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
+        </View>
+      ) : null}
+      {gridMarks.length ? (
+        <Masonry data={gridMarks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
+          <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} isWallOwner={isOwner} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
         )} />
       ) : (
         <View style={{ paddingVertical: 36, alignItems: "center" }}><Text variant="headline">No Marks yet</Text><Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>{canLeaveMark ? `Be the first to leave a Mark on ${wall.name}.` : "This Shared Wall is waiting for its first Mark."}</Text></View>
       )}
-      <MarkDetailModal mark={selectedMark} viewerId={userId} wallOwnerId={wall.owner_id} reactions={selectedMark ? summaries[selectedMark.id] : undefined} onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined} onClose={() => setSelectedMark(null)} onMarkUpdated={(markId, text) => { setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item)); setSelectedMark((current) => current?.id === markId ? { ...current, text } : current); }} onMarkRemoved={(markId) => setMarks((current) => current.filter((item) => item.id !== markId))} />
+      {nextCursor ? (
+        <View style={{ marginTop: 20, gap: 8 }}>
+          {olderError ? <Text accessibilityRole="alert" variant="body" color={colors.error}>Older Marks couldn&apos;t load. Your visible Marks are still here.</Text> : null}
+          <Button label={olderError ? "Retry older Marks" : "Load older Marks"} variant="primary" loading={olderBusy} onPress={() => void loadOlder()} />
+        </View>
+      ) : null}
+      <MarkDetailModal mark={selectedMark} viewerId={userId} wallOwnerId={wall.owner_id} reactions={selectedMark ? summaries[selectedMark.id] : undefined} onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined} onClose={() => setSelectedMark(null)} onMarkUpdated={(markId, text) => { setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item)); setSelectedMark((current) => current?.id === markId ? { ...current, text } : current); setFocusedMark((current) => current?.id === markId ? { ...current, text } : current); }} onMarkRemoved={() => void load()} />
     </Screen>
   );
 }

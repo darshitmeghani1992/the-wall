@@ -29,10 +29,20 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
   // Marks whose summary we've already requested — avoids redundant fetches as the
   // list re-renders or grows via realtime.
   const requested = useRef<Set<string>>(new Set());
+  const requestedUserId = useRef(userId ?? null);
+  const currentUserId = useRef(userId ?? null);
+  currentUserId.current = userId ?? null;
+
+  useEffect(() => {
+    requestedUserId.current = userId ?? null;
+    requested.current.clear();
+    setSummaries({});
+  }, [userId]);
 
   const refresh = useCallback(
     async (markId: string) => {
       const summary = await getReactionSummary(markId, userId);
+      if (currentUserId.current !== (userId ?? null)) return;
       setSummaries((cur) => ({ ...cur, [markId]: summary }));
     },
     [userId],
@@ -47,7 +57,7 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
     let active = true;
     getReactionSummaries(ids, userId)
       .then((map) => {
-        if (active) setSummaries((cur) => ({ ...cur, ...map }));
+        if (active && currentUserId.current === (userId ?? null)) setSummaries((cur) => ({ ...cur, ...map }));
       })
       .catch(() => {
         // Let a later render retry these ids.
@@ -102,5 +112,5 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
     [refresh],
   );
 
-  return { summaries, toggle };
+  return { summaries: requestedUserId.current === (userId ?? null) ? summaries : {}, toggle };
 }

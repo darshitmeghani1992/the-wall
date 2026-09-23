@@ -79,7 +79,8 @@ test("legacy process-memory holder is removed and recovery helpers propagate que
   const marks = read("src/lib/marks.ts");
   assert.match(profiles, /getProfileByHandle[\s\S]*if \(error\) throw error/);
   assert.match(profiles, /getPersonalWall[\s\S]*if \(error\) throw error/);
-  assert.match(marks, /getWallMarks[\s\S]*if \(error\) throw error/);
+  assert.match(marks, /listWallMarks[\s\S]*if \(error\) throw error/);
+  assert.match(marks, /getWallMark[\s\S]*if \(error\) throw error/);
   assert.match(marks, /hydrateAuthors[\s\S]*if \(error\) throw error/);
   assert.match(marks, /postgres_changes[\s\S]*try \{[\s\S]*await hydrateAuthors\(\[raw\]\)[\s\S]*\} catch \{/);
 });

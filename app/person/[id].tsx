@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -22,7 +22,8 @@ import {
   type RelationshipState,
 } from "@/lib/friendships";
 import { getFollowCounts, isFollowing, followUser, unfollowUser } from "@/lib/follows";
-import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
 import { useWallReactions } from "@/hooks/useWallReactions";
 import { sharePersonWall } from "@/lib/share";
@@ -74,6 +75,12 @@ export default function PersonWall() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [wall, setWall] = useState<Wall | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
+  const [nextCursor, setNextCursor] = useState<MarkCursor | null>(null);
+  const [olderBusy, setOlderBusy] = useState(false);
+  const [olderError, setOlderError] = useState(false);
+  const [focusedMark, setFocusedMark] = useState<MarkWithAuthor | null>(null);
+  const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
+  const pageGeneration = useRef(0);
   const [relationship, setRelationship] = useState<RelationshipState>("none");
   const [capabilities, setCapabilities] = useState<WallCapabilities | null>(null);
   const [following, setFollowing] = useState(false);
@@ -124,6 +131,7 @@ export default function PersonWall() {
   }, [deferredReadyToken]);
 
   const load = useCallback(async () => {
+    const generation = ++pageGeneration.current;
     const viewerId = session?.user.id ?? null;
     const personId = typeof id === "string" ? id : null;
     const token = loadFence.current.begin(viewerId);
@@ -142,6 +150,8 @@ export default function PersonWall() {
     setSelectedMark(null);
     setWall(null);
     setMarks([]);
+    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    setLoadedIdentity(null);
     setCapabilities(null);
     try {
       const blocked = await isUserBlockedByMe(personId);
@@ -161,7 +171,7 @@ export default function PersonWall() {
       const personPromise = getProfile(personId);
       const personalWallPromise = getReadablePersonalWall(personId);
       let capabilitiesPromise: Promise<WallCapabilities | null> | null = null;
-      let marksPromise: Promise<MarkWithAuthor[]> | null = null;
+      let markPromise: Promise<MarkWithAuthor | null> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
           ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "personal" as const, ownerId: personId } }
@@ -174,9 +184,9 @@ export default function PersonWall() {
             const wallCapabilities = await capabilitiesPromise;
             return wallCapabilities ? personalWall : null;
           },
-          wallMarks: async (wallId) => {
-            marksPromise ??= getWallMarks(wallId);
-            return marksPromise;
+          wallMark: async (wallId, markId) => {
+            markPromise ??= getWallMark(wallId, markId);
+            return markPromise;
           },
         });
         if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
@@ -221,18 +231,21 @@ export default function PersonWall() {
         if (!wallCapabilities) {
           return;
         }
-        const [nextMarks, followState] = await Promise.all([
-          marksPromise ?? getWallMarks(personalWall.id),
+        const [page, exactMark, followState] = await Promise.all([
+          listWallMarks(personalWall.id),
+          focusMarkId ? (markPromise ?? getWallMark(personalWall.id, focusMarkId)) : Promise.resolve(null),
           settleOptional(personalWall.visibility === "public" ? isFollowing(token.userId, personId) : Promise.resolve(false)),
         ]);
-        if (!loadFence.current.isCurrent(token, currentUserId.current)) return;
-        setMarks(nextMarks);
+        if (!loadFence.current.isCurrent(token, currentUserId.current) || generation !== pageGeneration.current) return;
+        setMarks(page.items);
+        setLoadedIdentity(`${viewerId}:${personId}:${focusMarkId ?? ""}`);
+        setNextCursor(page.nextCursor);
         setFollowing(followState.available ? followState.value : false);
         setFollowStateAvailable(followState.available);
         if (focusMarkId) {
-          const focusedMark = nextMarks.find((mark) => mark.id === focusMarkId) ?? null;
-          setSelectedMark(focusedMark);
-          setFocusedMarkUnavailable(!focusedMark);
+          setFocusedMark(exactMark);
+          setSelectedMark(exactMark?.secret ? null : exactMark);
+          setFocusedMarkUnavailable(!exactMark);
         }
         if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
       }
@@ -266,6 +279,7 @@ export default function PersonWall() {
       setLoading(false);
     }
     return () => {
+      pageGeneration.current++;
       loadFence.current.blur();
       actionFence.current.blur();
       targetRouteFence.current.blur();
@@ -274,9 +288,14 @@ export default function PersonWall() {
 
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
-    setMarks((current) => current.some((item) => item.id === mark.id) ? current : [mark, ...current]);
+    setMarks((current) => mergeWallMarks(current, [mark]));
   });
-  const { summaries, toggle } = useWallReactions(marks, session?.user.id);
+  const gridMarks = focusedMark?.secret ? marks.filter((mark) => mark.id !== focusedMark.id) : marks;
+  const reactionMarks = useMemo(
+    () => focusedMark && !marks.some((mark) => mark.id === focusedMark.id) ? [...marks, focusedMark] : marks,
+    [focusedMark, marks],
+  );
+  const { summaries, toggle } = useWallReactions(reactionMarks, session?.user.id);
   const canLeaveMark = capabilities?.canContribute === true;
   const wallAvailability = classifyOtherWallAvailability({
     readFailed: Boolean(error),
@@ -472,10 +491,30 @@ export default function PersonWall() {
     await load();
   }
 
+  async function loadOlder() {
+    const viewerId = session?.user.id ?? null;
+    const personId = typeof id === "string" ? id : null;
+    if (!viewerId || !personId || !wall || !nextCursor || olderBusy) return;
+    const generation = pageGeneration.current;
+    const requestedWall = wall.id;
+    setOlderBusy(true); setOlderError(false);
+    try {
+      const page = await listWallMarks(requestedWall, nextCursor);
+      if (generation !== pageGeneration.current || currentUserId.current !== viewerId || currentPersonId.current !== personId) return;
+      setMarks((current) => mergeWallMarks(current, page.items));
+      setNextCursor(page.nextCursor);
+    } catch {
+      if (generation === pageGeneration.current && currentUserId.current === viewerId) setOlderError(true);
+    } finally {
+      if (generation === pageGeneration.current) setOlderBusy(false);
+    }
+  }
+
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (!session) return <Redirect href="/welcome" />;
   if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (loadedIdentity && loadedIdentity !== `${session?.user.id}:${String(id ?? "")}:${focusMarkId ?? ""}`) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
   if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
@@ -565,8 +604,15 @@ export default function PersonWall() {
                 </Pressable>
               ) : null}
               {!canLeaveMark ? <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>{contributionUnavailableCopy(wall.contribution_policy, relationship)}</Text> : null}
+              <Text variant="label" color={colors.outlineVariant}>{gridMarks.length} {nextCursor ? "LOADED MARKS" : "MARKS"}</Text>
+              {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
+                <View style={{ marginBottom: 16 }}>
+                  <Text variant="label">LINKED MARK</Text>
+                  <MarkView mark={focusedMark} highlight reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
+                </View>
+              ) : null}
               {marks.length ? (
-                <Masonry data={marks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
+                <Masonry data={gridMarks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
                   <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
                 )} />
               ) : (
@@ -575,6 +621,12 @@ export default function PersonWall() {
                   <Text variant="body" color={colors.outline} style={{ marginTop: 6 }}>Their Wall is waiting for its first story.</Text>
                 </View>
               )}
+              {nextCursor ? (
+                <View style={{ marginTop: 20, gap: 8 }}>
+                  {olderError ? <Text accessibilityRole="alert" variant="body" color={colors.error}>Older Marks couldn&apos;t load. Your visible Marks are still here.</Text> : null}
+                  <Button label={olderError ? "Retry older Marks" : "Load older Marks"} variant="primary" loading={olderBusy} onPress={() => void loadOlder()} />
+                </View>
+              ) : null}
               <MarkDetailModal
                 mark={selectedMark}
                 viewerId={session?.user.id}
@@ -586,8 +638,9 @@ export default function PersonWall() {
                 onMarkUpdated={(markId, text) => {
                   setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item));
                   setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
+                  setFocusedMark((current) => current?.id === markId ? { ...current, text } : current);
                 }}
-                onMarkRemoved={(markId) => setMarks((current) => current.filter((item) => item.id !== markId))}
+                onMarkRemoved={() => void load()}
               />
             </>
           )}

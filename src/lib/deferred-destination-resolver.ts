@@ -10,7 +10,7 @@ export type DeferredResolverOperations = {
   personalWall?(ownerId: string): Promise<{ id: string } | null>;
   sharedWall?(wallId: string): Promise<{ id: string } | null>;
   invitation?(wallId: string): Promise<{ status: "available" } | { status: "unavailable" }>;
-  wallMarks?(wallId: string): Promise<readonly { id: string }[]>;
+  wallMark?(wallId: string, markId: string): Promise<{ id: string } | null>;
 };
 
 function operation<K extends keyof DeferredResolverOperations>(
@@ -75,8 +75,8 @@ export async function resolveDeferredDestination(
           ? await operation(operations, "personalWall")(destination.container.ownerId)
           : await operation(operations, "sharedWall")(destination.container.wallId);
         if (!wall) return { status: "terminal_unavailable" };
-        const marks = await operation(operations, "wallMarks")(wall.id);
-        if (!marks.some((mark) => mark.id === destination.markId)) return { status: "terminal_unavailable" };
+        const mark = await operation(operations, "wallMark")(wall.id, destination.markId);
+        if (!mark || mark.id !== destination.markId) return { status: "terminal_unavailable" };
         if (destination.container.kind === "personal") {
           const ownerId = destination.container.ownerId;
           return {

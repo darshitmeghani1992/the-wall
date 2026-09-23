@@ -13,7 +13,7 @@ function operations(overrides: Partial<DeferredResolverOperations> = {}): Deferr
     personalWall: async () => ({ id: WALL }),
     sharedWall: async () => ({ id: WALL }),
     invitation: async () => ({ status: "available" }),
-    wallMarks: async () => [{ id: MARK }],
+    wallMark: async () => ({ id: MARK }),
     ...overrides,
   };
 }
@@ -26,7 +26,7 @@ const liveBoundary = operations({
   personalWall: async (ownerId) => { calls.push(`personal:${ownerId}`); return { id: WALL }; },
   sharedWall: async (wallId) => { calls.push(`shared:${wallId}`); return { id: WALL }; },
   invitation: async (wallId) => { calls.push(`invite:${wallId}`); return { status: "available" }; },
-  wallMarks: async (wallId) => { calls.push(`marks:${wallId}`); return [{ id: MARK }]; },
+  wallMark: async (wallId, markId) => { calls.push(`mark:${wallId}:${markId}`); return { id: MARK }; },
 });
 
 await resolveDeferredDestination({ kind: "personal_handle", handle: "maya" }, A, liveBoundary);
@@ -41,9 +41,9 @@ assert.deepEqual(calls, [
   `shared:${WALL}`,
   `invite:${WALL}`,
   `personal:${B}`,
-  `marks:${WALL}`,
+  `mark:${WALL}:${MARK}`,
   `shared:${WALL}`,
-  `marks:${WALL}`,
+  `mark:${WALL}:${MARK}`,
 ], "each live destination family crosses the injected classifier operation boundary");
 
 assert.equal((await resolveDeferredDestination({ kind: "personal_handle", handle: "maya" }, A, operations())).status, "available");
@@ -56,7 +56,7 @@ assert.equal((await resolveDeferredDestination({ kind: "personal_handle", handle
 assert.equal((await resolveDeferredDestination({ kind: "personal_user", userId: B }, A, operations({ personalWall: async () => null }))).status, "terminal_unavailable");
 assert.equal((await resolveDeferredDestination({ kind: "shared_wall", wallId: WALL }, A, operations({ sharedWall: async () => null }))).status, "terminal_unavailable");
 assert.equal((await resolveDeferredDestination({ kind: "shared_invite", wallId: WALL }, A, operations({ invitation: async () => ({ status: "unavailable" }) }))).status, "terminal_unavailable");
-assert.equal((await resolveDeferredDestination({ kind: "mark", markId: MARK, container: { kind: "personal", ownerId: B } }, A, operations({ wallMarks: async () => [] }))).status, "terminal_unavailable");
+assert.equal((await resolveDeferredDestination({ kind: "mark", markId: MARK, container: { kind: "personal", ownerId: B } }, A, operations({ wallMark: async () => null }))).status, "terminal_unavailable");
 
 for (const throwing of [
   { kind: "personal_handle", handle: "maya" } as const,
@@ -70,7 +70,7 @@ for (const throwing of [
     personalWall: async () => { throw new Error("offline"); },
     sharedWall: async () => { throw new Error("offline"); },
     invitation: async () => { throw new Error("offline"); },
-    wallMarks: async () => { throw new Error("offline"); },
+    wallMark: async () => { throw new Error("offline"); },
   });
   assert.equal((await resolveDeferredDestination(throwing, A, failed)).status, "retryable_failure");
 }

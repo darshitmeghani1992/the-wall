@@ -13,7 +13,8 @@ import { WallStatus } from "@/components/WallStatus";
 import { shareMyWall, inviteFriends } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
-import { getWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getAccessibleSharedWalls } from "@/lib/walls";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { settleOptional } from "@/lib/optional-result";
@@ -60,6 +61,13 @@ export default function MyWall() {
   const [sharedWalls, setSharedWalls] = useState<Wall[]>([]);
   const [sharedWallsError, setSharedWallsError] = useState(false);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
+  const [nextCursor, setNextCursor] = useState<MarkCursor | null>(null);
+  const [olderBusy, setOlderBusy] = useState(false);
+  const [olderError, setOlderError] = useState(false);
+  const [focusedMark, setFocusedMark] = useState<MarkWithAuthor | null>(null);
+  const [loadedSubject, setLoadedSubject] = useState<string | null>(null);
+  const pageGeneration = useRef(0);
+  const hasFocused = useRef(false);
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -116,6 +124,8 @@ export default function MyWall() {
   useFocusEffect(
     useCallback(() => {
       sharedWallsFence.focus(userId ?? null);
+      if (hasFocused.current) setReloadKey((value) => value + 1);
+      hasFocused.current = true;
       if (!userId) {
         setSharedWalls([]);
         setSharedWallsError(false);
@@ -123,6 +133,7 @@ export default function MyWall() {
         void refreshSharedWalls();
       }
       return () => {
+        pageGeneration.current++;
         sharedWallsFence.blur();
         setSharedWalls([]);
         setSharedWallsError(false);
@@ -132,6 +143,10 @@ export default function MyWall() {
 
   useEffect(() => {
     let active = true;
+    const generationGuard = pageGeneration;
+    const generation = ++generationGuard.current;
+    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    setLoadedSubject(null);
     (async () => {
       if (!userId) {
         setWall(null);
@@ -153,16 +168,16 @@ export default function MyWall() {
       setSelectedMark(null);
 
       const personalWallPromise = getPersonalWall(userId);
-      let marksPromise: Promise<MarkWithAuthor[]> | null = null;
+      let markPromise: Promise<MarkWithAuthor | null> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
           ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "personal" as const, ownerId: userId } }
           : { kind: "personal_user" as const, userId };
         const resolution = await resolveDeferredDestination(destination, userId, {
           personalWall: async () => personalWallPromise,
-          wallMarks: async (wallId) => {
-            marksPromise ??= getWallMarks(wallId);
-            return marksPromise;
+          wallMark: async (wallId, markId) => {
+            markPromise ??= getWallMark(wallId, markId);
+            return markPromise;
           },
         });
         if (!active) return;
@@ -192,8 +207,9 @@ export default function MyWall() {
       }
 
       setWall(personalWall);
-      const [nextMarks, friends] = await Promise.all([
-        marksPromise ?? getWallMarks(personalWall.id),
+      const [page, exactMark, friends] = await Promise.all([
+        listWallMarks(personalWall.id),
+        focusMarkId ? (markPromise ?? getWallMark(personalWall.id, focusMarkId)) : Promise.resolve(null),
         settleOptional(supabase
           .from("friendships")
           .select("requester_id", { count: "exact", head: true })
@@ -204,12 +220,14 @@ export default function MyWall() {
             return count;
           })),
       ]);
-      if (!active) return;
-      setMarks(nextMarks);
+      if (!active || generation !== pageGeneration.current || currentUserId.current !== userId) return;
+      setMarks(page.items);
+      setLoadedSubject(`${userId}:${focusMarkId ?? ""}`);
+      setNextCursor(page.nextCursor);
       if (focusMarkId) {
-        const focusedMark = nextMarks.find((mark) => mark.id === focusMarkId) ?? null;
-        setSelectedMark(focusedMark);
-        setFocusedMarkUnavailable(!focusedMark);
+        setFocusedMark(exactMark);
+        setSelectedMark(exactMark?.secret ? null : exactMark);
+        setFocusedMarkUnavailable(!exactMark);
       }
       setFriendCount(friends.available ? friends.value : null);
       if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
@@ -223,6 +241,7 @@ export default function MyWall() {
 
     return () => {
       active = false;
+      if (generationGuard.current === generation) generationGuard.current++;
     };
   }, [accountRoute, deferredAttempt, focusMarkId, reference, reloadKey, router, userId]);
 
@@ -232,18 +251,38 @@ export default function MyWall() {
     setReloadKey((value) => value + 1);
   }
 
+  async function loadOlder() {
+    if (!wall || !userId || !nextCursor || olderBusy) return;
+    const generation = pageGeneration.current;
+    const cursor = nextCursor;
+    const requestedWall = wall.id;
+    setOlderBusy(true); setOlderError(false);
+    try {
+      const page = await listWallMarks(requestedWall, cursor);
+      if (generation !== pageGeneration.current || currentUserId.current !== userId || wall?.id !== requestedWall) return;
+      setMarks((current) => mergeWallMarks(current, page.items));
+      setNextCursor(page.nextCursor);
+    } catch {
+      if (generation === pageGeneration.current && currentUserId.current === userId) setOlderError(true);
+    } finally {
+      if (generation === pageGeneration.current) setOlderBusy(false);
+    }
+  }
+
   useStaggeredArrivals(wall?.id, (mark) => {
     dropIds.current.add(mark.id);
-    setMarks((current) =>
-      current.some((candidate) => candidate.id === mark.id) ? current : [mark, ...current],
-    );
+    setMarks((current) => mergeWallMarks(current, [mark]));
   });
-
-  const { summaries, toggle } = useWallReactions(marks, session?.user?.id);
+  const gridMarks = focusedMark?.secret ? marks.filter((mark) => mark.id !== focusedMark.id) : marks;
+  const reactionMarks = useMemo(
+    () => focusedMark && !marks.some((mark) => mark.id === focusedMark.id) ? [...marks, focusedMark] : marks,
+    [focusedMark, marks],
+  );
+  const { summaries, toggle } = useWallReactions(reactionMarks, session?.user?.id);
   const activeFilter = FILTERS.find((candidate) => candidate.key === filter) ?? FILTERS[0];
   const visible = useMemo(
-    () => marks.filter((mark) => activeFilter.match(mark.type)),
-    [marks, activeFilter],
+    () => gridMarks.filter((mark) => activeFilter.match(mark.type)),
+    [gridMarks, activeFilter],
   );
   const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
 
@@ -275,7 +314,7 @@ export default function MyWall() {
               {wall?.name ?? `${profile?.display_name ?? "My"}'s Wall`}
             </Text>
             <Text variant="label" color={colors.outline}>
-              {marks.length} MARKS · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
+              {gridMarks.length} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
             </Text>
           </View>
         </View>
@@ -371,13 +410,14 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, marks.length, profile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
+    [filter, friendCount, initial, gridMarks.length, nextCursor, profile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (!session) return <Redirect href="/welcome" />;
   if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
+  if (loadedSubject && loadedSubject !== `${userId}:${focusMarkId ?? ""}`) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
 
@@ -404,6 +444,13 @@ export default function MyWall() {
           >
             <Text variant="label">GO TO DISCOVER</Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
+        <View style={{ marginBottom: 16 }}>
+          <Text variant="label">LINKED MARK</Text>
+          <MarkView mark={focusedMark} highlight isWallOwner shareable wallHandle={profile?.handle} shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined} reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
         </View>
       ) : null}
 
@@ -444,6 +491,13 @@ export default function MyWall() {
         />
       )}
 
+      {!loadError && !loading && nextCursor ? (
+        <View style={{ marginTop: 20, gap: 8 }}>
+          {olderError ? <Text accessibilityRole="alert" variant="body" color={colors.error}>Older Marks couldn&apos;t load. Your visible Marks are still here.</Text> : null}
+          <Button label={olderError ? "Retry older Marks" : "Load older Marks"} variant="primary" loading={olderBusy} onPress={() => void loadOlder()} />
+        </View>
+      ) : null}
+
       <MarkDetailModal
         mark={selectedMark}
         viewerId={session?.user.id}
@@ -457,8 +511,9 @@ export default function MyWall() {
         onMarkUpdated={(markId, text) => {
           setMarks((current) => current.map((mark) => mark.id === markId ? { ...mark, text } : mark));
           setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
+          setFocusedMark((current) => current?.id === markId ? { ...current, text } : current);
         }}
-        onMarkRemoved={(markId) => setMarks((current) => current.filter((mark) => mark.id !== markId))}
+        onMarkRemoved={() => setReloadKey((value) => value + 1)}
       />
 
       <View style={{ height: 12 }} />
