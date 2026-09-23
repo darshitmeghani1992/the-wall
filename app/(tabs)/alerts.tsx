@@ -32,6 +32,7 @@ export default function AlertsScreen() {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [olderError, setOlderError] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
+  const receiptFence = useRef(new SessionFocusFence()).current;
   const pageLoadToken = useRef<ReturnType<SessionFocusFence["begin"]>>(null);
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
@@ -39,6 +40,8 @@ export default function AlertsScreen() {
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null);
     if (!token) return;
+    const receiptToken = receiptFence.begin(token.userId);
+    if (!receiptToken) return;
     pageLoadToken.current = null;
     setLoadingOlder(false);
     setLoading(true);
@@ -53,10 +56,11 @@ export default function AlertsScreen() {
       if (page.metadataIncomplete) {
         setDetailsError("Some Alert details couldn't be loaded. Your Alerts are still available.");
       }
+      // The receipt is best-effort. Show fetched Alerts even if its request stalls.
+      setLoading(false);
       try {
-        if (!fence.isCurrent(token, currentUserId.current)) return;
         const readIds = await markAllNotificationsRead(token.userId);
-        if (!fence.isCurrent(token, currentUserId.current)) return;
+        if (!receiptFence.isCurrent(receiptToken, currentUserId.current)) return;
         setItems((current) => applyNotificationReadReceipts(current, readIds));
       } catch {
         // Reading Alerts remains available if the non-critical receipt fails.
@@ -68,7 +72,7 @@ export default function AlertsScreen() {
     } finally {
       if (fence.isCurrent(token, currentUserId.current)) setLoading(false);
     }
-  }, [fence, userId]);
+  }, [fence, receiptFence, userId]);
 
   const loadOlder = useCallback(async () => {
     if (!userId || !nextCursor || loading || pageLoadToken.current) return;
@@ -100,6 +104,7 @@ export default function AlertsScreen() {
   useFocusEffect(
     useCallback(() => {
       fence.focus(userId ?? null);
+      receiptFence.focus(userId ?? null);
       pageLoadToken.current = null;
       if (!userId) {
         setItems([]);
@@ -114,6 +119,7 @@ export default function AlertsScreen() {
       }
       return () => {
         fence.blur();
+        receiptFence.blur();
         pageLoadToken.current = null;
         setItems([]);
         setNextCursor(null);
@@ -123,7 +129,7 @@ export default function AlertsScreen() {
         setLoadingOlder(false);
         setLoading(true);
       };
-    }, [fence, load, userId]),
+    }, [fence, load, receiptFence, userId]),
   );
 
   async function open(notification: NotificationWithActor) {
