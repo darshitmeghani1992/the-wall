@@ -8,6 +8,7 @@ import {
   type ReactionSummary,
 } from "@/lib/reactions";
 import type { MarkWithAuthor } from "@/lib/marks";
+import { ReactionRequestTracker } from "@/lib/reaction-request-tracker";
 
 const EMPTY: ReactionSummary = { counts: {}, mine: null };
 
@@ -28,11 +29,21 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
   summariesRef.current = summaries;
   // Marks whose summary we've already requested — avoids redundant fetches as the
   // list re-renders or grows via realtime.
-  const requested = useRef<Set<string>>(new Set());
+  const requested = useRef(new ReactionRequestTracker());
+  const requestedUserId = useRef(userId ?? null);
+  const currentUserId = useRef(userId ?? null);
+  currentUserId.current = userId ?? null;
+
+  useEffect(() => {
+    requestedUserId.current = userId ?? null;
+    requested.current.clear();
+    setSummaries({});
+  }, [userId]);
 
   const refresh = useCallback(
     async (markId: string) => {
       const summary = await getReactionSummary(markId, userId);
+      if (currentUserId.current !== (userId ?? null)) return;
       setSummaries((cur) => ({ ...cur, [markId]: summary }));
     },
     [userId],
@@ -40,21 +51,26 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
 
   // Load summaries for any Marks we haven't fetched yet.
   useEffect(() => {
-    const ids = marks.map((m) => m.id).filter((id) => !requested.current.has(id));
+    const request = requested.current.claim(marks.map((m) => m.id));
+    const ids = request.ids;
     if (!ids.length) return;
-    ids.forEach((id) => requested.current.add(id));
 
     let active = true;
+    let completed = false;
     getReactionSummaries(ids, userId)
       .then((map) => {
-        if (active) setSummaries((cur) => ({ ...cur, ...map }));
+        if (active && currentUserId.current === (userId ?? null)) {
+          completed = true;
+          setSummaries((cur) => ({ ...cur, ...map }));
+        }
       })
       .catch(() => {
         // Let a later render retry these ids.
-        ids.forEach((id) => requested.current.delete(id));
+        request.abandon();
       });
     return () => {
       active = false;
+      if (!completed) request.abandon();
     };
   }, [marks, userId]);
 
@@ -102,5 +118,5 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
     [refresh],
   );
 
-  return { summaries, toggle };
+  return { summaries: requestedUserId.current === (userId ?? null) ? summaries : {}, toggle };
 }

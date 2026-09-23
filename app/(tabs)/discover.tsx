@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { PersonRow } from "@/components/PersonRow";
@@ -27,6 +27,7 @@ import { colors, markColors, radius } from "@/theme";
 
 export default function PeopleScreen() {
   const router = useRouter();
+  const { section } = useLocalSearchParams<{ section?: string }>();
   const { session } = useAuth();
   const userId = session?.user.id;
   const [query, setQuery] = useState("");
@@ -84,6 +85,12 @@ export default function PeopleScreen() {
     setFriends([]);
     setIncoming([]);
     actionInFlight.current = false;
+    if (section === "friends") {
+      setMode("people");
+      currentQuery.current = "";
+      setQuery("");
+      router.setParams({ section: undefined });
+    }
     if (nextUserId) void loadNetwork();
     else setLoading(false);
     return () => {
@@ -91,7 +98,7 @@ export default function PeopleScreen() {
       searchFence.current.blur();
       actionFence.current.blur();
     };
-  }, [loadNetwork, userId]));
+  }, [loadNetwork, router, section, userId]));
 
   async function runSearch() {
     if (mode === "walls") return runWallSearch();
@@ -213,10 +220,44 @@ export default function PeopleScreen() {
         Find people and public Shared Walls.
       </Text>
 
-      <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+      <View
+        accessibilityRole="tablist"
+        accessibilityLabel="Discover category"
+        style={{ flexDirection: "row", marginBottom: 16, borderRadius: radius.card, borderWidth: 2, borderColor: colors.ink, overflow: "hidden" }}
+      >
         {(["people", "walls"] as const).map((choice) => {
           const selected = mode === choice;
-          return <Pressable key={choice} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={`Discover ${choice}`} onPress={() => { searchFence.current.focus(userId ?? null); setMode(choice); setQuery(""); currentQuery.current = ""; setResults([]); setWallResults([]); setSearchedQuery(null); setError(null); }} style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.ink, backgroundColor: selected ? colors.ink : colors.surface }}><Text variant="label" color={selected ? markColors.brandYellow : colors.ink}>{choice.toUpperCase()}</Text></Pressable>;
+          return (
+            <Pressable
+              key={choice}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Discover ${choice}`}
+              onPress={() => {
+                searchFence.current.focus(userId ?? null);
+                setMode(choice);
+                setQuery("");
+                currentQuery.current = "";
+                setResults([]);
+                setWallResults([]);
+                setSearchedQuery(null);
+                setError(null);
+              }}
+              style={{
+                flex: 1,
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+                borderLeftWidth: choice === "walls" ? 2 : 0,
+                borderColor: colors.ink,
+                backgroundColor: selected ? colors.ink : colors.surfaceContainerLow,
+              }}
+            >
+              <Text variant="label" color={selected ? markColors.brandYellow : colors.ink}>
+                {choice.toUpperCase()}
+              </Text>
+            </Pressable>
+          );
         })}
       </View>
 
