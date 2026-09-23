@@ -200,6 +200,8 @@ export default function MyWall() {
           if (capturedDeferredToken) {
             const unavailable = transferDeferredAttemptToUnavailable(capturedDeferredToken);
             if (unavailable) router.replace(unavailable.href as never);
+          } else {
+            setLoadError(true);
           }
           setLoading(false);
         }
@@ -424,7 +426,7 @@ export default function MyWall() {
 
   return (
     <Screen>
-      <Header />
+      {wall && !loadError ? <Header /> : <Text variant="display">My Wall</Text>}
 
       {focusedMarkUnavailable ? (
         <View
@@ -455,10 +457,10 @@ export default function MyWall() {
         </View>
       ) : null}
 
-      {loadError ? (
+      {loadError || (!loading && !wall) ? (
         <View style={{ marginTop: 24, gap: 12 }}>
           <Text accessibilityRole="alert" variant="headline">We couldn&apos;t load your Wall.</Text>
-          <Text variant="body" color={colors.outline}>Check your connection and try again.</Text>
+          <Text variant="body" color={colors.outline}>Try again in a moment.</Text>
           <Button label="Retry" variant="yellow" onPress={() => void retryLoad()} />
         </View>
       ) : loading ? (
@@ -467,7 +469,9 @@ export default function MyWall() {
         <View style={{ marginTop: 8 }}><InviteCrew handle={profile?.handle} /></View>
       ) : visible.length === 0 ? (
         <Text variant="body" color={colors.outline} style={{ marginTop: 24, textAlign: "center" }}>
-          No {activeFilter.label.toLowerCase()} yet.
+          {activeFilter.key === "all"
+            ? nextCursor ? "No other loaded Marks. Load older Marks to see more." : "No other Marks are visible."
+            : nextCursor ? `No loaded ${activeFilter.label.toLowerCase()} yet. Load older Marks to see more.` : `No ${activeFilter.label.toLowerCase()} yet.`}
         </Text>
       ) : (
         <Masonry
