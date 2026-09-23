@@ -115,7 +115,7 @@ export default function ProfileScreen() {
             <Text accessibilityRole="alert" variant="label" color={colors.error}>FRIENDS UNAVAILABLE · RETRY</Text>
           </Pressable>
         ) : friendCount !== null ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`${friendCount} friends. Open friends in Discover.`} onPress={() => router.push("/(tabs)/discover")} style={{ minHeight: 44, justifyContent: "center" }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${friendCount} friends. Open friends in Discover.`} onPress={() => router.push({ pathname: "/(tabs)/discover", params: { section: "friends" } })} style={{ minHeight: 44, justifyContent: "center" }}>
             <Text variant="label" color={colors.outline}>FRIENDS · {friendCount}</Text>
           </Pressable>
         ) : null}
