@@ -213,10 +213,44 @@ export default function PeopleScreen() {
         Find people and public Shared Walls.
       </Text>
 
-      <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+      <View
+        accessibilityRole="tablist"
+        accessibilityLabel="Discover category"
+        style={{ flexDirection: "row", marginBottom: 16, borderRadius: radius.card, borderWidth: 2, borderColor: colors.ink, overflow: "hidden" }}
+      >
         {(["people", "walls"] as const).map((choice) => {
           const selected = mode === choice;
-          return <Pressable key={choice} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={`Discover ${choice}`} onPress={() => { searchFence.current.focus(userId ?? null); setMode(choice); setQuery(""); currentQuery.current = ""; setResults([]); setWallResults([]); setSearchedQuery(null); setError(null); }} style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.ink, backgroundColor: selected ? colors.ink : colors.surface }}><Text variant="label" color={selected ? markColors.brandYellow : colors.ink}>{choice.toUpperCase()}</Text></Pressable>;
+          return (
+            <Pressable
+              key={choice}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Discover ${choice}`}
+              onPress={() => {
+                searchFence.current.focus(userId ?? null);
+                setMode(choice);
+                setQuery("");
+                currentQuery.current = "";
+                setResults([]);
+                setWallResults([]);
+                setSearchedQuery(null);
+                setError(null);
+              }}
+              style={{
+                flex: 1,
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+                borderLeftWidth: choice === "walls" ? 2 : 0,
+                borderColor: colors.ink,
+                backgroundColor: selected ? colors.ink : colors.surfaceContainerLow,
+              }}
+            >
+              <Text variant="label" color={selected ? markColors.brandYellow : colors.ink}>
+                {choice.toUpperCase()}
+              </Text>
+            </Pressable>
+          );
         })}
       </View>
 
