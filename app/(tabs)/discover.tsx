@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { PersonRow } from "@/components/PersonRow";
@@ -27,6 +27,7 @@ import { colors, markColors, radius } from "@/theme";
 
 export default function PeopleScreen() {
   const router = useRouter();
+  const { section } = useLocalSearchParams<{ section?: string }>();
   const { session } = useAuth();
   const userId = session?.user.id;
   const [query, setQuery] = useState("");
@@ -84,6 +85,11 @@ export default function PeopleScreen() {
     setFriends([]);
     setIncoming([]);
     actionInFlight.current = false;
+    if (section === "friends") {
+      setMode("people");
+      setQuery("");
+      router.setParams({ section: undefined });
+    }
     if (nextUserId) void loadNetwork();
     else setLoading(false);
     return () => {
@@ -91,7 +97,7 @@ export default function PeopleScreen() {
       searchFence.current.blur();
       actionFence.current.blur();
     };
-  }, [loadNetwork, userId]));
+  }, [loadNetwork, router, section, userId]));
 
   async function runSearch() {
     if (mode === "walls") return runWallSearch();
