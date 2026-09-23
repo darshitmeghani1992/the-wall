@@ -17,11 +17,11 @@ Every authorized active Mark on a Personal or Shared Wall remains reachable as i
 
 ## Acceptance criteria
 
-1. My Wall, another person's Wall, and Shared Walls initially show a bounded newest portion of available Marks in the established pinned-first order. Each offers a clear way to load older Marks while more remain.
-2. Loading older Marks appends without duplicates or lost rows across equal timestamps and the pinned-to-unpinned boundary. A failed request keeps visible Marks and allows retry.
-3. Opening an authorized exact-Mark link loads that Mark directly, selects it, and preserves the ordinary Wall context even when it falls outside the initial portion. A missing, removed, pending, inaccessible, or wrong-Wall target gets the existing privacy-safe unavailable outcome. Transport failure remains retryable.
+1. My Wall, another person's Wall, and Shared Walls initially show a bounded newest portion of available Marks in the established pinned-first order. Each offers a **Load older Marks** action while more remain, including when the current filter has no loaded matches.
+2. Loading older Marks appends without duplicates or lost rows across equal timestamps and the pinned-to-unpinned boundary while the underlying Wall order is stable. A failed request keeps visible Marks and allows retry. A refresh or a pin/removal action starts the history over from its newest page so a changed ordering cannot leave an old cursor in use.
+3. Opening an authorized exact-Mark link shows that Mark independently of which history page contains it, preserving the ordinary Wall context. For a Secret Mark, this means the existing locked shell and one-time reveal affordance, never automatically revealing content. For other Mark types, the ordinary detail and reactions remain usable. If the Mark later appears in a loaded page, it is shown only once. A missing, removed, pending, inaccessible, or wrong-Wall target gets the existing privacy-safe unavailable outcome. Transport failure remains retryable.
 4. Account change, sign-out, screen departure, or a newer refresh prevents an old request from changing the current Wall. New live arrivals remain visible once, and filtering applies consistently to loaded Marks.
-5. Any displayed total is the authoritative active-Mark count for that Wall or clearly names itself as the number loaded; it must never silently imply that the initial portion is the whole Wall.
+5. Header copy says **N loaded Marks** until the last page has been reached, then may say **N Marks**. The independently focused Mark is excluded from the loaded grid count. No partial count is presented as the total.
 6. Existing Wall visibility, authorization, Anonymous/Secret presentation, moderation, reactions, and exact-link behavior are preserved.
 
 ## Non-goals
@@ -39,4 +39,4 @@ An older memory should feel present on the Wall, not lost behind a misleading em
 
 ## Decision and open gate
 
-This is a product-facing change to the three Wall screens. The Founder must approve the proposed progressive older-history action and exact-link behavior before implementation. A separate architecture review should validate the read contract and decide whether any database index is required; this document does not authorize a migration.
+This is a product-facing change to the three Wall screens. The Founder authorized proceeding with the proposed Wall history work on 2026-09-23; this document makes the action and count wording explicit for review. A separate architecture review should validate the read contract and decide whether any database index is required; this document does not authorize a migration.
