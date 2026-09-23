@@ -3,6 +3,15 @@ import { descendingCreatedAtIdFilter, type CreatedAtIdCursor } from "./created-a
 
 export type MarkCursor = CreatedAtIdCursor & Readonly<{ pinned: boolean }>;
 
+/** Guards an asynchronous realtime hydration against unsubscribe and Wall switches. */
+export function wallInsertGate<T extends { wall_id: string }>(wallId: string, onInsert: (mark: T) => void) {
+  let active = true;
+  return {
+    accept(mark: T) { if (active && mark.wall_id === wallId) onInsert(mark); },
+    stop() { active = false; },
+  };
+}
+
 /** The phase predicate uses the same validated timestamp/UUID contract as Alerts. */
 export function markHistoryFilter(cursor: MarkCursor): string {
   if (typeof cursor.pinned !== "boolean") throw new Error("The Wall history cursor is invalid.");
@@ -37,8 +46,10 @@ export async function readMarkHistoryPage<T extends MarkCursor>(
 export function mergeWallMarks<T extends MarkCursor>(current: readonly T[], incoming: readonly T[]): T[] {
   const byId = new Map(current.map((mark) => [mark.id, mark]));
   for (const mark of incoming) byId.set(mark.id, mark);
+  const fractional = (value: string) => (value.match(/\.(\d+)(?:Z|[+-]\d\d:\d\d)$/)?.[1] ?? "").padEnd(9, "0");
   return [...byId.values()].sort((a, b) =>
     Number(b.pinned) - Number(a.pinned)
     || Date.parse(b.created_at) - Date.parse(a.created_at)
+    || fractional(b.created_at).localeCompare(fractional(a.created_at))
     || b.id.localeCompare(a.id));
 }

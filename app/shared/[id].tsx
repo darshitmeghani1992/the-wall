@@ -176,6 +176,7 @@ export default function SharedWallScreen() {
   }, [accountRoute, deferredAttempt?.reference, fence, load, reference, userId, wallId]));
 
   useStaggeredArrivals(wall?.id, (mark) => {
+    if (!wall || mark.wall_id !== wall.id || loadedIdentity !== `${userId}:${wallId}:${focusMarkId ?? ""}`) return;
     dropIds.current.add(mark.id);
     setMarks((current) => mergeWallMarks(current, [mark]));
   });
@@ -290,7 +291,7 @@ export default function SharedWallScreen() {
       </View>
       <Text variant="display" style={{ fontSize: 26 }}>{wall.name}</Text>
       <Text variant="body" color={colors.outline} style={{ marginTop: 4 }}>
-        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {gridMarks.length} {nextCursor ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
+        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} {nextCursor ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
       </Text>
 
       {error ? <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: 12 }}>{error}</Text> : null}
@@ -317,7 +318,7 @@ export default function SharedWallScreen() {
           <MarkView mark={focusedMark} highlight isWallOwner={isOwner} reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
         </View>
       ) : null}
-      {gridMarks.length ? (
+      {marks.length ? (
         <Masonry data={gridMarks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
           <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} isWallOwner={isOwner} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
         )} />

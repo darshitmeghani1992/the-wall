@@ -270,6 +270,7 @@ export default function MyWall() {
   }
 
   useStaggeredArrivals(wall?.id, (mark) => {
+    if (!wall || mark.wall_id !== wall.id || loadedSubject !== `${userId}:${focusMarkId ?? ""}`) return;
     dropIds.current.add(mark.id);
     setMarks((current) => mergeWallMarks(current, [mark]));
   });
@@ -314,7 +315,7 @@ export default function MyWall() {
               {wall?.name ?? `${profile?.display_name ?? "My"}'s Wall`}
             </Text>
             <Text variant="label" color={colors.outline}>
-              {gridMarks.length} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
+              {marks.length} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
             </Text>
           </View>
         </View>
@@ -410,7 +411,7 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, gridMarks.length, nextCursor, profile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
+    [filter, friendCount, initial, marks.length, nextCursor, profile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;

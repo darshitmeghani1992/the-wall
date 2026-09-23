@@ -4,7 +4,7 @@ import { executeMarkRemoval, type MarkRemovalReason } from "./actor-bound-servic
 import { mapActorBoundMutationError } from "./expected-actor";
 import type { Mark } from "./types";
 import type { MediaWriterRpc } from "./mark-media-writer";
-import { readMarkHistoryPage, type MarkCursor } from "./mark-history-cursor";
+import { readMarkHistoryPage, wallInsertGate, type MarkCursor } from "./mark-history-cursor";
 import {
   executeTextMarkSubmission,
   type CreateTextMarkResult,
@@ -122,6 +122,7 @@ export function subscribeToWall(
   wallId: string,
   onInsert: (mark: MarkWithAuthor) => void,
 ): () => void {
+  const gate = wallInsertGate(wallId, onInsert);
   const channel = supabase
     .channel(`wall:${wallId}`)
     .on(
@@ -132,7 +133,7 @@ export function subscribeToWall(
         if (raw.status !== "active") return; // pending marks await approval
         try {
           const [hydrated] = await hydrateAuthors([raw]);
-          onInsert(hydrated);
+          gate.accept(hydrated);
         } catch {
           // A realtime presentation refresh is best-effort. The next screen reload retries the
           // throwing resolver-facing read; never leak this callback failure as an unhandled promise.
@@ -142,6 +143,7 @@ export function subscribeToWall(
     .subscribe();
 
   return () => {
+    gate.stop();
     supabase.removeChannel(channel);
   };
 }

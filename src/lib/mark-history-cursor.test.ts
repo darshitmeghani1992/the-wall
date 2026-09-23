@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-ignore Node's strip-types runner needs the source extension.
-import { markHistoryFilter, mergeWallMarks, readMarkHistoryPage, type MarkCursor } from "./mark-history-cursor.ts";
+import { markHistoryFilter, mergeWallMarks, readMarkHistoryPage, wallInsertGate, type MarkCursor } from "./mark-history-cursor.ts";
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -20,13 +20,41 @@ test("overlapping pages and realtime rows preserve pinned first and unique IDs",
   assert.deepEqual(mergeWallMarks([a], [a, b]).map((row) => row.id), [B, A]);
 });
 
+test("live merge preserves PostgreSQL microsecond order within one JS millisecond", () => {
+  const older = { id: B, pinned: false, created_at: "2026-09-20T12:00:00.000100+00:00" };
+  const newer = { id: A, pinned: false, created_at: "2026-09-20T12:00:00.000900+00:00" };
+  assert.deepEqual(mergeWallMarks([older], [newer]).map((mark) => mark.id), [A, B]);
+});
+
+test("an old Wall's delayed hydration cannot insert after unsubscribe or into another Wall", async () => {
+  const arrivals: string[] = [];
+  const oldGate = wallInsertGate<{ id: string; wall_id: string }>("old", (mark) => arrivals.push(mark.id));
+  const newGate = wallInsertGate<{ id: string; wall_id: string }>("new", (mark) => arrivals.push(mark.id));
+  let finishHydration!: (mark: { id: string; wall_id: string }) => void;
+  const hydration = new Promise<{ id: string; wall_id: string }>((resolve) => { finishHydration = resolve; });
+  const late = hydration.then(oldGate.accept);
+  oldGate.stop();
+  finishHydration({ id: A, wall_id: "old" });
+  await late;
+  newGate.accept({ id: A, wall_id: "old" });
+  newGate.accept({ id: B, wall_id: "new" });
+  assert.deepEqual(arrivals, [B]);
+});
+
 test("equal timestamps use descending UUID as a stable page boundary", async () => {
-  const rows = [B, A].map((id) => ({ id, pinned: false, created_at: time }));
+  const rows = Array.from({ length: 51 }, (_, index) => ({
+    id: `${String(51 - index).padStart(8, "0")}-1111-4111-8111-111111111111`,
+    pinned: false,
+    created_at: time,
+  }));
   const read = async (pinned: boolean, limit: number, after?: string) =>
     (pinned ? [] : rows.filter((row) => !after || row.id < after.match(/id\.lt\.([^)]*)/)![1])).slice(0, limit);
-  const page = await readMarkHistoryPage(read);
-  assert.deepEqual(page.items.map((item) => item.id), [B, A]);
-  assert.equal(page.nextCursor, null);
+  const first = await readMarkHistoryPage(read);
+  assert.equal(first.items.length, 50);
+  assert.ok(first.nextCursor);
+  const second = await readMarkHistoryPage(read, first.nextCursor);
+  assert.deepEqual([...first.items, ...second.items].map((item) => item.id), rows.map((row) => row.id));
+  assert.equal(second.nextCursor, null);
 });
 
 test("a failed exact-50 boundary probe rejects the whole page", async () => {

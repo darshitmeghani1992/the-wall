@@ -287,6 +287,7 @@ export default function PersonWall() {
   }, [accountRoute, deferredAttempt?.reference, id, load, reference, session?.user.id]));
 
   useStaggeredArrivals(wall?.id, (mark) => {
+    if (!wall || mark.wall_id !== wall.id || loadedIdentity !== `${session?.user.id}:${String(id ?? "")}:${focusMarkId ?? ""}`) return;
     dropIds.current.add(mark.id);
     setMarks((current) => mergeWallMarks(current, [mark]));
   });
@@ -604,7 +605,7 @@ export default function PersonWall() {
                 </Pressable>
               ) : null}
               {!canLeaveMark ? <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>{contributionUnavailableCopy(wall.contribution_policy, relationship)}</Text> : null}
-              <Text variant="label" color={colors.outlineVariant}>{gridMarks.length} {nextCursor ? "LOADED MARKS" : "MARKS"}</Text>
+              <Text variant="label" color={colors.outlineVariant}>{marks.length} {nextCursor ? "LOADED MARKS" : "MARKS"}</Text>
               {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
                 <View style={{ marginBottom: 16 }}>
                   <Text variant="label">LINKED MARK</Text>
