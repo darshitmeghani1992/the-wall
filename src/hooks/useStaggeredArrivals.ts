@@ -31,12 +31,13 @@ export function useStaggeredArrivals(
     if (!wallId) return;
 
     const buffer: MarkWithAuthor[] = [];
+    let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let running = false;
 
     const releaseOne = () => {
       const next = buffer.shift();
-      if (next) onRevealRef.current(next);
+      if (active && next?.wall_id === wallId) onRevealRef.current(next);
     };
 
     const pump = () => {
@@ -63,6 +64,7 @@ export function useStaggeredArrivals(
     };
 
     const unsub = subscribeToWall(wallId, (mark) => {
+      if (!active || mark.wall_id !== wallId) return;
       if (reduced) {
         onRevealRef.current(mark);
         return;
@@ -72,6 +74,7 @@ export function useStaggeredArrivals(
     });
 
     return () => {
+      active = false;
       unsub();
       if (timer) clearTimeout(timer);
       buffer.length = 0;

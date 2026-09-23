@@ -8,6 +8,7 @@ import { Button } from "@/components/Button";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
 import { getFollowCounts } from "@/lib/follows";
+import { getFriends } from "@/lib/friendships";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { shareMyWall } from "@/lib/share";
 import { colors, markColors } from "@/theme";
@@ -18,8 +19,12 @@ export default function ProfileScreen() {
   const [followers, setFollowers] = useState(0);
   const [following, setFollowing] = useState(0);
   const [countsLoading, setCountsLoading] = useState(false);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [friendCountLoading, setFriendCountLoading] = useState(false);
+  const [friendCountError, setFriendCountError] = useState(false);
   const [countsError, setCountsError] = useState(false);
   const countsFence = useRef(new SessionFocusFence());
+  const friendFence = useRef(new SessionFocusFence());
   const currentUserId = useRef<string | null>(session?.user.id ?? null);
   currentUserId.current = session?.user.id ?? null;
   const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
@@ -41,11 +46,34 @@ export default function ProfileScreen() {
     }
   }, [session?.user.id]);
 
+  const refreshFriends = useCallback(async () => {
+    const token = friendFence.current.begin(session?.user.id ?? null);
+    if (!token) return;
+    setFriendCountLoading(true);
+    setFriendCountError(false);
+    try {
+      const people = await getFriends(token.userId);
+      if (!friendFence.current.isCurrent(token, currentUserId.current)) return;
+      setFriendCount(people.length);
+    } catch {
+      if (friendFence.current.isCurrent(token, currentUserId.current)) setFriendCountError(true);
+    } finally {
+      if (friendFence.current.isCurrent(token, currentUserId.current)) setFriendCountLoading(false);
+    }
+  }, [session?.user.id]);
+
   useFocusEffect(useCallback(() => {
-    countsFence.current.focus(session?.user.id ?? null);
+    const userId = session?.user.id ?? null;
+    countsFence.current.focus(userId);
+    friendFence.current.focus(userId);
+    setFriendCount(null);
     void refreshCounts();
-    return () => countsFence.current.blur();
-  }, [refreshCounts, session?.user.id]));
+    void refreshFriends();
+    return () => {
+      countsFence.current.blur();
+      friendFence.current.blur();
+    };
+  }, [refreshCounts, refreshFriends, session?.user.id]));
 
   return (
     <Screen>
@@ -81,6 +109,16 @@ export default function ProfileScreen() {
             </>
           )}
         </View>
+
+        {friendCountLoading ? <ActivityIndicator color={markColors.brandYellow} /> : friendCountError ? (
+          <Pressable accessibilityRole="button" onPress={() => void refreshFriends()} style={{ minHeight: 44, justifyContent: "center" }}>
+            <Text accessibilityRole="alert" variant="label" color={colors.error}>FRIENDS UNAVAILABLE · RETRY</Text>
+          </Pressable>
+        ) : friendCount !== null ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`${friendCount} friends. Open friends in Discover.`} onPress={() => router.push({ pathname: "/(tabs)/discover", params: { section: "friends" } })} style={{ minHeight: 44, justifyContent: "center" }}>
+            <Text variant="label" color={colors.outline}>FRIENDS · {friendCount}</Text>
+          </Pressable>
+        ) : null}
 
         {profile?.bio ? <Text variant="body" color={colors.onSurfaceVariant} style={{ textAlign: "center" }}>{profile.bio}</Text> : null}
         {profile ? <SocialLinks profile={profile} /> : null}
