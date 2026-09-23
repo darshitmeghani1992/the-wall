@@ -87,6 +87,7 @@ export default function PeopleScreen() {
     actionInFlight.current = false;
     if (section === "friends") {
       setMode("people");
+      currentQuery.current = "";
       setQuery("");
       router.setParams({ section: undefined });
     }
