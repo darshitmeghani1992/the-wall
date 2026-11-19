@@ -16,7 +16,8 @@
     "export:ios": "expo export --platform ios --output-dir /tmp/the-wall-export-ios",
     "export:android": "expo export --platform android --output-dir /tmp/the-wall-export-android",
     "postinstall": "node scripts/patch-expo-cli-tar.cjs",
-    "verify:ios-prebuild": "node scripts/verify-ios-prebuild.cjs"
+    "verify:ios-prebuild": "node scripts/verify-ios-prebuild.cjs",
+    "verify:staging": "node scripts/verify-staging-backend.mjs"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
