@@ -31,6 +31,9 @@ jobs:
       - name: Expo health
         run: npx expo-doctor
 
+      - name: Verify disposable native iOS prebuild
+        run: npm run verify:ios-prebuild
+
       - name: Export iOS bundle
         run: npm run export:ios
 
