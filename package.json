@@ -14,7 +14,8 @@
     "test:worker": "npm test --prefix workers/media-processor",
     "check:expo": "expo-doctor",
     "export:ios": "expo export --platform ios --output-dir /tmp/the-wall-export-ios",
-    "export:android": "expo export --platform android --output-dir /tmp/the-wall-export-android"
+    "export:android": "expo export --platform android --output-dir /tmp/the-wall-export-android",
+    "postinstall": "node scripts/patch-expo-cli-tar.cjs"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
