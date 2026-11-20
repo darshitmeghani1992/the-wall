@@ -19,5 +19,7 @@ export const supabase = createClient(supabaseUrl ?? "http://localhost", supabase
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // Native OAuth callbacks provide ?code= for exchangeCodeForSession().
+    flowType: "pkce",
   },
 });
