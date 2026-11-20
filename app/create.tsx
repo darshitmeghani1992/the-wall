@@ -28,6 +28,7 @@ import {
 } from "@/lib/upload";
 import type { MarkType } from "@/lib/types";
 import { getWall } from "@/lib/walls";
+import { isMediaComposerEnabled } from "@/lib/media-rollout";
 import { colors, markColors, radius, shadow, stickySwatches } from "@/theme";
 
 const MAX_TEXT = 500;
@@ -238,7 +239,7 @@ export default function Composer() {
 
   const overLimit = text.length > MAX_TEXT;
   const markType: MarkType = media[0]?.kind ?? "text";
-  const canSubmit = Boolean(wallId && currentUserId && !overLimit && hasContent && !recording && !(secret && media.length));
+  const canSubmit = Boolean(wallId && currentUserId && !overLimit && hasContent && !recording && !(secret && media.length) && (isMediaComposerEnabled || media.length === 0));
 
   function requestNonSecretMedia(intent: () => void) {
     if (!lockRef.current.allowsIntent()) return;
@@ -494,8 +495,8 @@ export default function Composer() {
     </View>
   </Screen>;
 
-  const canAddPhoto = !busy && (media.length === 0 || media[0].kind === "photo") && media.length < 5;
-  const canAddAv = !busy && media.length === 0;
+  const canAddPhoto = isMediaComposerEnabled && !busy && (media.length === 0 || media[0].kind === "photo") && media.length < 5;
+  const canAddAv = isMediaComposerEnabled && !busy && media.length === 0;
   const canToggleSecret = !media.length && !busy && !recording;
   return <Screen dockInset={false}>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -533,7 +534,7 @@ export default function Composer() {
     <Text variant="label" color={overLimit ? colors.error : text.length > MAX_TEXT - 40 ? markColors.roastOrange : colors.outline}
       style={{ alignSelf: "flex-end", marginTop: 6 }}>{text.length}/{MAX_TEXT}</Text>
 
-    {recording ? <View style={{ marginTop: 14, borderWidth: 2, borderColor: colors.ink,
+    {isMediaComposerEnabled ? (recording ? <View style={{ marginTop: 14, borderWidth: 2, borderColor: colors.ink,
       borderRadius: radius.card, padding: 16, alignItems: "center", gap: 12, backgroundColor: markColors.skyBlue }}>
       <Text variant="display" style={{ fontSize: 26 }}>{formatDuration(recorder.elapsedMs)}</Text>
       <Text variant="label" color={colors.outline}>RECORDING · UP TO 60s</Text>
@@ -552,7 +553,11 @@ export default function Composer() {
         <Text variant="label" color={colors.error}>
           Microphone access is off — open Settings to record a voice Mark.</Text>
       </Pressable> : null}
-    </View>}
+    </View>) : (
+      <Text variant="label" color={colors.outline} style={{ marginTop: 14 }}>
+        Photo, voice and video Marks are temporarily unavailable while we complete secure media processing.
+      </Text>
+    )}
 
     {media.length === 0 ? <View style={{ marginTop: 18 }}>
       <Text variant="label" color={colors.outline} style={{ marginBottom: 10 }}>COLOR</Text>
