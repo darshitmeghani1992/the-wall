@@ -29,6 +29,7 @@ import {
 import type { MarkType } from "@/lib/types";
 import { getWall } from "@/lib/walls";
 import { isMediaComposerEnabled } from "@/lib/media-rollout";
+import { isSecretComposerEnabled } from "@/lib/secret-rollout";
 import { colors, markColors, radius, shadow, stickySwatches } from "@/theme";
 
 const MAX_TEXT = 500;
@@ -239,7 +240,7 @@ export default function Composer() {
 
   const overLimit = text.length > MAX_TEXT;
   const markType: MarkType = media[0]?.kind ?? "text";
-  const canSubmit = Boolean(wallId && currentUserId && !overLimit && hasContent && !recording && !(secret && media.length) && (isMediaComposerEnabled || media.length === 0));
+  const canSubmit = Boolean(wallId && currentUserId && !overLimit && hasContent && !recording && !(secret && media.length) && (isMediaComposerEnabled || media.length === 0) && (!secret || isSecretComposerEnabled));
 
   function requestNonSecretMedia(intent: () => void) {
     if (!lockRef.current.allowsIntent()) return;
@@ -497,7 +498,7 @@ export default function Composer() {
 
   const canAddPhoto = isMediaComposerEnabled && !busy && (media.length === 0 || media[0].kind === "photo") && media.length < 5;
   const canAddAv = isMediaComposerEnabled && !busy && media.length === 0;
-  const canToggleSecret = !media.length && !busy && !recording;
+  const canToggleSecret = isSecretComposerEnabled && !media.length && !busy && !recording;
   return <Screen dockInset={false}>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
       marginTop: 12, marginBottom: 16 }}>
@@ -579,7 +580,7 @@ export default function Composer() {
         subtitle={allowAnonymous ? "Name hidden" : "Not allowed here"} />
     </View></View>
 
-    <View style={{ marginTop: 16 }}><Pressable onPress={() => lockRef.current.runIntent(() => setSecret((value) => !value))}
+    {isSecretComposerEnabled ? <View style={{ marginTop: 16 }}><Pressable onPress={() => lockRef.current.runIntent(() => setSecret((value) => !value))}
       disabled={!canToggleSecret} accessibilityRole="switch"
       accessibilityState={{ checked: secret, disabled: !canToggleSecret }}
       accessibilityLabel="Secret Mark — only the recipient can open it, once, within an hour"
@@ -591,7 +592,11 @@ export default function Composer() {
         <Text variant="label" color={secret ? markColors.secretOnPurple : colors.outline} style={{ marginTop: 2 }}>
           {media.length ? "Text-only for now" : secret ? "Only they can open it — once, within an hour" : "Hide the content until they open it"}
         </Text></View>
-    </Pressable></View>
+    </Pressable></View> : (
+      <Text variant="label" color={colors.outline} style={{ marginTop: 14 }}>
+        Secret Marks are temporarily unavailable until the one-hour expiry service is verified.
+      </Text>
+    )}
 
     {!media.length && !recording ? <><Text variant="label" color={colors.outline}
       style={{ marginTop: 20, marginBottom: 12 }}>PREVIEW</Text><View style={{ alignItems: "center" }}>

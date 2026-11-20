@@ -8,7 +8,43 @@
 
 _Last updated: 2026-09-22._
 
-## Corrective candidate under exact-tree certification
+## Current release-sprint status — 20 November 2026
+
+**Source:** Current release-sprint branch `codex/launch-restart-checkpoint-2026-11`;
+resolve its exact published GitHub PR/SHA/tree and fresh CI. Verified parent: draft PR #51,
+`3c04c543fce4e3be628e5562b1c5a2a93cbb1c74`, tree
+`40ef0b5e01ecc1efe55f7f0fcf592a51e636c587`, parent CI 4/4 green.
+Latest continuation adds a default-OFF Secret composer and scheduling runbooks.
+**Certification:** Independent Reviewer APPROVE and independent QA PASS **not yet obtained**
+for this tree. **Delivery:** All PRs still draft; **no production merge/deploy**.
+
+**Hosted staging:** Separate Supabase `ewintxgdxdvschiqodkq`, migrations 0001–0030 plus
+0032 service-only Secret expiry ACL and 0033 active owner Shared-Wall `INSERT RETURNING` RLS
+fix. Public tables 34/34 have RLS. `mark-media` private and media kind switches all OFF;
+Secret expiry cron NOT scheduled; Secret composer default OFF in next draft until scheduler is verified. `mark-media` authenticated read Edge Function deployed,
+C2 worker/ops not deployed. Original `wfsfafmgvxevpzrurofz` with existing user data is untouched.
+
+**Verified real hosted SQL:** Three temporary synthetic actors can create text Marks, retry
+idempotently, create Secret Marks with isolated content, enforce private Personal/Shared Walls,
+invite/accept/remove Shared members, and deny unrelated/blocked actors. Both suites executed
+under single database transactions with ROLLBACK; final Auth/Profile/Wall/Mark/Storage counts all 0.
+**Not verified:** SMTP OTP delivery, physical device login, multi-device E2E, processor hosting,
+secret-expiry cron runtime, Apple signing, App Store and production security certification.
+
+**Android:** Cloud staging Preview APK `a1037ffa-c214-471b-8949-7796cbaeba81` **FINISHED** with
+artifact; physical installation/testing not completed. Its source predates migration 0033, which
+is backend-only and now applied to staging. The same APK thus targets staging, subject to QA.
+
+**External dependencies postponed until 21 Nov:** purchase/verify a domain, set custom SMTP
+for general testers, apply `{{ .Token }}` email template, prove OTP; activate Apple Developer
+Program and signing. Separate legal/Founder approval required for hosted 0031 deletion worker.
+
+**Next actions and detailed evidence:**
+`docs/handoffs/LAUNCH_SPRINT_CHECKPOINT_2026-11-20.md` and GitHub P0 issues #39, #45.
+The prior September percentage values below describe a **historical** source/CI boundary and
+must not be asserted as today's measured production readiness.
+
+## Historical corrective candidate under exact-tree certification
 
 The source surface is still approximately **80% implemented**, but that is not a production-ready
 percentage. A third-party audit of the prior candidate estimated approximately **76% source + CI**

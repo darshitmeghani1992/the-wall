@@ -3,7 +3,27 @@
 > Restart state only. Product authority is `THE_WALL_MASTER_BUILD_SPEC_v1.1.md`; AIOS governance
 > authority is `docs/aios/`. Detailed progress is in `docs/BUILD_STATUS.md`.
 
-## Corrective candidate — 2026-09-22
+## Current continuation — 20 November 2026 (release sprint)
+
+The section below supersedes the historical September operational snapshot for **current** work,
+without modifying the locked product/AIOS authorities. GitHub live PRs remain the authority for
+an exact source SHA, CI, independent Reviewer and QA certification. The latest release-sprint
+source is the release-sprint continuation branch `codex/launch-restart-checkpoint-2026-11`.
+**Resolve the current published PR head/tree/CI from GitHub before certifying.** Its verified
+parent is draft PR #51, commit `3c04c543fce4e3be628e5562b1c5a2a93cbb1c74`, tree
+`40ef0b5e01ecc1efe55f7f0fcf592a51e636c587` (parent CI **4/4 green**).
+Latest continuation adds a default-OFF Secret composer pending confirmed one-hour expiry cron,
+and explicit operational runbooks. Independent Reviewer/QA on the newest tree remain pending.
+See `docs/handoffs/LAUNCH_SPRINT_CHECKPOINT_2026-11-20.md` for exact staging state,
+proven invariants, build, rollout gates, and first next action. **Do not resume from old PR #22**
+without first examining the current stacked release-sprint candidate.
+
+**Next:** independent Reviewer then QA on unchanged tree; domain+verified OTP SMTP and Apple
+Developer signing on 21 Nov; actual Android multiuser/device QA; protected media remains OFF until
+worker runtime/isolated container controls pass; recoverable account deletion 0031 withheld;
+Secret expiry cron prepared but not activated; Secret composer default OFF until verified. No merge or production deploy authorized.
+
+## Historical corrective candidate — 2026-09-22
 
 Draft PR `#22` has a corrective candidate under exact-tree certification. Source implementation remains about
 80%; the prior third-party audit estimated 76% source + CI and 46% production readiness because
