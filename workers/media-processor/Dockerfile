@@ -22,6 +22,10 @@ WORKDIR /app
 COPY --from=build --chown=10001:10001 /build/dist ./dist
 USER 10001:10001
 ENV NODE_ENV=production
-# C2 must provide the approved gateway adapters before this image receives a
-# runnable entrypoint. Failing closed is intentional during the C3 prototype.
-CMD ["node", "-e", "throw new Error('C2 envelope adapter is not configured')"]
+# The executable requires MARK_MEDIA_RUNTIME_ENABLED=true plus validated
+# gateway secrets and Ed25519 public-key bindings or exits before listening.
+# The runtime is NOT hosted/released until DevOps enforces the declarative
+# sandbox, exact egress, immutable image digest and C2 Edge secret gates.
+COPY --chown=10001:10001 start.cjs ./start.cjs
+EXPOSE 8080
+CMD ["node", "start.cjs"]

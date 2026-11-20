@@ -3,7 +3,7 @@ kind: MediaProcessorRuntimeRequirements
 metadata:
   name: protected-mark-media
 spec:
-  status: local-prototype-only
+  status: integration-code-only-not-hosted
   image:
     immutableDigestRequired: true
     sbomRequired: true
@@ -42,5 +42,5 @@ spec:
       - SUPABASE_SECRET_KEY
     envelopeVerification: native-webcrypto-ed25519-v2
   deploymentGate:
-    runnableEntrypointConfigured: false
-    note: C2 gateway redeem/finalize adapters and selected runtime must be approved before deployment.
+    runnableEntrypointConfigured: true
+    note: C2 gateway code is present; deployment remains blocked on approved runtime, secret distribution, exact DNS/egress enforcement, SBOM/CVE and end-to-end QA.
