@@ -6,6 +6,7 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { deactivateAccount } from "@/lib/account";
+import { isAccountDeletionEnabled } from "@/lib/account-deletion-availability";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { runSettingsDeactivationFlow } from "@/components/safety-action-flows";
 import { colors } from "@/theme";
@@ -113,7 +114,9 @@ export default function SettingsScreen() {
           <Text variant="label" color={colors.error}>DEACTIVATE ACCOUNT</Text>
         </Pressable>
         <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 20, marginBottom: 12 }}>
-          Permanent deletion includes your Personal Wall and every Mark you authored. A 30-day recovery window applies.
+          {isAccountDeletionEnabled
+            ? "Permanent deletion includes your Personal Wall and every Mark you authored. A 30-day recovery window applies."
+            : "Permanent deletion is temporarily unavailable while we complete its safety and recovery infrastructure. You can still deactivate your account."}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -122,7 +125,9 @@ export default function SettingsScreen() {
           onPress={() => router.push("/delete-account")}
           style={{ minHeight: 48, justifyContent: "center", opacity: busy ? 0.5 : 1 }}
         >
-          <Text variant="label" color={colors.error}>DELETE ACCOUNT</Text>
+          <Text variant="label" color={colors.error}>
+            {isAccountDeletionEnabled ? "DELETE ACCOUNT" : "ACCOUNT DELETION STATUS"}
+          </Text>
         </Pressable>
       </View>
     </Screen>
