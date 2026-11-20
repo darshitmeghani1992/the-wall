@@ -6,6 +6,8 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { useAuth } from "@/lib/auth";
+import { supabaseAnonKey, supabaseUrl } from "@/lib/config";
+import { fetchOAuthProviderAvailability, noOAuthProviders } from "@/lib/oauth-provider-availability";
 import { colors } from "@/theme";
 
 /**
@@ -22,6 +24,15 @@ export default function SignIn() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [oauthProviders, setOAuthProviders] = useState(noOAuthProviders);
+
+  useEffect(() => {
+    let mounted = true;
+    void fetchOAuthProviderAvailability({ url: supabaseUrl, anonKey: supabaseAnonKey }).then((available) => {
+      if (mounted) setOAuthProviders(available);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -105,16 +116,22 @@ export default function SignIn() {
           />
           <Button label="Email me a code" variant="primary" loading={busy} onPress={sendCode} />
 
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 6 }}>
-            <View style={{ flex: 1, height: 1, backgroundColor: colors.outlineVariant }} />
-            <Text variant="label" color={colors.outline}>
-              OR
-            </Text>
-            <View style={{ flex: 1, height: 1, backgroundColor: colors.outlineVariant }} />
-          </View>
+          {(oauthProviders.google || oauthProviders.apple) && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 6 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.outlineVariant }} />
+              <Text variant="label" color={colors.outline}>
+                OR
+              </Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.outlineVariant }} />
+            </View>
+          )}
 
-          <Button label="Continue with Apple" variant="ghost" onPress={() => oauth("apple")} />
-          <Button label="Continue with Google" variant="ghost" onPress={() => oauth("google")} />
+          {oauthProviders.apple && (
+            <Button label="Continue with Apple" variant="ghost" onPress={() => oauth("apple")} />
+          )}
+          {oauthProviders.google && (
+            <Button label="Continue with Google" variant="ghost" onPress={() => oauth("google")} />
+          )}
         </View>
       ) : (
         <View style={{ gap: 16 }}>
