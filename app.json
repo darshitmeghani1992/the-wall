@@ -18,7 +18,8 @@
     "android": {
       "package": "com.thewall.app",
       "adaptiveIcon": {
-        "backgroundColor": "#f3e300"
+        "backgroundColor": "#f3e300",
+        "foregroundImage": "./assets/adaptive-icon.png"
       }
     },
     "web": {
@@ -52,6 +53,7 @@
       "eas": {
         "projectId": "6abd7556-d524-40cd-b923-2819a689851e"
       }
-    }
+    },
+    "icon": "./assets/icon.png"
   }
 }
