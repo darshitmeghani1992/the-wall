@@ -163,6 +163,10 @@ echo "── load: 0032_expire_secret_acl_hardening.sql"
 psql_test -f "$MIG/0032_expire_secret_acl_hardening.sql" >/dev/null
 echo "── replay: 0032_expire_secret_acl_hardening.sql (idempotence)"
 psql_test -f "$MIG/0032_expire_secret_acl_hardening.sql" >/dev/null
+echo "── load: 0033_shared_wall_owner_returning_rls.sql"
+psql_test -f "$MIG/0033_shared_wall_owner_returning_rls.sql" >/dev/null
+echo "── replay: 0033_shared_wall_owner_returning_rls.sql (idempotence)"
+psql_test -f "$MIG/0033_shared_wall_owner_returning_rls.sql" >/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
@@ -171,7 +175,7 @@ echo "════════════════════════�
 for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             58_activation_foundation \
-            60_secret_marks 61_secret_reveal 61_secret_expiry_acl 71_shared_wall_lifecycle 80_notifications 85_moderation 90_profile_links \
+            60_secret_marks 61_secret_reveal 61_secret_expiry_acl 71_shared_wall_lifecycle 73_shared_wall_owner_returning 80_notifications 85_moderation 90_profile_links \
             95_account_lifecycle 96_actor_bound_safety_mutations 97_actor_bound_account_reactivation 98_actor_bound_admin_moderation \
             99_recoverable_account_deletion; do
   psql_test -f "$HERE/$area.sql"
