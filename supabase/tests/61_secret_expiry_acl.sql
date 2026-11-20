@@ -1,4 +1,4 @@
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 
 -- Scheduler-only SECURITY DEFINER routine may never be user-invocable.
 do $$
