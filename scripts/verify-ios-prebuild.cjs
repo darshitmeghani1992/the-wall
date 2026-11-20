@@ -34,6 +34,29 @@ try {
       !fs.readdirSync(ios).some((name) => name.endsWith('.xcodeproj'))) {
     throw new Error('iOS prebuild completed without its Podfile or Xcode project');
   }
+  // SDK 51 intentionally disables CocoaPods privacy-manifest aggregation;
+  // verify the *generated app target* includes our dependency-required reasons.
+  const nativeManifests = [];
+  const visit = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const filename = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(filename);
+      else if (entry.isFile() && entry.name === 'PrivacyInfo.xcprivacy') nativeManifests.push(filename);
+    }
+  };
+  visit(ios);
+  if (nativeManifests.length < 1) throw new Error('iOS native target missing PrivacyInfo.xcprivacy');
+  const manifest = nativeManifests.map((filename) => fs.readFileSync(filename, 'utf8')).join('\n');
+  const requiredTokens = [
+    'NSPrivacyAccessedAPICategoryFileTimestamp', 'C617.1', '0A2A.1', '3B52.1',
+    'NSPrivacyAccessedAPICategoryUserDefaults', 'CA92.1',
+    'NSPrivacyAccessedAPICategorySystemBootTime', '35F9.1',
+    'NSPrivacyAccessedAPICategoryDiskSpace', 'E174.1', '85F4.1',
+  ];
+  for (const token of requiredTokens) {
+    if (!manifest.includes(token)) throw new Error(`Generated iOS privacy manifest is missing ${token}`);
+  }
+  console.log('Verified: iOS app privacy manifest includes reviewed SDK 51 required-reason API categories.');
   console.log('Verified: disposable iOS prebuild produces Podfile and Xcode project.');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
