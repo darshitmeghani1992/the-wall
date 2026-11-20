@@ -1,3 +1,5 @@
+-- Disable the server Secret creation gate BEFORE stopping the expiry job.
+update public.secret_mark_rollout set enabled=false,updated_at=now() where singleton;
 -- STAGING / DEVOPS ROLLBACK RUNBOOK ONLY.
 -- Stops future Secret Mark expiry jobs; it does NOT restore already expired
 -- content or weaken the service-only execute privilege.

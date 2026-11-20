@@ -167,6 +167,14 @@ echo "── load: 0033_shared_wall_owner_returning_rls.sql"
 psql_test -f "$MIG/0033_shared_wall_owner_returning_rls.sql" >/dev/null
 echo "── replay: 0033_shared_wall_owner_returning_rls.sql (idempotence)"
 psql_test -f "$MIG/0033_shared_wall_owner_returning_rls.sql" >/dev/null
+echo "── load: 0034_secret_rollout_server_gate.sql"
+psql_test -f "$MIG/0034_secret_rollout_server_gate.sql" >/dev/null
+echo "── replay: 0034_secret_rollout_server_gate.sql (idempotence)"
+psql_test -f "$MIG/0034_secret_rollout_server_gate.sql" >/dev/null
+echo "── assertion: 62_secret_rollout_server_gate (default OFF)"
+psql_test -f "$HERE/62_secret_rollout_server_gate.sql"
+echo "── isolated fixture: enable Secret only for existing local test cases"
+psql_test -c "update public.secret_mark_rollout set enabled=true where singleton;" >/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
