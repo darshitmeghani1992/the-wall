@@ -5,15 +5,16 @@
  * Fail closed before install/prebuild. Never print the URL, public key, or
  * arbitrary thrown errors, as EAS logs may be shared with collaborators.
  */
-import { validatePublicClientConfig } from './staging-preflight.mjs';
+import { assertLegacyAnonKeyMatchesOrigin, validatePublicClientConfig } from './staging-preflight.mjs';
 
 try {
-  validatePublicClientConfig(
+  const origin = validatePublicClientConfig(
     process.env.EXPO_PUBLIC_SUPABASE_URL,
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   );
+  assertLegacyAnonKeyMatchesOrigin(origin, process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
   console.log('EAS Supabase public client configuration: valid HTTPS project origin.');
 } catch {
-  console.error('EAS build blocked: Supabase public client configuration is missing or invalid. EXPO_PUBLIC_SUPABASE_URL must be the HTTPS project origin, without /rest/v1/ or credentials.');
+  console.error('EAS build blocked: Supabase public client configuration is missing, invalid or points to a different project. The URL must be the HTTPS project origin and the public key must match.');
   process.exitCode = 1;
 }

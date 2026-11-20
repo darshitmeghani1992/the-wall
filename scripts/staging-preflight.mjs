@@ -23,6 +23,32 @@ export function validatePublicClientConfig(url, key) {
   return parsed.origin;
 }
 
+/**
+ * Catch a project/key mix-up before the APK is built. Legacy anon JWTs embed
+ * their Supabase project ref and role. This is a consistency check, NOT JWT
+ * signature verification; the server still validates every request.
+ * Modern sb_publishable_* keys do not embed the project ref and are handled by
+ * the live API preflight instead.
+ */
+export function assertLegacyAnonKeyMatchesOrigin(origin, key) {
+  if (!key.startsWith('eyJ')) return;
+  const parts = key.split('.');
+  if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) {
+    throw new Error('Malformed legacy public key');
+  }
+  let claims;
+  try {
+    claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    throw new Error('Invalid legacy public key claims');
+  }
+  const hostname = new URL(origin).hostname;
+  const expectedRef = hostname.endsWith('.supabase.co') ? hostname.slice(0, -'.supabase.co'.length) : null;
+  if (!expectedRef || claims?.ref !== expectedRef || claims?.role !== 'anon') {
+    throw new Error('Public key belongs to another Supabase project or role');
+  }
+}
+
 export function classifyResult(check, status, errorCode = '') {
   const ok = check.acceptedStatuses.includes(status);
   let reason = ok ? 'reachable' : 'unexpected_http_status';

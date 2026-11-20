@@ -43,3 +43,30 @@ test('EAS guard rejects insecure HTTP and query-bearing origins', () => {
   assert.equal(run('http://project-id.supabase.co').status, 1);
   assert.equal(run('https://project-id.supabase.co?token=bad').status, 1);
 });
+
+function fakeLegacyAnonKey(ref, role = 'anon') {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ ref, role })).toString('base64url');
+  return `${header}.${body}.test-signature`;
+}
+
+test('EAS guard accepts matching legacy anonymous key project ref', () => {
+  const r = run('https://staging-project.supabase.co', fakeLegacyAnonKey('staging-project'));
+  assert.equal(r.status, 0);
+});
+
+test('EAS guard rejects mismatched legacy key or privileged service role', () => {
+  const mismatch = fakeLegacyAnonKey('production-project');
+  const wrongProject = run('https://staging-project.supabase.co', mismatch);
+  assert.equal(wrongProject.status, 1);
+  const privileged = run('https://staging-project.supabase.co', fakeLegacyAnonKey('staging-project', 'service_role'));
+  assert.equal(privileged.status, 1);
+  assert.equal((wrongProject.stdout + wrongProject.stderr).includes(mismatch), false);
+});
+
+test('EAS guard rejects malformed JWT-like public keys without printing them', () => {
+  const malformed = 'eyJinvalid.test.invalid';
+  const result = run('https://staging-project.supabase.co', malformed);
+  assert.equal(result.status, 1);
+  assert.equal((result.stdout + result.stderr).includes(malformed), false);
+});

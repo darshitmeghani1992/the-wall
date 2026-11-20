@@ -6,6 +6,7 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { requestAccountDeletion } from "@/lib/account";
+import { isAccountDeletionEnabled } from "@/lib/account-deletion-availability";
 import { reconcileCommittedDeletion } from "@/lib/account-deletion-contract";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { colors, radius, spacing } from "@/theme";
@@ -29,7 +30,7 @@ export default function DeleteAccountScreen() {
   }, [actorId]));
 
   async function scheduleDeletion() {
-    if (!actorId || confirmation !== "DELETE" || inFlight.current) return;
+    if (!isAccountDeletionEnabled || !actorId || confirmation !== "DELETE" || inFlight.current) return;
     const token = actionFence.current.begin(actorId);
     if (!token) return;
     inFlight.current = true;
@@ -81,6 +82,24 @@ export default function DeleteAccountScreen() {
         setBusy(false);
       }
     }
+  }
+
+  if (!isAccountDeletionEnabled) {
+    return (
+      <Screen dockInset={false}>
+        <Text variant="display" style={{ marginTop: 28 }}>Account deletion</Text>
+        <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 16 }}>
+          Permanent deletion is temporarily unavailable while we complete the required safety,
+          30-day recovery, and permanent removal infrastructure. No deletion has been scheduled.
+        </Text>
+        <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 16 }}>
+          You can deactivate your account from Settings in the meantime.
+        </Text>
+        <View style={{ marginTop: 24 }}>
+          <Button label="Back to Settings" onPress={() => router.replace("/settings")} />
+        </View>
+      </Screen>
+    );
   }
 
   return (
