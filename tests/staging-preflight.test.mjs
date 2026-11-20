@@ -11,7 +11,7 @@ test('public client configuration requires HTTPS origin and key', () => {
 });
 
 test('all current staging probes are readonly zero-row table checks', () => {
-  assert.equal(requiredChecks.length, 4);
+  assert.equal(requiredChecks.length, 7);
   assert(requiredChecks.every(({ path }) => path.includes('limit=0') || path === '/auth/v1/health'));
 });
 
@@ -19,7 +19,7 @@ test('all required healthy endpoints pass without accessing row bodies', async (
   const seen = [];
   const fakeFetch = async (url, options) => {
     seen.push([url, options]);
-    return { status: 200, json: async () => { throw new Error('success body should not be read'); } };
+    return { status: url.includes('mark_secrets?') || url.includes('mark_media?') || url.includes('secret_mark_rollout?') ? 401 : 200, json: async () => { throw new Error('success body should not be read'); } };
   };
   const result = await verifyStagingBackend({ url: 'https://example.supabase.co', key: 'public-key', fetchImpl: fakeFetch });
   assert.equal(result.ready, true);
@@ -30,7 +30,7 @@ test('all required healthy endpoints pass without accessing row bodies', async (
 test('missing follows schema fails decisively, without exposing error body', async () => {
   const fetchImpl = async (url) => url.includes('/follows?')
     ? { status: 404, json: async () => ({ code: 'PGRST205', details: 'do not print this sensitive value' }) }
-    : { status: 200 };
+    : { status: url.includes('mark_secrets?') || url.includes('mark_media?') || url.includes('secret_mark_rollout?') ? 401 : 200 };
   const result = await verifyStagingBackend({ url: 'https://example.supabase.co', key: 'public-key', fetchImpl });
   assert.equal(result.ready, false);
   assert.deepEqual(result.checks[3], { name: 'follows_api', ok: false, status: 404, reason: 'schema_or_rpc_missing' });
@@ -42,4 +42,27 @@ test('auth denied and network failures are fail-closed', async () => {
   const result = await verifyStagingBackend({ url: 'https://example.supabase.co', key: 'public-key', fetchImpl });
   assert.equal(result.ready, false);
   assert(result.checks.every((check) => check.reason === 'network_unreachable'));
+});
+
+test('public read of a protected table fails the release gate', async () => {
+  const fetchImpl = async (url) => ({
+    status: url.includes('mark_secrets?') ? 200 :
+      url.includes('mark_media?') || url.includes('secret_mark_rollout?') ? 403 : 200,
+    json: async () => ({}),
+  });
+  const result = await verifyStagingBackend({ url: 'https://example.supabase.co', key: 'public-key', fetchImpl });
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.checks[4], { name: 'secret_payload_isolation', ok: false, status: 200, reason: 'unexpected_http_status' });
+  assert(result.checks[5].ok && result.checks[6].ok);
+});
+
+test('missing Secret rollout gate is not confused with expected client denial', async () => {
+  const fetchImpl = async (url) => ({
+    status: url.includes('secret_mark_rollout?') ? 404 :
+      url.includes('mark_secrets?') || url.includes('mark_media?') ? 401 : 200,
+    json: async () => ({ code: 'PGRST205' }),
+  });
+  const result = await verifyStagingBackend({ url: 'https://example.supabase.co', key: 'public-key', fetchImpl });
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.checks[6], { name: 'secret_rollout_isolation', ok: false, status: 404, reason: 'schema_or_rpc_missing' });
 });

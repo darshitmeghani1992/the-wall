@@ -7,6 +7,10 @@ export const requiredChecks = Object.freeze([
   { name: 'profiles_api', path: '/rest/v1/profiles?select=id&limit=0', acceptedStatuses: [200] },
   { name: 'marks_api', path: '/rest/v1/marks?select=id&limit=0', acceptedStatuses: [200] },
   { name: 'follows_api', path: '/rest/v1/follows?select=followed_id&limit=0', acceptedStatuses: [200] },
+  // A healthy staging backend MUST reject direct client table reads.
+  { name: 'secret_payload_isolation', path: '/rest/v1/mark_secrets?select=mark_id&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'private_media_isolation', path: '/rest/v1/mark_media?select=mark_id&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'secret_rollout_isolation', path: '/rest/v1/secret_mark_rollout?select=singleton&limit=0', acceptedStatuses: [401, 403] },
 ]);
 
 export function validatePublicClientConfig(url, key) {
@@ -51,7 +55,7 @@ export function assertLegacyAnonKeyMatchesOrigin(origin, key) {
 
 export function classifyResult(check, status, errorCode = '') {
   const ok = check.acceptedStatuses.includes(status);
-  let reason = ok ? 'reachable' : 'unexpected_http_status';
+  let reason = ok ? (status === 401 || status === 403 ? 'expected_access_denial' : 'reachable') : 'unexpected_http_status';
   if (!ok && status === 404 && /^PGRST20[0-9]$/.test(errorCode)) reason = 'schema_or_rpc_missing';
   else if (!ok && (status === 401 || status === 403)) reason = 'client_access_denied';
   return { name: check.name, ok, status, reason };
