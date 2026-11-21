@@ -1,5 +1,10 @@
 # The-Wall Build Status
 
+## Gemini free-tier account claimed ready — controlled credential smoke candidate (21 Nov 2026)
+
+**Founder:** reported GitHub Actions `GEMINI_API_KEY` secret added and Google AI Studio project marked Free tier. Secret content and billing linkage **not independently accessible or verified**. Isolated branch `codex/gemini-free-auth-smoke-20261121` descends from PR #70 at `669f0f1a3b35b35013dba21a87ea3b2faad3935f`; adds `scripts/gemini_free_smoke.py` (one fixed model request, no project files or provider response logged), mocks, and a **manual-only** credential-smoke workflow with a free-tier confirmation and read-only token. Normal PR CI runs mocks without any key. The new manual workflow cannot be dispatched until independently reviewed and available on default branch; no key use has occurred. Cloud coding agent, event-driven lease coordinator and task-to-task handoff remain NOT VERIFIED; $0 paid fallback and staging-only gates remain, no hosted writes/merge. **Next:** exact-SHA CI + independent review; integrate smoke only after release governance permits; manually trigger one bounded credential test, then develop durable coordinator and bounded coding agent. Enhanced Beta NO-GO.
+
+
 ## Free-first cloud-loop implementation — 21 Nov 2026 (draft only)
 
 **Founder request:** Complete all possible no-charge preparation. **ROLE: ARCHITECT orchestration, DEVOPS-designated CI preparation.** New isolated branch `codex/free-first-cloud-loop-20261121`, descended from cloud-prep PR #69, adds manual `.github/workflows/free-worker-smoke.yml` (GitHub public runner, read-only permissions, no secrets, dry-run only), fail-closed `scripts/free_worker_preflight.py` and negative tests, and `docs/architecture/FREE_FIRST_WORKER_V2.md`. Config remains OFF, agent unconfigured, financial authority $0. Gemini headless requires an account-owned free-tier credential; no paid API, billing, key entry, worker or webhook dispatch was activated. **Next:** exact-commit CI and independent review; lease/webhook/agent adapter and simulated task transitions before any real agent pilot. Original production untouched, Enhanced Beta NO-GO.
