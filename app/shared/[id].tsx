@@ -61,6 +61,8 @@ export default function SharedWallScreen() {
   const [focusedMarkUnavailable, setFocusedMarkUnavailable] = useState(false);
   const dropIds = useRef<Set<string>>(new Set(justCreatedId ? [justCreatedId] : []));
   const fence = useRef(new SessionFocusFence()).current;
+  // Join/leave ownership must not be invalidated by a simultaneous Wall refresh.
+  const mutationFence = useRef(new SessionFocusFence()).current;
   const mutationInFlight = useRef(false);
   const currentUserId = useRef<string | null>(userId ?? null);
   const currentWallId = useRef(wallId);
@@ -170,10 +172,11 @@ export default function SharedWallScreen() {
 
   useFocusEffect(useCallback(() => {
     fence.focus(userId ?? null);
+    mutationFence.focus(userId ?? null);
     setWall(null); setOwner(null); setCapabilities(null); setMarks([]); setSelectedMark(null); setBusy(null);
     if (userId && accountRoute === "ready" && wallId && (!reference || deferredAttempt?.reference === reference)) void load(); else if (!reference && accountRoute === "ready") setLoading(false);
-    return () => { pageGeneration.current++; fence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
-  }, [accountRoute, deferredAttempt?.reference, fence, load, reference, userId, wallId]));
+    return () => { pageGeneration.current++; fence.blur(); mutationFence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
+  }, [accountRoute, deferredAttempt?.reference, fence, load, mutationFence, reference, userId, wallId]));
 
   useStaggeredArrivals(wall?.id, (mark) => {
     if (!wall || mark.wall_id !== wall.id || loadedIdentity !== `${userId}:${wallId}:${focusMarkId ?? ""}`) return;
@@ -189,12 +192,12 @@ export default function SharedWallScreen() {
 
   async function join() {
     if (!userId || busy || capabilities?.wallType !== "shared" || !capabilities.canJoin || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId);
+    const token = mutationFence.begin(userId);
     if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusy("join"); setError(null);
     try {
       const result = await joinSharedWall(wallId);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (result.status !== "joined" && result.status !== "already_member") {
         setError("Joining isn't available. The owner can invite you.");
         return;
@@ -202,10 +205,13 @@ export default function SharedWallScreen() {
       setBusy(null);
       void load();
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't join this Shared Wall.");
+      if (mutationFence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't join this Shared Wall.");
     } finally {
-      endExclusiveMutation(mutationInFlight);
-      if (fence.isCurrent(token, currentUserId.current)) setBusy(null);
+      // A previous account or Wall's late completion cannot release a newer mutation.
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight);
+        setBusy(null);
+      }
     }
   }
 
@@ -218,19 +224,22 @@ export default function SharedWallScreen() {
 
   async function leave() {
     if (!userId || busy || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId);
+    const token = mutationFence.begin(userId);
     if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusy("leave");
     try {
       const result = await leaveSharedWall(wallId);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (result.status === "left") router.replace("/(tabs)/home");
       else setError("This membership has already changed.");
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't leave this Shared Wall.");
+      if (mutationFence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't leave this Shared Wall.");
     } finally {
-      endExclusiveMutation(mutationInFlight);
-      if (fence.isCurrent(token, currentUserId.current)) setBusy(null);
+      // A previous account or Wall's late completion cannot release a newer mutation.
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight);
+        setBusy(null);
+      }
     }
   }
 
