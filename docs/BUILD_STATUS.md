@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-35 · Lease unsaved settings discard to authenticated actor — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #118 exact `074824a77d2ae1c771a3c6fe758cd4b886fd441b`. The Personal Wall settings `beforeRemove` confirmation captured a navigation action, but its delayed Discard callback could still dispatch after account A→B or sign-out; duplicate modal prompts were also possible, and a back gesture during an in-flight save could navigate incorrectly. Use the existing account action `SessionFocusFence` as a lease for the captured confirmation, discard old callbacks when the actor/focus generation changes, prevent multiple prompts and navigation during an in-flight mutation, reset prompt state on focus/blur. No server/schema/API/product/visual change; preserve current unsaved change and Save settings journeys. Regression `tests/frontend-personal-settings-discard-lease.test.mjs` includes actual `SessionFocusFence` race checks.
+
+**Verification:** exact new SHA CI and independent Reviewer/behavioral QA needed on account switches, stale modal callbacks, dirty discard, saving while back gesture, cancel and retry. Unit/source checks are not real device QA. Prior #118 exact SHA was 4/4 CI but cannot certify child. STAGING ONLY `ewintxgdxdvschiqodkq`; original production untouched. No hosted write, migration 0031, main merge, paid service, release or tester invitation. Enhanced Beta **NO-GO**: six-digit SMTP OTP, real three-user JWT HTTP suite, C2/C3 media, Secret one-hour cron, deletion/purge, installed-device/rollback and independent Reviewer/QA/Founder approval outstanding; media/Secret/analytics OFF; domain/DNS/Apple held.
+
+**Next:** Verify child exact tree and CI, independent code review and native UX test. Continue independent unblocked task after checkpoint.
+
+
 ## BETA-P0-34 · Personal Wall settings actor-bound render and retry — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #117 exact `6be90c1de356ba4b128d3faa735245fc5900ef0e`. Personal Wall visibility, writing and Anonymous configuration could remain rendered from account A after a new account B session/route render but before focus-effect cleanup. Bind settings, error/dirty and save eligibility to the actor whose read settled; show the existing spinner while B loads, and settle errors under B to preserve retry. Sign-out fails closed without an unusable retry action. All three server-saved settings remain atomic and backend owner validation is unchanged. New `tests/frontend-personal-settings-actor-display.test.mjs` source/state checks; no UI redesign, schema, API, security policy or flags changed.
