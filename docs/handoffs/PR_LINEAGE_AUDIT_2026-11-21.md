@@ -30,7 +30,7 @@ This is a **collision watchlist**, not proof of a conflict or regression: every 
 
 **Verified:** GitHub PR live base/head metadata, compare ancestry for `main→#30`, `#30→#58`, `#58→#61`, `#63→#64/#65/#67` and `#67→#73`, PR changed-filename lists for every listed release-slice PR, and three file-level blob equivalences (#60→#61, #65→#67 source/test). #73 exact-head CI is green. All PRs inspected remain **draft, open, unmerged**.
 
-**Not verified:** complete content-by-content semantic reconciliation of the historical `main→#30` large diff, independent Reviewer APPPROVE/QA PASS on the unchanged integrated application tree, actual three-user JWT/HTTP permissions, SMTP delivery, iOS/Android device flows, private media worker runtime/cleanup, Secret cron/expiry, account deletion 0031 worker, release rollback. A green test does not compensate for these.
+**Not verified:** complete content-by-content semantic reconciliation of the historical `main→#30` large diff, independent Reviewer APPROVE/QA PASS on the unchanged integrated application tree, actual three-user JWT/HTTP permissions, SMTP delivery, iOS/Android device flows, private media worker runtime/cleanup, Secret cron/expiry, account deletion 0031 worker, release rollback. A green test does not compensate for these.
 
 **Staging read-only refresh, 21 Nov:** `ewintxgdxdvschiqodkq` had 0 Auth users, 0 Walls, 0 Marks and 0 `mark-media` objects; `mark-media` private, `pg_cron` absent, migrations 0001–0030 plus 0032–0034 applied, 0031 withheld. Original `wfsfafmgvxevpzrurofz` not queried or changed.
 
