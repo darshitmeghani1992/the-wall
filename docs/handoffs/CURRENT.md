@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Atomic loop completion fix — 21 November 2026, source/test draft only
+
+Base draft PR #72 exact head `538604d9f0b778698b9b6d53934c31cacc4986bc` passed 44885364695 full CI and 44885364694 engineering contracts. #72 still draft; no independent Reviewer/QA. New branch `codex/loop-v2-atomic-completion-20261121` is an isolated child for BACKEND internal tooling correction: transactional completion/event + closed task record, guarded by monotonic fenced token; the local dispatcher excludes already-completed tasks on every tick. New tests cover three consecutive task transitions, persistent exclusion and re-used events that must not release a live second lease. **Next:** open stacked draft PR and verify its exact SHA CI; then independent reviewer and QA, and a future shared durable outbox/event dispatcher before any real cloud activation. Local SQLite is not a multi-run cloud queue. Gemini live auth remains not verified. No paid provider, hosted writes, production, merges, or feature enablement; Enhanced Beta still NO-GO.
+
+
 ## Loop v2.0 durable lease + simulated immediate handoff — 21 Nov 2026
 
 Last verified ancestor PR #71 head `99f75722dddb51f3dbeb13340b70e82434e27e61`, full CI 44885048259 SUCCESS and engineering contracts 44885048285 SUCCESS. New isolated branch `codex/loop-v2-durable-leases-20261121` implements **prototype** SQLite transactional lease caps, token fencing, branch isolation, duplicate-event detection and no-network simulated completion→next-task dispatch with tests. A SQLite file does not persist across cloud runners: no claimed continuous operation. **Next:** check this branch's exact CI, independent review and QA; implement shared durable coordinator and authenticated free-tier sandbox worker with no exposed credentials or paid fallback. Gemini manual real API test still awaits reviewed workflow integration, not yet run. Hourly fallback unchanged, Enhanced Beta NO-GO.
