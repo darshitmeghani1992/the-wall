@@ -7,6 +7,9 @@ on:
       - "scripts/tests/test_engineering_loop_v2.py"
       - "scripts/tests/test_engineering_cloud_policy_v2.py"
       - "config/engineering-cloud-v2.json"
+      - "scripts/free_worker_preflight.py"
+      - "scripts/tests/test_free_worker_preflight.py"
+      - ".github/workflows/free-worker-smoke.yml"
       - ".github/workflows/engineering-loop-contracts.yml"
   workflow_dispatch:
 
@@ -22,6 +25,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Unit tests (no network or credentials)
-        run: python -m unittest discover -s scripts/tests -p 'test_engineering_*v2.py' -v
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_engineering_*v2.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_free_worker_preflight.py' -v
+          python scripts/free_worker_preflight.py
       - name: Canonical queue dry run
         run: python scripts/engineering_loop_v2.py --workers 3

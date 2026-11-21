@@ -1,0 +1,40 @@
+name: Free-first coding worker smoke (manual only)
+
+# Intentionally no webhook/push/PR automation. This smoke is not a live agent.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: the-wall-free-worker-smoke
+  cancel-in-progress: false
+
+jobs:
+  safe-smoke:
+    if: github.repository == 'darshitmeghani1992/the-wall'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      THE_WALL_SUPABASE_PROJECT: ewintxgdxdvschiqodkq
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify zero-billing and default-off policy
+        run: python scripts/free_worker_preflight.py
+      - name: Check queue logic and hard caps
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_engineering_*v2.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_free_worker_preflight.py' -v
+      - name: Show eligible tasks (dry run)
+        run: python scripts/engineering_loop_v2.py --workers 1
+
+# No AI key is passed to this workflow.
+# Future LIVE agent must use a separately reviewed workflow with:
+# strict GitHub App permissions, bounded calls, durable lease fencing,
+# immutable source, independent review, zero paid fallback and rollback.
