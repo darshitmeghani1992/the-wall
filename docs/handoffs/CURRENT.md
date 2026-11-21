@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-45 · Shared Wall invite preview, response and lock actor/route isolation — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #128 exact `d4b12e83bb78d8984ccf8bf335554f31b2a121d7` preserving draft ancestry. `app/shared/invite/[id].tsx` held prior account's invitation name, inviter, privacy and response state until focus cleanup; a route change could show a previous private invitation, while claimed deferred references were deduplicated only by reference and a stale `respond` finally could release another account's mutation lock. Add viewer+Wall+deferred-reference key; show invite/errors/actions only after the exact key loads; reject stale resolution and retry, scope deferred token to exact key, and separate mutation fence from read fence to avoid stale response unlocks. No changes to backend invite authorization or existing coordinator. Executable key matrix + source guards in `tests/frontend-shared-invite-actor-route.test.mjs`.
+
+**Gates:** Exact-head CI including TypeScript/lint, contracts, DB security, Edge/media and Expo/native where available. Independent Reviewer and separate real-device QA on invite A→B, Wall X→Y, reference R1→R2, accept/decline, old confirmation callback, slow/offline load and in-flight response, retry and UI semantics; source tests are not behavioral QA. STAGING ONLY `ewintxgdxdvschiqodkq`, protect original production. No hosted writes, schema/Auth/RLS/API/flag modifications, migration 0031, main merge, deployment or invitations. Enhanced Beta **NO-GO** pending true SMTP six-digit OTP, three hosted JWT actors, media C2/C3, Secret cleanup, deletion, independent QA/device/rollback and Founder GO. Media/Secret/analytics OFF; domain/Apple held.
+
+**Next:** Verify PR #129 own CI and independent gates; proceed with unblocked beta scope while external release requirements remain held.
+
+
 ## CURRENT BETA-P0-44 · Root deferred redirect bound to authenticated account — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #127 immutable `1290b956205f3b9906be47e68d7f7c0c2c361761`, maintaining untouched PR #30–#127 ancestry. The root `app/index.tsx` kept a plain resolved redirect string from account A. While session B became ready but before root `useEffect` invalidated that string, render could redirect B to A's previously resolved Wall, invite or fallback. A new `ActorRedirectTarget` records the resolving actor with its exact destination; `visibleRedirectForActor` fails closed until the currently authenticated actor matches. Async completion remains guarded by the pre-existing `preparedFor` lease and the deferred coordinator is not altered. Existing root contract adjusted to require scoped destination plus executable pure actor matrix `tests/frontend-root-redirect-actor.test.mjs`.
