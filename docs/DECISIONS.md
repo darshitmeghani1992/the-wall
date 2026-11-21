@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-21 · 2026-11-21 · Atomic completion is mandatory before any event-driven worker pilot
+- **Finding:** On draft PR #72's simulated local dispatcher, a lease was released before an event ID was recorded and completed tasks were not stored; a repeated event could release a second valid lease, and a finished task could be reassigned on later ticks.
+- **Decision (reversible internal bugfix):** BACKEND makes the local SQLite completion/event/fencing/closed-task transition one `BEGIN IMMEDIATE` transaction, rejected duplicate/stale events have zero effect, and every next dispatch excludes durably completed simulation tasks. Add negative multi-tick and duplicate-event tests; do not change or rewrite the canonical queue.
+- **Boundary:** Local completion means **simulation worker bookkeeping only**, not QA acceptance, actual code completion, deploy readiness, or product completion. SQLite still cannot coordinate ephemeral GitHub hosts; a crash between local completion and external wakeup requires a future transactional shared outbox or polling reconciliation. No hosted schema/migration write, real worker, Gemini call or paid fallback.
+- **Gate:** Independent Reviewer and behavioral QA for exact PR candidate; new shared coordination architecture, security and hosted infrastructure activation remain gated. This change does not declare the cloud agent continuous.
+
+
 ## D-20 · 2026-11-21 · Prototype fenced three-worker leases and immediate handoff without activating AI
 - **Decision:** Build a no-cost SQLite transactional single-host coordination **prototype** using `BEGIN IMMEDIATE`, monotonically increasing fencing token, bounded leases, task/branch ownership, deduplicated event ID, and max three active implementation leases. Simulate completion-to-next-task without hourly polling.
 - **Limits:** SQLite file is not shared across ephemeral GitHub Actions hosts and **must not be used as multi-run production coordinator**; any real cloud loop requires a shared durable transactional service plus security/operational review. A simulated task handoff is not evidence of authenticated Gemini coding, PR creation, QA or continuous deployment.
