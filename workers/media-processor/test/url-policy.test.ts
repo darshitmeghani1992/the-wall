@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertCallbackUrl, assertHostnameResolvesPublic, assertStorageObjectUrl, type UrlPolicy } from "../src/url-policy.js";
+import { assertCallbackUrl, assertFinalResponseOrigin, assertHostnameResolvesPublic, assertStorageObjectUrl, type UrlPolicy } from "../src/url-policy.js";
 
 const policy: UrlPolicy = {
   storageHostname: "project.supabase.co",
@@ -49,4 +49,16 @@ test("resolved private and reserved addresses are rejected", async () => {
   const publicResolver = (async () => [{ address: "203.0.114.10", family: 4 }]) as never;
   await assert.rejects(assertHostnameResolvesPublic("project.supabase.co", privateResolver));
   await assert.doesNotReject(assertHostnameResolvesPublic("project.supabase.co", publicResolver));
+});
+
+
+test("final Storage responses preserve the exact signed query and path", () => {
+  const expected = assertStorageObjectUrl(
+    `https://project.supabase.co/storage/v1/object/sign/mark-media/${objectPath}?token=original&download=1`,
+    objectPath, "download", policy,
+  );
+  assert.doesNotThrow(() => assertFinalResponseOrigin(expected.href, expected));
+  assert.throws(() => assertFinalResponseOrigin(expected.href.replace("original", "replacement"), expected));
+  assert.throws(() => assertFinalResponseOrigin(expected.href.replace("download=1", "download=0"), expected));
+  assert.throws(() => assertFinalResponseOrigin(expected.href.replace("full.jpg", "other.jpg"), expected));
 });
