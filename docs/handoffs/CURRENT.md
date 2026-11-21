@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Gemini workflow branch-selection guard — 21 Nov 2026
+
+**ROLE: BACKEND/DEVOPS security correction.** The credential smoke and two-request model job must both require exact GitHub repository, `refs/heads/main`, and Founder `github.actor`; manual dispatch may otherwise select an untrusted branch while still accessing secrets. Updated both secret-bearing workflows and added static negative contract assertions in stacked draft PR #81. This changes the candidate SHA and requires fresh CI plus independent Reviewer/QA; prior passing checks cannot certify the new head. No workflow merged, invoked with Gemini key, paid fallback or actual cloud agent yet.
+
+
 ## Restricted Gemini draft PR worker candidate — 21 Nov 2026, NOT ACTIVATED
 
 Isolated `codex/gemini-controlled-draft-writer-20261121` from draft #80 exact head `ed86159d358248dacb064ed82fad0a80622694f8`. Adds `scripts/gemini_fixture_draft_pr_v2.py` and extensive no-network hostile-input tests plus a second optional manual workflow job for a **draft-only** GitHub write of exactly two synthetic fixture files. Secret-bearing generation job remains read-only and never receives GitHub write token; publisher job does not receive Gemini key. Full exact-SHA CI, independent Reviewer/QA, existing Founder/main-merge authorization and a first genuine API+draft PR run are still outstanding. **No Gemini free-tier usage or continuous cloud coding proven.** Next: verify new PR CI, independent review, approved default-branch integration/one-time pilot; reconcile GitHub Actions token-created PR CI limitation. Build bounded real app editing and multi-run event dispatch independently. Original production untouched; first beta Enhanced scope NO-GO.
