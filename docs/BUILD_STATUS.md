@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## Independent release-evidence audit — 21 Nov 2026 (ARCHITECT → BACKEND)
+
+**Founder priority:** automate the next engineering tasks and deliver a deployable Enhanced Beta without skipping safety gates. The existing hourly engineering automation was checked: enabled and **in progress** during this independent slice. Do not launch duplicate overlapping work or claim a perpetual Codex task trigger; cloud Codex handoff remains unverified.
+
+**New isolated release-tooling branch:** `codex/beta-release-gate-audit-20261121` based on reviewed-lineage application candidate PR #85 exact SHA `3e13b30cde449ac8023edaf01df6b1b35a8a734a` (PR #85 full CI success; independent review absent). Adds `scripts/beta_release_evidence.py` and negative unit tests, wired to GitHub CI. The tool requires an immutable candidate SHA and individually verified linked evidence for fourteen explicit gates: CI, independent Reviewer, independent QA, staging binding, OTP, real three-JWT HTTP, Shared Wall RETURNING, RLS/definers, media, Secret, deletion, device, rollback and Founder release approval. Fail closed on missing, stale, self-certified or production evidence. **This is an audit checker, not a deployment or authentication flow.** No staging hosted changes, main merge, release invitation, production access or feature activation.
+
+**Next:** verify this draft PR's exact CI, independent Reviewer/QA of audit assumptions; resolve P0 SMTP authorized testers + authenticated actor QA and immutable candidate from PR #85/#86/#87. Existing hourly automation remains the only verified unattended schedule. New event-driven Codex cloud chaining is *not* activated; don't duplicate a running worker. **Enhanced Beta NO-GO.**
+
+
 ## BETA-P0-01 · Integrated lineage audit, application candidate (21 Nov 2026)
 
 **ROLE: ARCHITECT**, documentation-only integration; source parent [#84](https://github.com/darshitmeghani1992/the-wall/pull/84) `f583ca520ad0dfa3b452dfc7ae85ece016597498`. Imported the exact audit text from [#74](https://github.com/darshitmeghani1992/the-wall/pull/74) `65a211c467a94e903bb74f1e3df7a4612e79104c` as `docs/handoffs/PR_LINEAGE_AUDIT_2026-11-21.md`. The audit's complete 351-path main→#30 blob inventory, historical PR base chain, and collision watchlist are preserved; this is not a 351-file semantic security review.

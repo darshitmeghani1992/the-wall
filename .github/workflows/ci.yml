@@ -19,6 +19,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Release evidence audit contracts (read-only)
+        run: python3 -m unittest discover -s scripts/tests -p 'test_beta_release_evidence.py' -v
+
       - name: Type-check
         run: npx tsc --noEmit
 
