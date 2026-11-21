@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-32 · Status editor account/Wall render fence — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #115 `b1ed1637c86f5349f41ded85d4f0eeea9108b415`: before focus cleanup, old Status body/draft can be rendered for a changed account/Wall. Visible editor values, dirty/save/remove controls and loading are now gated by matching `userId:wallId`; success/denied/error states are tagged for authorized retry, with no server contract or UX redesign. Regression `tests/frontend-status-actor-render-fence.test.mjs`. New exact-head CI plus independent Reviewer and actual behavioral native QA required; no self-certification or release GO. Staging `ewintxgdxdvschiqodkq` only, original production untouched. No hosted writes, merge/deploy or invite. Media/Secret/analytics OFF.
+
+**Next:** Capture immutable child SHA/tree, verify checks, route independently to Reviewer/QA; separately investigate StatusRemovalGuard in-flight account switching. Real OTP/three JWTs, media, Secret, deletion, device and Founder GO remain blocked.
+
+
 ## BETA-P0-31 · Approved Writers actor-bound roster guard — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Child of #114 `dfb8270e96764be9a1bdd20f985e51b643883b13` adds pre-focus session render gate to Approved Writers roster/search, and blocks stale search/add/remove/confirm actions. Current actor selected/unselected, loading, error and retry unchanged. New static/regression test; exact-head CI, independent Reviewer and native behavioral QA still pending. No hosted writes/production, merge or deploy. Enhanced Beta **NO-GO**, external holds unchanged.

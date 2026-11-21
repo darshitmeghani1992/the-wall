@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-32 · Status editor actor/Wall render privacy guard — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #115 immutable `b1ed1637c86f5349f41ded85d4f0eeea9108b415`. The Status editor already fences delayed network responses and clears state on focus, but could briefly render the previous account's or previous Personal Wall's Status text/draft **before** the focus effect clears it. Bind the visible Status/body, save eligibility, dirty/remove controls and loading/error transition to the current `userId:wallId` subject; mark both authorized results and denied/failed loads as settled for that subject so authorized retry still works. Loading and navigation preserve the existing user journey. New source/state regression `tests/frontend-status-actor-render-fence.test.mjs`. Backend permission remains authoritative; no UI redesign, auth/schema/API/flag changes.
+
+**Verification / gates:** Exact-head CI must run separately from #115; status editor actor A→B, Wall X→Y, delayed success/failure, retry, unsaved edits and back/removal needs independent Reviewer and behavioral device QA. Source contracts do **not** prove native privacy. Prior #115 exact SHA `b1ed1637c86f5349f41ded85d4f0eeea9108b415` passed 4/4 GitHub CI ([run 44942504092](https://github.com/darshitmeghani1992/the-wall/actions/runs/44942504092)); its approval/QA are still pending. No production access, hosted writes, feature activation, migrations, merges, deployments or tester invitations. Enhanced Beta **NO-GO** until real six-digit OTP delivery, 3 genuine hosted JWT actors, C2/C3 media, one-hour Secret cleanup, 0031 deletion/purge, device/rollback and Founder release gates.
+
+**Next:** Verify new child exact SHA/tree/checks and independent Reviewer/QA; next separately leased unblocked task should assess `StatusRemovalGuard` in-flight ownership on account switch without conflating it with this UI-render fix. Domain/DNS and Apple enrollment/signing remain held.
+
+
 ## BETA-P0-31 · Fence Approved Writers roster and controls by account — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #114 immutable `dfb8270e96764be9a1bdd20f985e51b643883b13`, preserving prior stacked drafts. Approved Writers cached roster and search UI persisted until `useFocusEffect` cleanup; a new account render could expose prior actor writer names or accept stale UI actions. An actor-bound `loadedActorId` gate hides cached content until current actor's settings and roster load. Search, add, remove and confirmation fail closed on actor mismatch. Current actor error/retry and non-selected explanation still function. Added dedicated Node contract `tests/frontend-approved-writers-actor-display.test.mjs`. No server permissions, API, UX design, schema or flags changed.
