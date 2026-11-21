@@ -92,8 +92,11 @@ def save_verified_artifact(directory, task_id, code):
         ("add", ast.Add) if task_id == "FIXTURE-ONE" else ("subtract", ast.Sub)
     )
     verify_synthetic_code(code, expected_name, operation)
-    output_dir = Path(directory).resolve(strict=True)
-    if not output_dir.is_dir() or output_dir.is_symlink():
+    requested_dir = Path(directory)
+    if requested_dir.is_symlink():
+        raise ValueError("artifact directory cannot be a symlink")
+    output_dir = requested_dir.resolve(strict=True)
+    if not output_dir.is_dir():
         raise ValueError("invalid artifact directory")
     output = output_dir / filenames[task_id]
     if output.exists() or output.is_symlink():
