@@ -85,7 +85,10 @@ test("moderation surface is admin-gated and wired to actor-bound services", () =
   const screen = readFileSync("app/moderation.tsx", "utf8");
   const settings = readFileSync("app/settings.tsx", "utf8");
   const service = readFileSync("src/lib/moderation.ts", "utf8");
-  assert.match(settings, /profile\?\.is_admin/);
+  // Render permission belongs to the matching authenticated profile, never stale identity metadata.
+  assert.match(settings, /const actorProfile = actorId && profile\?\.id === actorId \? profile : null/);
+  assert.match(settings, /actorProfile\?\.is_admin \? \(/);
+  assert.doesNotMatch(settings, /\{profile\?\.is_admin \? \(/);
   assert.match(screen, /!isAdmin/);
   assert.match(screen, /runModerationActionFlow/);
   assert.match(screen, /listModerationActions\(token\.userId\)/);
