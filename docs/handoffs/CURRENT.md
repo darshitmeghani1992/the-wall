@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-34 · Personal Wall settings account-render guard — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #117 `6be90c1de356ba4b128d3faa735245fc5900ef0e`. Prior-account visibility/contribution/Anonymous settings and errors could flash before focus reset; current actor now gates rendered draft and save/dirty, marks a failed actor load settled so retry works, and hides retry while signed out. New source/state regression; exact SHA CI and separate Reviewer/native QA pending. No hosted/production writes, schema/API/flags, merge or launch. STAGING `ewintxgdxdvschiqodkq` only; original production protected; Enhanced Beta remains NO-GO with media/Secret/analytics OFF.
+
+**Next:** New CI and independent Reviewer/QA; genuine OTP, three hosted actors, media, Secret, deletion, device and Founder release gates still open.
+
+
 ## BETA-P0-33 · Status editor guard / async lease separation — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #116 `d6c60a9796fbfe734a630ffed2fabfefb0ca0f8f`. A stale account's save/remove `finally` could release a new account's Status navigation guard; read refresh shared the operation fence. Separate action/read generation, current-subject protection of stale modal callbacks, reset per-focus approved/busy/dirty guard state, conditional final release. Adds `StatusRemovalGuard.resetSession` and unit/source race tests. Exact new-head CI, independent Reviewer and behavioral QA required; not an installed-device validation, do not merge/deploy. Staging-only `ewintxgdxdvschiqodkq`; original production protected. Media/Secret/analytics remain OFF.

@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-34 · Personal Wall settings actor-bound render and retry — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #117 exact `6be90c1de356ba4b128d3faa735245fc5900ef0e`. Personal Wall visibility, writing and Anonymous configuration could remain rendered from account A after a new account B session/route render but before focus-effect cleanup. Bind settings, error/dirty and save eligibility to the actor whose read settled; show the existing spinner while B loads, and settle errors under B to preserve retry. Sign-out fails closed without an unusable retry action. All three server-saved settings remain atomic and backend owner validation is unchanged. New `tests/frontend-personal-settings-actor-display.test.mjs` source/state checks; no UI redesign, schema, API, security policy or flags changed.
+
+**Gates:** new exact SHA CI, independent Reviewer approval and separate simulator/device behavioral QA must verify account A→B before focus, failed B load and retry, sign-out, pending save and no stale options. Not release certification; previous #117 CI/evidence do not cover this child. No hosted writes, production access, irreversible migration, main merge, signing, deployments or tester invitations. Enhanced Beta **NO-GO**: real SMTP 6-digit OTP, 3 authenticated JWT actors, C2/C3 photo/voice/video, Secret one-hour cron, 0031 deletion/purge and installed-device/rollback + independent QA/Founder GO outstanding. Domain/DNS and Apple held; media/Secret/analytics OFF.
+
+**Next:** Verify exact-head CI and lease/QA independence, then continue unblocked tests/implementation from this canonical queue.
+
+
 ## BETA-P0-33 · Status removal guard account-switch lease isolation — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #116 immutable `d6c60a9796fbfe734a630ffed2fabfefb0ca0f8f`, retaining #30–#116 drafts. Status save/remove shared the read-generation fence and unconditionally finished the reusable navigation removal guard in late `finally`; an A-account request could clear B's exclusive operation or old `approved`/dirty navigation state could carry into B. Separate action/read fences, reset session-scoped guard/confirmation state on focus/blur, release guard **only** under the current action lease, and reject stale modal callbacks/old route subjects. Keep server-authoritative save/remove, existing prompts, denial/dirty behavior and UI intact. Add `StatusRemovalGuard.resetSession()`, a unit regression and `tests/frontend-status-action-actor-lease.test.mjs`.
