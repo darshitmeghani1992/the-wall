@@ -24,9 +24,9 @@ test("authorized empty, denied and failed loads settle to current subject for re
 });
 
 test("stale-account save and removal actions fail closed", () => {
-  assert.match(screen, /if \(!userId \|\| !currentSubjectLoaded \|\| !canSave\) return/);
-  assert.match(screen, /if \(!userId \|\| !currentSubjectLoaded \|\| !visibleStatus \|\| busy\) return/);
-  assert.match(screen, /if \(busy \|\| !currentSubjectLoaded \|\| !visibleStatus\) return/);
+  assert.match(screen, /if \(!userId \|\| !currentSubjectLoaded \|\| subject !== currentSubjectRef\.current \|\| !canSave\) return/);
+  assert.match(screen, /if \(!userId \|\| !currentSubjectLoaded \|\| subject !== currentSubjectRef\.current \|\| !visibleStatus \|\| busy\) return/);
+  assert.match(screen, /if \(busy \|\| !currentSubjectLoaded \|\| subject !== currentSubjectRef\.current \|\| !visibleStatus\) return/);
   const visible = (actor, wall, loaded) => actor !== null && wall !== "" && loaded === `${actor}:${wall}`;
   assert.equal(visible("A", "wall-A", "A:wall-A"), true);
   assert.equal(visible("B", "wall-A", "A:wall-A"), false);
