@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-36 · Fail-closed Alerts across account changes — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #119 immutable `07f191bdc3cf9285111935573be4c1e50e4c9dbe`, original tree `810de7276b69ce236c74b9ad9451994c350d2cc9`. The Alerts tab already checks asynchronous responses against the authenticated user, but previously cached sensitive Alerts (actor name, recipient notifications, unread state, pages and errors) could render for account B before `useFocusEffect` cleared account A. Gate every rendered Alert, error and history cursor by its settled authenticated actor; clear items and cursor at the start of a new load, settle failed loads for a current-actor retry, and reject old-actor open/page actions before navigation or writes. Retain owner-scoped receipt behavior, pagination and current empty/retry UX. New `tests/frontend-alerts-actor-display.test.mjs` checks the source wiring and A→B data selection.
+
+**Evidence/Gates:** Requires exact new SHA GitHub CI, independent Reviewer approval and separate native behavioral QA for A→B before focus, delayed initial/error/older-page load, Alert open, receipt, retry and sign-out. CI/source tests are NOT device E2E proof. Staging `ewintxgdxdvschiqodkq` only; protected production `wfsfafmgvxevpzrurofz` untouched. No hosted write, schema/auth/API/flag change, paid service, merge, deployment or invitation. Enhanced Beta **NO-GO** pending verified 6-digit SMTP OTP, 3 real hosted JWT actors, private media C2/C3, Secret cron, migration 0031/purge, independent QA, installed devices/rollback and Founder GO. Media/Secret/analytics OFF; domain/DNS/Apple held.
+
+**Next:** Check new branch/head CI; obtain independent Reviewer and simulator/device QA; continue next unblocked scoped task without editing another worker's branch.
+
+
 ## BETA-P0-35 · Lease unsaved settings discard to authenticated actor — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #118 exact `074824a77d2ae1c771a3c6fe758cd4b886fd441b`. The Personal Wall settings `beforeRemove` confirmation captured a navigation action, but its delayed Discard callback could still dispatch after account A→B or sign-out; duplicate modal prompts were also possible, and a back gesture during an in-flight save could navigate incorrectly. Use the existing account action `SessionFocusFence` as a lease for the captured confirmation, discard old callbacks when the actor/focus generation changes, prevent multiple prompts and navigation during an in-flight mutation, reset prompt state on focus/blur. No server/schema/API/product/visual change; preserve current unsaved change and Save settings journeys. Regression `tests/frontend-personal-settings-discard-lease.test.mjs` includes actual `SessionFocusFence` race checks.
