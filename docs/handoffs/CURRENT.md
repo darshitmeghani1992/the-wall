@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-26 · Profile counter render actor fencing — 21 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated descendant of [#109](https://github.com/darshitmeghani1992/the-wall/pull/109) at `ac43236da37bf5a2736cfbed6a5b4265e8801333`. Profile read resets on focus already, but before that effect commits a new actor can still see old account's follower/following/friend numbers or stale error. New request-actor identities gate each counter's visible value/error synchronously at render, showing existing loading indicator until current actor's authorized request resolves. Source change and Node test only; require own exact-head GitHub CI, independent Reviewer and behavioral QA on A→B switching and slow/failing requests. #109 CI 4/4 passed on its old commit, no implicit certification of this child. Enhanced Beta NO-GO; no production access, hosted writes, deployments, merges or invitations.
+
+**Next:** Verify exact SHA CI, record independent Reviewer/QA status in #57, then continue unblocked work. True six-digit OTP, hosted three-JWT actor validation, media, Secret, deletion 0031, device/rollback and Founder gates stay open.
+
+
 ## BETA-P0-25 · Home friend count actor reset — 21 Nov 2026
 
 **ARCHITECT → FRONTEND:** New isolated child of #108 at `677db50ab226ce47259cf3605f5d118d1b429544`. On every main My Wall load `friendCount` now becomes unavailable before the new actor/Wall data arrives, rather than displaying the previous session's stale total. Current-user server result still overwrites when available; failure stays unavailable. Added source/regression test `tests/frontend-home-friend-count-session-reset.test.mjs`. CI/Reviewer/QA exact-SHA gates and device slow-counter testing remain open, no backend or hosted changes, Enhanced Beta NO-GO.

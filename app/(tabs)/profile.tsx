@@ -23,15 +23,23 @@ export default function ProfileScreen() {
   const [friendCountLoading, setFriendCountLoading] = useState(false);
   const [friendCountError, setFriendCountError] = useState(false);
   const [countsError, setCountsError] = useState(false);
+  // Tie visible counters and their errors to the actor that initiated the request.
+  // The focus effect runs after render; it alone cannot fence a session-switch frame.
+  const [countsActorId, setCountsActorId] = useState<string | null>(null);
+  const [friendsActorId, setFriendsActorId] = useState<string | null>(null);
   const countsFence = useRef(new SessionFocusFence());
   const friendFence = useRef(new SessionFocusFence());
   const currentUserId = useRef<string | null>(session?.user.id ?? null);
   currentUserId.current = session?.user.id ?? null;
   const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
+  const actorId = session?.user.id ?? null;
+  const countsAreForActor = Boolean(actorId && countsActorId === actorId);
+  const friendsAreForActor = Boolean(actorId && friendsActorId === actorId);
 
   const refreshCounts = useCallback(async () => {
     const token = countsFence.current.begin(session?.user.id ?? null);
     if (!token) return;
+    setCountsActorId(token.userId);
     setCountsLoading(true);
     setCountsError(false);
     try {
@@ -49,6 +57,7 @@ export default function ProfileScreen() {
   const refreshFriends = useCallback(async () => {
     const token = friendFence.current.begin(session?.user.id ?? null);
     if (!token) return;
+    setFriendsActorId(token.userId);
     setFriendCountLoading(true);
     setFriendCountError(false);
     try {
@@ -70,6 +79,8 @@ export default function ProfileScreen() {
     setFollowers(0);
     setFollowing(0);
     setFriendCount(null);
+    setCountsActorId(null);
+    setFriendsActorId(null);
     setCountsError(false);
     setFriendCountError(false);
     if (userId) {
@@ -102,7 +113,7 @@ export default function ProfileScreen() {
         {profile?.handle ? <Text variant="label" color={colors.outline}>@{profile.handle}</Text> : null}
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 26, marginTop: 4 }}>
-          {countsLoading ? <ActivityIndicator color={markColors.brandYellow} /> : countsError ? (
+          {!actorId ? null : !countsAreForActor || countsLoading ? <ActivityIndicator color={markColors.brandYellow} /> : countsError ? (
             <Pressable accessibilityRole="button" onPress={() => void refreshCounts()} style={{ minHeight: 44, justifyContent: "center" }}>
               <Text accessibilityRole="alert" variant="label" color={colors.error}>COUNTS UNAVAILABLE · RETRY</Text>
             </Pressable>
@@ -121,7 +132,7 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {friendCountLoading ? <ActivityIndicator color={markColors.brandYellow} /> : friendCountError ? (
+        {!actorId ? null : !friendsAreForActor || friendCountLoading ? <ActivityIndicator color={markColors.brandYellow} /> : friendCountError ? (
           <Pressable accessibilityRole="button" onPress={() => void refreshFriends()} style={{ minHeight: 44, justifyContent: "center" }}>
             <Text accessibilityRole="alert" variant="label" color={colors.error}>FRIENDS UNAVAILABLE · RETRY</Text>
           </Pressable>
