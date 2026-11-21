@@ -38,6 +38,8 @@ export default function ApprovedWritersScreen() {
   const [results, setResults] = useState<PersonRelationship[]>([]);
   const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Cache only belongs to the actor that completed the initial settings/roster load.
+  const [loadedActorId, setLoadedActorId] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export default function ApprovedWritersScreen() {
     const token = loadFence.current.begin(actorId);
     if (!token) return;
     setLoading(true);
+    setLoadedActorId(null);
     setLoadError(null);
     try {
       const nextSettings = await getPersonalWallSettings(token.userId);
@@ -60,13 +63,16 @@ export default function ApprovedWritersScreen() {
       setSettings(nextSettings);
       if (nextSettings.contributionPolicy !== "selected") {
         setWriters([]);
+        setLoadedActorId(token.userId);
         return;
       }
       const nextWriters = await listApprovedWriters(token.userId, nextSettings.wallId);
       if (!loadFence.current.isCurrent(token, currentActorId.current)) return;
       setWriters(nextWriters);
+      setLoadedActorId(token.userId);
     } catch (cause: any) {
       if (loadFence.current.isCurrent(token, currentActorId.current)) {
+        setLoadedActorId(token.userId);
         setLoadError(cause?.message ?? "Couldn't load approved writers.");
       }
     } finally {
@@ -81,6 +87,7 @@ export default function ApprovedWritersScreen() {
     mutationInFlight.current = false;
     setSettings(null);
     setWriters([]);
+    setLoadedActorId(null);
     setQuery("");
     setResults([]);
     setSearchedQuery(null);
@@ -104,7 +111,7 @@ export default function ApprovedWritersScreen() {
   async function search() {
     const normalized = normalizePeopleSearchQuery(query);
     const token = searchFence.current.begin(actorId);
-    if (!token || settings?.contributionPolicy !== "selected" || !normalized) {
+    if (!token || loadedActorId !== actorId || settings?.contributionPolicy !== "selected" || !normalized) {
       setResults([]);
       setSearchedQuery(null);
       return;
@@ -136,7 +143,7 @@ export default function ApprovedWritersScreen() {
   }
 
   async function add(personId: string) {
-    if (!settings || busyId || !beginExclusiveMutation(mutationInFlight)) return;
+    if (!actorId || loadedActorId !== actorId || !settings || busyId || !beginExclusiveMutation(mutationInFlight)) return;
     const token = actionFence.current.begin(actorId);
     if (!token) {
       endExclusiveMutation(mutationInFlight);
@@ -161,6 +168,7 @@ export default function ApprovedWritersScreen() {
   }
 
   function confirmRemove(writer: ApprovedWriterRow) {
+    if (!actorId || loadedActorId !== actorId) return;
     const name = writer.profile?.display_name ?? "this person";
     openCapturedTargetConfirmation({
       capture: () => actionFence.current.begin(actorId),
@@ -180,7 +188,7 @@ export default function ApprovedWritersScreen() {
 
   async function remove(personId: string, token: SessionGenerationToken) {
     if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
-    if (!settings || busyId || !beginExclusiveMutation(mutationInFlight)) return;
+    if (!actorId || loadedActorId !== actorId || !settings || busyId || !beginExclusiveMutation(mutationInFlight)) return;
     setBusyId(personId);
     setActionError(null);
     try {
@@ -199,6 +207,7 @@ export default function ApprovedWritersScreen() {
     }
   }
 
+  const currentActorLoaded = actorId !== null && loadedActorId === actorId;
   const approvedIds = new Set(writers.map((writer) => writer.userId));
 
   return (
@@ -218,7 +227,7 @@ export default function ApprovedWritersScreen() {
         Choose who may leave Marks when your Wall is set to Selected people.
       </Text>
 
-      {loading ? (
+      {loading || !currentActorLoaded ? (
         <ActivityIndicator accessibilityLabel="Loading approved writers" color={markColors.brandYellow} style={{ marginTop: spacing.unit * 9 }} />
       ) : loadError || !settings ? (
         <View style={{ marginTop: spacing.unit * 6, gap: spacing.unit * 3 }}>
