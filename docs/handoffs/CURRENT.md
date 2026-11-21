@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-24 · My Wall Shared Wall tab actor reset — 21 Nov 2026
+
+**ARCHITECT → FRONTEND:** Stacked on #107 immutable source `99d8d7612d5a4cbcc616743940f1523bc3872329`, isolated new branch. The home tab's async Shared Wall response was actor-fenced, but already-loaded tab names remained visible until the new account's fetch completed. `app/(tabs)/home.tsx` now clears the prior list and error synchronously on focus/session/route changes before refreshing authorized current-actor Walls. `tests/frontend-home-shared-wall-session-reset.test.mjs` adds source-order and actor-fence unit coverage. CI and real native behavior are distinct; exact SHA needs independent Reviewer and QA before any release. No backend/hosted/production/flag change.
+
+**Next:** verify exact-head CI, hand off unchanged tree for separate Reviewer and QA, then pick another unblocked task. Enhanced Beta remains NO-GO; held SMTP, genuine 3-JWT actors, private media/Secret/deletion/device gates and Founder review unchanged.
+
 ## BETA-P0-23 · Mark recipient people-picker session/search correction (21 Nov 2026)
 
 **ROLE: ARCHITECT → FRONTEND.** New isolated descendant of #106 at `36623f29d02f2c7c0a18445f5e3d08ce6ecd5d35`. The people picker now empties prior actor/query results on focus changes and invalidates pending friend/search queries whenever input changes, without modifying friend APIs or permission gates. Clearing search restores the active actor's friend list. Test `tests/frontend-people-picker-stale-search.test.mjs` checks source bindings and actual fence invalidation. Exact-head GitHub CI required, then independent Reviewer and QA on changed-account/slow-network/native behavior; not certified by source-only tests.

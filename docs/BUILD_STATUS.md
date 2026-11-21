@@ -1,5 +1,13 @@
 # The-Wall Build Status
 
+## BETA-P0-24 · My Wall removes prior actor Shared Wall tabs on session/focus changes — 21 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** This isolated stacked draft descends from [#107](https://github.com/darshitmeghani1992/the-wall/pull/107) source `99d8d7612d5a4cbcc616743940f1523bc3872329`. My Wall previously fenced async Shared Wall response writes by actor, but it kept already-rendered Shared Wall tabs while a different account's replacement list was loading; a quick sign-out/account switch could transiently display previous-account private Shared Wall names. On every focused actor/route transition, reset tab data and its prior error before issuing the new actor's `getAccessibleSharedWalls` request. Keep existing read fence, backend RLS/permissions and retry behavior unchanged. No visual design, navigation, schema, API, migration, flags or hosted operations changed.
+
+**Verification:** `tests/frontend-home-shared-wall-session-reset.test.mjs` checks source order and simulates old/new actor fence state. Contract tests and CI are implementation-level only; independent Reviewer and separate QA must verify actual UI on simulator/device (slow A list → switch to B, B empty/authorized, stale A success/failure, navigating away/back) with exact unchanged SHA. New PR needs its own full 4-job CI; ancestor CI alone is not enough. Enhanced Beta **NO-GO**, blocked by genuine six-digit SMTP OTP, 3 staging JWT actor suite, secure media C2/C3, Secret cleanup scheduler, deletion 0031/worker, installed-device/rollback and Founder release gates. Staging only, protect original production, media/Secret/analytics OFF, no hosted writes, merges, deployment or invitations.
+
+**Next:** verify immutable PR head and CI, independent Reviewer and QA, then continue queue on a separately leased branch. Domain/DNS and Apple enrollment/signing remain held.
+
 ## BETA-P0-23 · People picker account/query fetch-fencing — 21 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated draft based on [#106](https://github.com/darshitmeghani1992/the-wall/pull/106) immutable source `36623f29d02f2c7c0a18445f5e3d08ce6ecd5d35`; prior stacked PRs remain untouched. The Mark recipient people picker previously retained the prior actor's friend results on focus/account switch and let a search requested for an earlier query repaint results or errors after input edits. This slice resets account-scoped picker data when focus/session changes; editing invalidates pending friends/search requests, clears stale results and error/loading state, and clearing a query reloads current-account friends. The backend friendship and Wall permissions, route, feature flags, and UX contract are unchanged.
