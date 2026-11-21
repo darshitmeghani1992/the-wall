@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Application release lineage audit — 21 Nov 2026 (ARCHITECT, branch separate from cloud-tooling drafts)
+
+On `codex/beta-pr-lineage-evidence-20261121` (based on integrated application PR #67 SHA `ebdf28c196a3f50e4b5218dd6038d12277d12953`), created `docs/handoffs/PR_LINEAGE_AUDIT_2026-11-21.md` with the base/head chain #30–#73, sibling reconciliations #59/#60→#61 and #64/#65→#67, changed-file collision watchlist and blob-equivalence proof. This is *docs only*, not a release tree or a replacement for other draft branches. #73 exact SHA `4f3ef5f15f20d0b4c79254ac967afe109ebc4272` full CI 44885692102 and contracts 44885692058 green, still no independent Reviewer/QA, no actual agent, no hosted writes. **Next:** independently review this docs branch exact SHA CI; use completed full tree inventory (351 main→#30 blob paths; compare API capped at 300) for *semantic* security/release review before integration/merge; continue separate BACKEND P0-04 caller-triage/JWT preparations. Founder domain/Apple holds, staging-only safety and Enhanced Beta NO-GO unchanged.
+
+
 ## Integrated internal source — 21 Nov (PR #67)
 
 **Current draft-only internal candidate:** [PR #67](https://github.com/darshitmeghani1992/the-wall/pull/67) combines [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64) staging audit/queue/handoff documentation (ancestor head `2c919ee1728fe48a157ab282eb8bcb7ce73a0cf7`) and source/test blobs from sibling BACKEND [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65) at head `d3396bfd72ac58c926245ed9b5905d7c67673e48`. Confirmed integrated worker blobs **exactly equal** #65's: source `88b235eb5c818b110abcd798ec63af766c1414aa`, tests `8473f47ca63d9096ad245ec7ec7512246df9f4b5`. Branch `codex/internal-beta-verified-security-candidate-20261121`; **live GitHub PR head/CI must be resolved fresh** because this handoff changes the SHA. This does not supersede #30's historical lineage or waive verification of older draft security diffs.
