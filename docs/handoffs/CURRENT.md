@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## Independent release-evidence audit — 21 Nov 2026 (ARCHITECT → BACKEND)
+
+**Founder priority:** automate the next engineering tasks and deliver a deployable Enhanced Beta without skipping safety gates. The existing hourly engineering automation was checked: enabled and **in progress** during this independent slice. Do not launch duplicate overlapping work or claim a perpetual Codex task trigger; cloud Codex handoff remains unverified.
+
+**New isolated release-tooling branch:** `codex/beta-release-gate-audit-20261121` based on reviewed-lineage application candidate PR #85 exact SHA `3e13b30cde449ac8023edaf01df6b1b35a8a734a` (PR #85 full CI success; independent review absent). Adds `scripts/beta_release_evidence.py` and negative unit tests, wired to GitHub CI. The tool requires an immutable candidate SHA and individually verified linked evidence for fourteen explicit gates: CI, independent Reviewer, independent QA, staging binding, OTP, real three-JWT HTTP, Shared Wall RETURNING, RLS/definers, media, Secret, deletion, device, rollback and Founder release approval. Fail closed on missing, stale, self-certified or production evidence. **This is an audit checker, not a deployment or authentication flow.** No staging hosted changes, main merge, release invitation, production access or feature activation.
+
+**Next:** verify this draft PR's exact CI, independent Reviewer/QA of audit assumptions; resolve P0 SMTP authorized testers + authenticated actor QA and immutable candidate from PR #85/#86/#87. Existing hourly automation remains the only verified unattended schedule. New event-driven Codex cloud chaining is *not* activated; don't duplicate a running worker. **Enhanced Beta NO-GO.**
+
+
 ## 21 Nov 2026 · BETA-P0-01 application lineage integrated (ROLE: ARCHITECT)
 
 This new isolated draft follows #84 source head `f583ca520ad0dfa3b452dfc7ae85ece016597498` and incorporates the **byte-identical** #74 artifact `docs/handoffs/PR_LINEAGE_AUDIT_2026-11-21.md`. Fresh compare from #67 confirms #74's docs-only lineage and #84's test/harness lineage; #81 tooling remains a parallel, **excluded** draft (shared continuity docs reconciled here, not silently cherry-picked). Exact source equivalence rechecked for MarkDetailModal blob `23a4e1159e258ae19a8636c2927961f75b0fab84` and media URL policy blob `88b235eb5c818b110abcd798ec63af766c1414aa`. Audit confirms 351 main→#30 changed blob paths; **semantic** audit still OPEN. #84 prior CI 44892196400 green, but new head requires its own CI; no independent Reviewer or QA observed. No staging actors; pg_cron absent. NEVER call this beta GO or merge/deploy on this evidence.
