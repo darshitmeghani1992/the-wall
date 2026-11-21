@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Loop v2.0 durable lease + simulated immediate handoff — 21 Nov 2026
+
+Last verified ancestor PR #71 head `99f75722dddb51f3dbeb13340b70e82434e27e61`, full CI 44885048259 SUCCESS and engineering contracts 44885048285 SUCCESS. New isolated branch `codex/loop-v2-durable-leases-20261121` implements **prototype** SQLite transactional lease caps, token fencing, branch isolation, duplicate-event detection and no-network simulated completion→next-task dispatch with tests. A SQLite file does not persist across cloud runners: no claimed continuous operation. **Next:** check this branch's exact CI, independent review and QA; implement shared durable coordinator and authenticated free-tier sandbox worker with no exposed credentials or paid fallback. Gemini manual real API test still awaits reviewed workflow integration, not yet run. Hourly fallback unchanged, Enhanced Beta NO-GO.
+
+
 ## Gemini key saved by Founder; one-request smoke PREPARED, NOT EXECUTED (21 Nov 2026)
 
 New isolated branch `codex/gemini-free-auth-smoke-20261121` based on PR #70 exact head `669f0f1a3b35b35013dba21a87ea3b2faad3935f`. Adds manual-only, read-only `gemini-free-auth-smoke.yml`, safe fixed-prompt Python REST probe and fully mocked regression tests, with CI contracts running without secret. Founder reports GitHub Actions `GEMINI_API_KEY` and Google AI Studio Free tier; actual key and billing status are intentionally unreadable here. Manual workflow cannot be invoked until safely integrated to default branch with independent review. **Next exact check:** review new draft PR immutable SHA and 4/4 CI plus contract workflow. Then controlled manual authentication request (no code sent) after approval; separate coordinator/leases and sandbox coding agent still required. Existing hourly execution stays fallback; production unchanged, no paid service or release action.
