@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Free-first cloud-loop checkpoint — 21 Nov 2026 (NOT CONTINUOUS)
+
+Latest isolated draft branch `codex/free-first-cloud-loop-20261121` descends from PR #69; manual read-only public-runner `.github/workflows/free-worker-smoke.yml`, `scripts/free_worker_preflight.py`, negative tests and `docs/architecture/FREE_FIRST_WORKER_V2.md`. Cloud policy remains disabled, agent unconfigured, $0 budget, maximum 3, staging-only. **No Gemini key, no authenticated model invocation or event-driven continuous loop.** Exact next check: run preflight + Python unittest and verify current PR CI. Next engineering task: durable lease/event dispatcher, then a guarded free-tier coding adapter and simulated auto-handoff, independent Reviewer/QA separately. Account-owned Gemini free-tier secret later required; never ask for key in chat. Hourly fallback unchanged; Enhanced Beta NO-GO.
+
+
 ## Cloud-based coding loop preparation — 21 Nov 2026 (NOT ACTIVATED)
 
 Draft-only `codex/cloud-loop-v2-preparation-20261121` extends PR #68 `d170654cfbff08a012b63fd99d238494f941abd7`. Proposed computers: ephemeral GitHub-hosted Ubuntu runners; coding-agent provider still unconfigured. `config/engineering-cloud-v2.json` fail-closed: enabled false, budget USD 0, maximum three, no release/hosted writes, staging only. Added cloud policy contract tests and setup/cost document `docs/architecture/CLOUD_LOOP_V2_SETUP.md`. **Next:** exact-commit CI then independent DEVOPS/security review; compare billable coding-provider options and get Founder billing cap/account action approval before any activation; implement durable leases/webhook wakeups and verify two sequential actual tasks. Hourly fallback unchanged. Enhanced Beta remains NO-GO.
