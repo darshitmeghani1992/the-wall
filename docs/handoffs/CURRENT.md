@@ -1,5 +1,16 @@
 # CURRENT — Operational Handoff
 
+## Active continuation — 21 Nov 2026 13:08 IST (ARCHITECT/BACKEND, source-only)
+
+**Latest unmerged source head:** draft [PR #63](https://github.com/darshitmeghani1992/the-wall/pull/63), `codex/media-signed-token-shape-20261121` at `fdf1fbbcd342100b5a958eb7af95281650b973a2` (base PR #62 at `340b55431ca09d504351a52db4ef33c88904648b`; source diff only worker URL policy and regression tests). PR #63 [CI #229](https://github.com/darshitmeghani1992/the-wall/actions/runs/44881091871) **SUCCESS 4/4** on this exact SHA; previous [CI #228](https://github.com/darshitmeghani1992/the-wall/actions/runs/44881008244) failed and is superseded **for CI evidence only**, not as an independently reviewed source. PR #62 [CI #227](https://github.com/darshitmeghani1992/the-wall/actions/runs/44877580399) 4/4 green. Both PRs still draft and unmerged; PR #63 Reviewer and QA not submitted at inspection. **Do not self-certify**.
+
+**This handoff/documentation-only branch:** `codex/architect-staging-security-triage-20261121` began at PR #63 exact head. Its docs changes require their own published SHA and fresh CI; no code/runtime/SDK/flags/infra modified by the docs branch. Ancestry check: PR #63 three commits ahead of PR #62, and 223 ahead of `main` at `5f1f7ff4c8b8afa8c8e606f41c768c7c7721b613`, zero behind. Retain #30 and #34–#61 as review lineage, not merged history.
+
+**Verified staging read-only SQL and migration inventory:** `ewintxgdxdvschiqodkq` ACTIVE_HEALTHY. Migrations `0001`–`0030`, `0032`–`0034` applied; `0031` not applied. Catalog: 113 public SECURITY DEFINER routines, 59 executable by authenticated (33 direct + 26 trigger functions), zero by anon, 54 not executable by either, 0 without explicit `search_path`. All 33 direct include `auth.uid()` reference; **no behavioral authorization proof**. No staging Auth users, Walls, Marks, private bucket objects; `mark-media` bucket private; `pg_cron` absent. See `docs/handoffs/STAGING_DEFINER_CALLER_TRIAGE_2026-11-21.md` for SQL, categories, and limits. **Original `wfsfafmgvxevpzrurofz` untouched**.
+
+**Exact next action:** independently trace and test high-risk exposed Admin RPCs and `reveal_secret` against migration contract and actor-specific permissions (ROLE: BACKEND) on a separate branch; do not modify this documentation branch with application code. Check documentation PR exact-head CI and request genuine Reviewer/QA. Continue file-level reconciliation for older PRs; don't merge or deploy before all gates. SMTP/six-digit OTP and three actual authorized JWT actors, worker runtime, Secret expiry scheduling, deletion 0031, and physical-device validation remain blockers. Media/Secret/analytics OFF, 0031 withheld, Apple/domain held. First beta including Enhanced Beta remains **NO-GO**.
+
+
 ## Active handoff — 21 November 2026 (ARCHITECT, first-beta execution)
 
 - **Resume source:** PR #58 `codex/mark-pin-write-confirmation-2026-11` head `4cfd9f9d2a782fc1cd956d282953e227505773d3`; CI run #221 passed 4/4, independent review/behavioral QA not submitted. PR #30 is an ancestor, not a separate competing candidate: 26 commits from #30 to #58, 210 from `main` to #58. Do not merge or deploy based only on CI.
