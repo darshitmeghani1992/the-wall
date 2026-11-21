@@ -27,6 +27,8 @@ export default function BlockedUsersScreen() {
   const [people, setPeople] = useState<readonly BlockedUser[]>([]);
   const [nextCursor, setNextCursor] = useState<BlockedUsersCursor | null>(null);
   const [loading, setLoading] = useState(true);
+  // The focus effect can run after an account-switch render.
+  const [loadedActorId, setLoadedActorId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -42,12 +44,16 @@ export default function BlockedUsersScreen() {
     if (!token) return;
     loadInFlight.current = true;
     if (append) setLoadingMore(true);
-    else setLoading(true);
+    else {
+      setLoading(true);
+      setLoadedActorId(null);
+    }
     setLoadError(null);
     try {
       const result = await listBlockedUsers(token.userId, cursor);
       if (!loadFence.current.isCurrent(token, currentActorId.current)) return;
       if (result.status !== "available") {
+        setLoadedActorId(token.userId);
         setLoadError(result.status === "unavailable"
           ? "Blocked users aren't available for this account."
           : "That page is no longer available. Please reload the list.");
@@ -59,8 +65,10 @@ export default function BlockedUsersScreen() {
         return [...current, ...result.items.filter((person) => !seen.has(person.userId))];
       });
       setNextCursor(result.nextCursor);
+      setLoadedActorId(token.userId);
     } catch (cause: any) {
       if (loadFence.current.isCurrent(token, currentActorId.current)) {
+        setLoadedActorId(token.userId);
         setLoadError(cause?.message ?? "Couldn't load blocked users. Please try again.");
       }
     } finally {
@@ -78,6 +86,7 @@ export default function BlockedUsersScreen() {
     loadInFlight.current = false;
     mutationInFlight.current = false;
     setPeople([]);
+    setLoadedActorId(null);
     setNextCursor(null);
     setLoadError(null);
     setActionError(null);
@@ -133,6 +142,9 @@ export default function BlockedUsersScreen() {
     }
   }
 
+  // Never render the previous account's blocked identities before focus cleanup.
+  const currentActorLoaded = actorId !== null && loadedActorId === actorId;
+
   return (
     <Screen dockInset={false}>
       <Pressable
@@ -150,7 +162,7 @@ export default function BlockedUsersScreen() {
         People you block cannot view, contribute to, or notify you through The-Wall.
       </Text>
 
-      {loading ? (
+      {loading || !currentActorLoaded ? (
         <ActivityIndicator accessibilityLabel="Loading blocked users" color={markColors.brandYellow} style={{ marginTop: spacing.unit * 9 }} />
       ) : loadError && people.length === 0 ? (
         <View style={{ marginTop: spacing.unit * 6, gap: spacing.unit * 3 }}>
