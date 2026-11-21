@@ -7,6 +7,7 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { SessionFocusFence } from "@/lib/session-generation";
+import { openNotificationWithoutWaitingForReceipt } from "@/lib/notification-open";
 import { appendUniqueNotifications, applyNotificationReadReceipts, relativeNotificationTime } from "@/lib/notification-ui";
 import {
   listNotifications,
@@ -132,21 +133,22 @@ export default function AlertsScreen() {
     }, [fence, load, receiptFence, userId]),
   );
 
-  async function open(notification: NotificationWithActor) {
+  function open(notification: NotificationWithActor) {
     if (!userId || notification.user_id !== userId) return;
     const token = fence.begin(userId);
     if (!token) return;
-    if (!notification.read) {
-      try {
+
+    // A slow or failed read receipt must never trap the user on Alerts.
+    // The server remains authoritative: only apply a returned receipt ID,
+    // and only if the account/screen fence still matches after navigation.
+    openNotificationWithoutWaitingForReceipt(
+      () => router.push(notificationRoute(notification)),
+      notification.read ? undefined : async () => {
         const readId = await markNotificationRead(token.userId, notification.id);
         if (!fence.isCurrent(token, currentUserId.current)) return;
         setItems((current) => applyNotificationReadReceipts(current, [readId]));
-      } catch {
-        // Navigation remains useful when the non-critical read receipt fails.
-      }
-    }
-    if (!fence.isCurrent(token, currentUserId.current)) return;
-    router.push(notificationRoute(notification));
+      },
+    );
   }
 
   return (
