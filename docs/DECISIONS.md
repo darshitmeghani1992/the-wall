@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-17 · 2026-11-21 · Choose GitHub-hosted ephemeral Linux as cloud worker computer, keep AI billing separate and disabled
+- **Decision:** Prefer existing GitHub-hosted Ubuntu runners instead of a dedicated paid VM for first external coding-agent loop; reserve model/provider decision for explicit account/cost approval. GitHub public standard runner compute may be included, but model inference and optional hosting remain separately billable.
+- **Security:** The configuration begins disabled and zero budget; no secrets in PR CI, no privileged service-role Supabase credentials, no auto-merge/deploy, staging only; three-worker ceiling, durable leases and independent Reviewer/QA required before activation.
+- **Tradeoff/reversibility:** Fast setup, ephemeral runtime, limited persistent state; durable coordination will require an independently reviewed control plane. Switching providers is possible without changing the canonical task queue. Source: `docs/architecture/CLOUD_LOOP_V2_SETUP.md`.
+- **Founder gate:** Paid provider, actual account spending cap, connection and activation withheld. **No authenticated agent yet.**
+
+
 ## D-16 · 2026-11-21 · Founder-approved event-driven engineering loop; activation withheld pending actual runtime
 - **Decision:** Build a maximum-three-worker external coding-agent loop; keep canonical `docs/BUILD_STATUS.md` task queue, isolate FRONTEND/BACKEND execution roles, enforce unique durable leases, retain independent Reviewer/QA and all Founder release/security gates. Preserve the existing hourly engineering automation as fallback.
 - **Authority:** Explicit Founder approval of Continuous Engineering Loop v2.0. Architecture planned under ARCHITECT; implementation must retain its distinct authorized implementation role.

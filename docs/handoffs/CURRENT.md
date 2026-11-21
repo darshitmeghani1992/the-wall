@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Cloud-based coding loop preparation — 21 Nov 2026 (NOT ACTIVATED)
+
+Draft-only `codex/cloud-loop-v2-preparation-20261121` extends PR #68 `d170654cfbff08a012b63fd99d238494f941abd7`. Proposed computers: ephemeral GitHub-hosted Ubuntu runners; coding-agent provider still unconfigured. `config/engineering-cloud-v2.json` fail-closed: enabled false, budget USD 0, maximum three, no release/hosted writes, staging only. Added cloud policy contract tests and setup/cost document `docs/architecture/CLOUD_LOOP_V2_SETUP.md`. **Next:** exact-commit CI then independent DEVOPS/security review; compare billable coding-provider options and get Founder billing cap/account action approval before any activation; implement durable leases/webhook wakeups and verify two sequential actual tasks. Hourly fallback unchanged. Enhanced Beta remains NO-GO.
+
+
 ## Approved engineering loop v2.0 — 21 Nov 2026, NOT RUNNING CONTINUOUSLY
 
 ARCHITECT foundation on isolated branch `codex/continuous-loop-v2-foundation-20261121` (ancestor PR #67 head `ebdf28c196a3f50e4b5218dd6038d12277d12953`), dry-run parser `scripts/engineering_loop_v2.py`, four unit cases and isolated PR contract workflow. Mac runtime probe: `claude --version` crashes due to macOS 11.7.11 vs binary built for macOS 13; no external coding-agent runtime verified. Existing hourly automation unchanged; **do not report event-driven continuous work as active**.

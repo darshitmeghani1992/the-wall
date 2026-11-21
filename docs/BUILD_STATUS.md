@@ -1,5 +1,10 @@
 # The-Wall Build Status
 
+## Cloud loop v2.0 prepared, default OFF — 21 Nov 2026
+
+**ROLE: ARCHITECT design / DEVOPS preparation.** Founder approved cloud-based execution environment preparation, **not paid activation**. Isolated branch `codex/cloud-loop-v2-preparation-20261121` extends draft #68, selects GitHub-hosted ephemeral Linux as candidate computer and documents AI coding-service options and prices in `docs/architecture/CLOUD_LOOP_V2_SETUP.md`. `config/engineering-cloud-v2.json` remains `enabled=false`, `coding_agent=unconfigured`, `financial_limit_usd=0` with three worker ceiling and staging-only gates; policy contract tests added. **No coding-agent runtime, paid service, webhook dispatch or durable lease executor is active.** Next: exact SHA contract CI and independent security review, billable provider/limit approval then implement secure event-driven coordinator and one real pilot. Existing hourly automation remains fallback. NO-GO.
+
+
 ## Continuous engineering loop v2.0 — Founder-approved foundation, NOT ACTIVATED (21 Nov 2026)
 
 **ROLE: ARCHITECT.** Founder approved three maximum simultaneous implementation workers for autonomous code/tests/draft PRs with existing Reviewer/QA/Founder and staging-only gates. Isolated implementation branch `codex/continuous-loop-v2-foundation-20261121` descends from PR #67 exact ancestor `ebdf28c196a3f50e4b5218dd6038d12277d12953`. New `scripts/engineering_loop_v2.py` is **dry-run only** queue selection, with tests and least-privilege contract workflow. **No continuous external worker is running.** Mac `claude --version` crashed (macOS 11.7.11, binary built for 13); agent runtime and durable leases/event dispatch not verified. Existing hourly task remains active. **Next:** DEVOPS separate authorized branch to provision supported coding agent, implement atomic leases/webhook wakeups and verify one whole real execution-to-next-task cycle. See `docs/architecture/CONTINUOUS_ENGINEERING_LOOP_V2.md`. No merges, production writes, device release, media/Secret enablement or independent-review waiver. **NO-GO**.
