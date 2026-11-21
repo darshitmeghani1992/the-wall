@@ -81,6 +81,8 @@ export default function PeopleScreen() {
     setSearching(false);
     setError(null);
     setResults([]);
+    // Public Wall searches belong to the previous viewer/session too.
+    setWallResults([]);
     setSearchedQuery(null);
     setFriends([]);
     setIncoming([]);
