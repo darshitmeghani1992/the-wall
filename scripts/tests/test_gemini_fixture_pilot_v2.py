@@ -44,6 +44,49 @@ class PilotTests(unittest.TestCase):
             prompt=payload["contents"][0]["parts"][0]["text"]
             self.assertNotIn("AGENTS.md",prompt)
             self.assertNotIn("SUPABASE",prompt)
+    def test_generated_artifacts_are_real_files_and_hashes(self):
+        import hashlib
+        calls=[]
+        def opener(req, timeout):
+            calls.append(req)
+            return FakeResponse("def add(a,b): return a+b" if len(calls)==1
+                                else "def subtract(a,b): return a-b")
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)/"artifacts"
+            folder.mkdir()
+            result=m.run(ENV,opener,state_path=Path(d)/"state.sqlite",
+                         artifact_dir=folder)
+            self.assertEqual(len(calls),2)
+            self.assertEqual(set(p.name for p in folder.iterdir()),
+                             {"generated_add.py","generated_subtract.py"})
+            for task,name in [("FIXTURE-ONE","generated_add.py"),
+                              ("FIXTURE-TWO","generated_subtract.py")]:
+                content=(folder/name).read_bytes()
+                self.assertEqual(hashlib.sha256(content).hexdigest(),
+                                 result["source_sha256"][task])
+                self.assertTrue(content.endswith(b"\\n"))
+            self.assertNotIn("GEMINI_API_KEY", (folder/"generated_add.py").read_text())
+
+    def test_artifact_overwrite_and_symlink_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)/"artifacts"
+            folder.mkdir()
+            (folder/"generated_add.py").write_text("existing file")
+            with self.assertRaises(ValueError):
+                m.save_verified_artifact(folder,"FIXTURE-ONE","def add(a,b): return a+b")
+            self.assertEqual((folder/"generated_add.py").read_text(),"existing file")
+            link=Path(d)/"link"
+            link.symlink_to(folder,target_is_directory=True)
+            with self.assertRaises(ValueError):
+                m.save_verified_artifact(link,"FIXTURE-TWO","def subtract(a,b): return a-b")
+
+    def test_no_artifact_written_for_malicious_source(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError):
+                m.save_verified_artifact(d,"FIXTURE-ONE",
+                    "import os\\ndef add(a,b): return a+b")
+            self.assertEqual(list(Path(d).iterdir()),[])
+
     def test_reject_import_call_and_extra_statements(self):
         for source in ["import os\ndef add(a,b): return a+b",
                        "def add(a,b): return os.system('bad')",
