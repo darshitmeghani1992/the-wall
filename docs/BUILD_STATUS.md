@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-27 · Fence follower/following lists by viewer, destination and list kind before focus effects — 21 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated source child of [#110](https://github.com/darshitmeghani1992/the-wall/pull/110) immutable `f94eb8c5af1bf4f0c6eeb2c6236e3eae6b7eafce`. `app/social/[kind].tsx` fenced asynchronous responses by viewer and requested target, but retained already rendered follower/following data and old error until `useFocusEffect` cleanup. A route-param/actor change could briefly display the previous list or mismatch Followers vs Following. Bind list visibility to the exact `viewer:target:kind` subject, keep existing loading/empty/error/retry UX and server-side access unchanged, and clear subject on focus cleanup. Add `tests/frontend-social-list-subject-fence.test.mjs` contract/race checks.
+
+**Verification:** New immutable child requires its own GitHub CI, independent Reviewer approval, and distinct simulator/device QA for actor A→B, target X→Y, followers→following, error/retry and delayed old response. Static/Node tests alone do not establish runtime privacy. No hosted schema/auth/RLS/endpoint, flags, design, production, deployment, merges or tester invitations altered. Enhanced Beta **NO-GO** pending real six-digit SMTP OTP, 3 authenticated JWT actors, C2/C3 private media, Secret one-hour scheduler, deletion 0031/purge, device/rollback, independent Reviewer/QA and Founder GO. Domain/DNS and Apple enrollment/signing held.
+
+**Next:** Record exact PR CI/commit/tree in issue #57 and route to independent Reviewer/QA; continue unblocked work on separate isolated branch without touching earlier branches.
+
+
 ## BETA-P0-26 · Prevent previous-account Profile counters during pre-effect render — 21 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #109 exact `ac43236da37bf5a2736cfbed6a5b4265e8801333`; parent #101 only clears counters inside `useFocusEffect`. A user change may render before that effect runs, briefly exposing the prior account's follower/following/friend totals or fetch failure. Bind counter visibility to the actor that started each request, with an actor-mismatch showing the existing loading indicator; do not invent a zero before server counts load. Source-only change to `app/(tabs)/profile.tsx` plus `tests/frontend-profile-actor-render-fence.test.mjs`; no visual redesign, auth/permission changes, schema/API/feature flags or hosted changes.

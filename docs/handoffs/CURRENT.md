@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-27 · Social follower/following route-subject display guard — 21 Nov 2026
+
+**ARCHITECT → FRONTEND:** New isolated child of #110 exact `f94eb8c5af1bf4f0c6eeb2c6236e3eae6b7eafce`. In `app/social/[kind].tsx`, loaded follower/following names could persist between a viewer, target or list-kind change before focus cleanup runs. A current render-subject gate now hides previous lists/errors immediately, preserves the existing loading and retry contract, and is covered by a new Node source/logic contract test. Requires exact-head CI, independent Reviewer and real behavioral device/simulator QA. No hosted writes, protected production, merges, releases, credential requests, or feature activation. **Enhanced Beta NO-GO.**
+
+**Next:** Capture own immutable head/tree and CI; independently review and QA on multi-user/route-switching. Remaining gates are true OTP delivery, three JWT actors, private media, Secret scheduler, deletion migration/purge, device/rollback and Founder GO.
+
+
 ## BETA-P0-26 · Profile counter render actor fencing — 21 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated descendant of [#109](https://github.com/darshitmeghani1992/the-wall/pull/109) at `ac43236da37bf5a2736cfbed6a5b4265e8801333`. Profile read resets on focus already, but before that effect commits a new actor can still see old account's follower/following/friend numbers or stale error. New request-actor identities gate each counter's visible value/error synchronously at render, showing existing loading indicator until current actor's authorized request resolves. Source change and Node test only; require own exact-head GitHub CI, independent Reviewer and behavioral QA on A→B switching and slow/failing requests. #109 CI 4/4 passed on its old commit, no implicit certification of this child. Enhanced Beta NO-GO; no production access, hosted writes, deployments, merges or invitations.
