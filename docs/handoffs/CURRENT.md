@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Gemini key saved by Founder; one-request smoke PREPARED, NOT EXECUTED (21 Nov 2026)
+
+New isolated branch `codex/gemini-free-auth-smoke-20261121` based on PR #70 exact head `669f0f1a3b35b35013dba21a87ea3b2faad3935f`. Adds manual-only, read-only `gemini-free-auth-smoke.yml`, safe fixed-prompt Python REST probe and fully mocked regression tests, with CI contracts running without secret. Founder reports GitHub Actions `GEMINI_API_KEY` and Google AI Studio Free tier; actual key and billing status are intentionally unreadable here. Manual workflow cannot be invoked until safely integrated to default branch with independent review. **Next exact check:** review new draft PR immutable SHA and 4/4 CI plus contract workflow. Then controlled manual authentication request (no code sent) after approval; separate coordinator/leases and sandbox coding agent still required. Existing hourly execution stays fallback; production unchanged, no paid service or release action.
+
+
 ## Free-first cloud-loop checkpoint — 21 Nov 2026 (NOT CONTINUOUS)
 
 Latest isolated draft branch `codex/free-first-cloud-loop-20261121` descends from PR #69; manual read-only public-runner `.github/workflows/free-worker-smoke.yml`, `scripts/free_worker_preflight.py`, negative tests and `docs/architecture/FREE_FIRST_WORKER_V2.md`. Cloud policy remains disabled, agent unconfigured, $0 budget, maximum 3, staging-only. **No Gemini key, no authenticated model invocation or event-driven continuous loop.** Exact next check: run preflight + Python unittest and verify current PR CI. Next engineering task: durable lease/event dispatcher, then a guarded free-tier coding adapter and simulated auto-handoff, independent Reviewer/QA separately. Account-owned Gemini free-tier secret later required; never ask for key in chat. Hourly fallback unchanged; Enhanced Beta NO-GO.
