@@ -60,3 +60,18 @@ FROM s;
 4. **Reviewer independent:** inspect any security-critical changes on immutable candidate SHA before merge. Media, Secret and deletion remain disabled/withheld until their runtime-specific security/cleanup and legal gates.
 
 **Next unblocked engineering action:** source-level authorization trace for the three admin RPCs and `reveal_secret`, then add adversarial regression tests on an isolated BACKEND branch if a real weakness is demonstrated. No hosted write, setting change, secret material, migration, deployment or production access occurred.
+
+## First four routine traces (read-only catalog + migration source)
+
+Inspected current staging function signatures and token-level control-flow markers; cross-referenced `supabase/migrations/0030_actor_bound_admin_moderation.sql`, `0010_secret_reveal_lifecycle.sql`, `0012_mark_lifecycle.sql`, and actual `marks` trigger inventory:
+
+| Routine | Observed hosted properties | Status |
+|---|---|---|
+| `admin_remove_mark(p_expected_actor_id,...)` | `authenticated` EXECUTE; exact actor comparison to `auth.uid()`; `is_admin` branch; `FOR UPDATE` row lock; moderation audit insert | **Source/catalog guard present**; JWT negative cases still needed |
+| `admin_suspend_account(p_expected_actor_id,...)` | Same four checks and audit insertion | **Source/catalog guard present**; JWT negative cases still needed |
+| `admin_resolve_report(p_expected_actor_id,...)` | Same four checks and audit insertion | **Source/catalog guard present**; JWT negative cases still needed |
+| `reveal_secret(p_mark_id)` | Owner ID `auth.uid()` gate; `opened_at IS NULL` and expiry guard; **no Mark status check** in hosted routine | **Potential soft-removal disclosure** under review in [issue #66](https://github.com/darshitmeghani1992/the-wall/issues/66); no actual exploit executed |
+
+The three legacy admin overloads without `p_expected_actor_id` still exist but show `authenticated_exec=false` and `anon_exec=false` in live catalog. No permission changes requested as part of this audit. The source-level Secret risk concerns a Mark that is soft-removed (`marks.status='removed'`) while its payload remains in `mark_secrets`; the update trigger catalog did not show removal-time purging. The intended post-removal contract requires PRODUCT/ARCHITECT resolution before any reviewed migration, and no hosted actors exist for a safe live test today.
+
+**Separate C3 defensive implementation:** [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65) adds IPv4-compatible, NAT64, 6to4 and Teredo IPv6 destination blocking plus mocked-resolver tests. Exact source `d3396bfd72ac58c926245ed9b5905d7c67673e48`, [CI #231](https://github.com/darshitmeghani1992/the-wall/actions/runs/44881521179) **4/4 SUCCESS**. This is a sibling of documentation [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64), not a merged integration. Egress ACL, live redirect/DNS rebound behavior and independent Reviewer/QA still unmet.
