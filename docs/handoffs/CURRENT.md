@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Gemini coding-output artifact draft — 21 Nov 2026 (NOT LIVE)
+
+Latest isolated branch `codex/gemini-code-artifact-pilot-20261121` descendant of #79 `0b207a14fea260064588d2ef8f7f9f675d76d499`. The two-task manual Gemini pilot can now save two syntactically and semantically constrained generated Python functions in short-lived GitHub Actions artifacts, without execution or repository write. Hash validation and malicious-output rejection covered by mock tests. **No real Gemini API call or continuous worker launch**; manual workflow still needs independent Reviewer/QA and approved default-branch integration. Next exact task: verify new PR immutable SHA CI, review/approve secret-bearing workflow, run controlled pilot, examine code artifacts and completion callback, then implement cross-run shared event dispatch and restricted real app coding. Keep $0 paid fallback, staging-only and original production untouched; Enhanced Beta NO-GO.
+
+
 ## Gemini completion event observer draft — 21 Nov 2026
 
 Separate `codex/gemini-completion-event-router-20261121` based on #78 exact `0986f9f3b9a42133f49d8405f6ac21f3aa8497a8` adds a read-only GitHub `workflow_run` observer and strict callback provenance tests. The callback workflow does not contain credentials or write permissions, **does not actually dispatch Gemini jobs**, and cannot trigger until independently approved workflow enters default branch. No live Gemini API usage verified. Exact next checks: new PR CI and independent Reviewer/QA, then a one-time approved manual Gemini pilot and observe a callback. Shared multi-host leases, autonomous draft PR worker and continuous event loop remain blocked and must be implemented separately. No changes to original production, staging writes, held domain/Apple, media/Secret OFF. Enhanced Beta NO-GO.

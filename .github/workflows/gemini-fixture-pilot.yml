@@ -26,6 +26,7 @@ jobs:
       GEMINI_BILLING_TIER: free
       GEMINI_FIXTURE_PILOT_APPROVED: 'true'
       GEMINI_PILOT_STATE: ${{ runner.temp }}/fixture_state.sqlite
+      GEMINI_PILOT_ARTIFACTS: ${{ runner.temp }}/gemini-generated
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,10 +40,19 @@ jobs:
         run: |
           python -m unittest discover -s scripts/tests -p 'test_gemini_fixture_pilot_v2.py' -v
           python -m unittest discover -s scripts/tests -p 'test_engineering_outbox_v2.py' -v
+      - name: Create disposable artifact directory
+        run: mkdir -p "$GEMINI_PILOT_ARTIFACTS"
       - name: Two bounded model fixture coding tasks
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python scripts/gemini_fixture_pilot_v2.py
+      - name: Upload validated synthetic source for independent inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-synthetic-code-evidence
+          path: ${{ runner.temp }}/gemini-generated/generated_*.py
+          if-no-files-found: error
+          retention-days: 1
 
 # Manual job uses GitHub-hosted public-repo runner, two model requests maximum,
 # no repo write token, no generated code execution, no billing fallback.

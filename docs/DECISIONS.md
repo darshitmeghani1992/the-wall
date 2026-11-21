@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-24 · 2026-11-21 · Capture validated Gemini coding output as an ephemeral read-only CI artifact
+- **Decision:** During a later authorized two-request live Gemini pilot, persist only strictly AST-validated fixed-function source into two allowlisted files in runner temp; record SHA256 and upload as a one-day workflow artifact. Never execute generated code or give Gemini a repository GitHub token.
+- **Reason:** Mock CI is insufficient evidence of an actual agent; code artifacts enable independent verification without prematurely allowing code writes or changing the app candidate.
+- **Boundary:** The workflow remains unmerged/draft pending independent Reviewer/QA; no live model invocation, shared cloud lease engine or automatic draft PR worker exists. No pricing/production exposure; project still subject to Free-tier limits. This output is not beta release evidence.
+- **Next:** verify new CI and independently authorize workflow activation, inspect one genuine model run's artifact and callback, then implement a tightly scoped code-change worker and durable multi-run dispatch separately.
+
+
 ## D-23 · 2026-11-21 · Validate completion callbacks before automatic coding dispatch
 - **Decision:** Implement a GitHub `workflow_run` observer that verifies expected repository, exact source repository, approved manual pilot name, successful completed state, integer run ID and immutable full SHA. It performs no model invocation or write. Never infer source authorization solely from a workflow name or PR body.
 - **Reason:** Event-driven wakeups can avoid hourly idle intervals once default-branch integrated; accepting arbitrary workflow-run events into a credentialed dispatcher would be a security bypass.
