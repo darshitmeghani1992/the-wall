@@ -11,7 +11,7 @@ const inputBody = source.slice(source.indexOf("      <Input\n"), source.indexOf(
 
 test("picker clears account-specific people/query/errors when focus changes", () => {
   assert.match(focusBody, /loadFence\.current\.focus\(userId \?\? null\)/);
-  assert.match(focusBody, /setQuery\(" "\)/);
+  assert.match(focusBody, /setQuery\(""\)/);
   assert.match(focusBody, /setPeople\(\[\]\)/);
   assert.match(focusBody, /setError\(null\)/);
   assert.match(focusBody, /loadFence\.current\.blur\(\)/);
