@@ -5,6 +5,13 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
 
 ---
 
+## D-15 · 2026-11-21 · Separate definer catalog exposure from per-caller security verification
+- **Decision:** For BETA-P0-04, inventory staging `public` SECURITY DEFINER routines by effective `anon`/`authenticated` `EXECUTE` grants, separate trigger-only functions from directly invokable RPCs, and track individual `auth.uid()` guard checks. Catalog metrics are **read-only triage evidence**, not proof of secure function behavior or successful hosted authenticated HTTP denial.
+- **Evidence and reason:** `ewintxgdxdvschiqodkq` query returned 113 SECURITY DEFINER functions, 0 `anon` callable, 59 `authenticated` executable (33 direct functions + 26 trigger-returning), 54 internal-only, 0 missing explicit `search_path`. All 33 direct routines contain `auth.uid()` text. The former blanket '59 risky definer functions' label conflated ordinary SQL RPC endpoints and trigger functions and could lead to unsafe blind revocation.
+- **Alternatives:** Blanket REVOKE (rejected without caller/trigger audit); automatically classify `auth.uid()` reference as authorization proof (rejected); skip real three-actor JWT tests in favor of catalog SQL (rejected).
+- **Reversibility:** Reversible documentation methodology only. **Founder Gate?** No for this read-only audit; **yes** for unapproved hosted grant/schema/function changes and releases. No roles, grants, flags or production data changed.
+- **Next:** source/body/callsite trace for each exposed RPC, reviewed code tests for confirmed defects, independent Reviewer + QA using hosted JWT actors and migration-safe rollout. See `docs/handoffs/STAGING_DEFINER_CALLER_TRIAGE_2026-11-21.md`.
+
 ## D-14 · 2026-11-21 · Single tracked first-beta release train and exact-SHA evidence
 - **Decision:** Use `docs/BUILD_STATUS.md` as the single resumable development queue and issue #57 as its linked human-facing tracker. The first-beta scope is explicitly expanded through Enhanced Beta; a controlled text-first source candidate is only an **internal certification checkpoint**. Complete photo/voice/video and Secret runtime verification before any final first-beta GO. Keep domain/DNS and Apple Developer enrollment/signing held per Founder; no implication that SMTP delivery can be skipped.
 - **Reason:** A linear set of unmerged draft PRs and multiple older checkpoint documents have allowed stale source/status claims. The latest source line descends from #30; CI #221 succeeded for #58, but independent review and E2E/device/hosted requirements remain open.
