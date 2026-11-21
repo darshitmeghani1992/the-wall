@@ -18,6 +18,8 @@ on:
       - "scripts/tests/test_engineering_outbox_v2.py"
       - "scripts/gemini_fixture_pilot_v2.py"
       - "scripts/tests/test_gemini_fixture_pilot_v2.py"
+      - "scripts/gemini_fixture_draft_pr_v2.py"
+      - "scripts/tests/test_gemini_fixture_draft_pr_v2.py"
       - ".github/workflows/gemini-fixture-pilot.yml"
       - "scripts/engineering_cloud_event_router_v2.py"
       - "scripts/tests/test_engineering_cloud_event_router_v2.py"
@@ -49,5 +51,6 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_engineering_outbox_v2.py' -v
           python -m unittest discover -s scripts/tests -p 'test_gemini_fixture_pilot_v2.py' -v
           python -m unittest discover -s scripts/tests -p 'test_engineering_cloud_event_router_v2.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_gemini_fixture_draft_pr_v2.py' -v
       - name: Canonical queue dry run
         run: python scripts/engineering_loop_v2.py --workers 3
