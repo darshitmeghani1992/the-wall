@@ -30,6 +30,8 @@ export default function SharedWallMembersScreen() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
+  // Keep mutation ownership separate from fetch/search generations.
+  const mutationFence = useRef(new SessionFocusFence()).current;
   const mutationInFlight = useRef(false);
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
@@ -56,10 +58,10 @@ export default function SharedWallMembersScreen() {
   }, [fence, userId, wallId]);
 
   useFocusEffect(useCallback(() => {
-    fence.focus(userId ?? null); setWall(null); setMembers([]); setRemoved([]); setResults([]); setBusyId(null);
+    fence.focus(userId ?? null); mutationFence.focus(userId ?? null); setWall(null); setMembers([]); setRemoved([]); setResults([]); setBusyId(null);
     if (userId && wallId) void load(); else setLoading(false);
-    return () => { fence.blur(); endExclusiveMutation(mutationInFlight); setBusyId(null); };
-  }, [fence, load, userId, wallId]));
+    return () => { fence.blur(); mutationFence.blur(); endExclusiveMutation(mutationInFlight); setBusyId(null); };
+  }, [fence, load, mutationFence, userId, wallId]));
 
   async function search() {
     if (!userId || !isOwner || !query.trim()) return;
@@ -75,19 +77,25 @@ export default function SharedWallMembersScreen() {
 
   async function invite(personId: string) {
     if (!userId || busyId || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
+    const token = mutationFence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusyId(personId); setError(null);
     try {
       const result = await inviteToWall(wallId, personId);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (["invited", "already_invited", "already_member"].includes(result.status)) {
         setBusyId(null); void load();
       } else {
         setError("That person can't be invited right now.");
       }
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) { setError(cause?.message ?? "Couldn't send that invitation."); setBusyId(null); }
-    } finally { endExclusiveMutation(mutationInFlight); if (fence.isCurrent(token, currentUserId.current)) setBusyId(null); }
+      if (mutationFence.isCurrent(token, currentUserId.current)) { setError(cause?.message ?? "Couldn't send that invitation."); setBusyId(null); }
+    } finally {
+      // A previous screen/account response must never release the new owner's lock.
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight);
+        setBusyId(null);
+      }
+    }
   }
 
   function confirmRemove(member: WallMemberWithProfile) {
@@ -100,19 +108,25 @@ export default function SharedWallMembersScreen() {
 
   async function remove(personId: string) {
     if (!userId || busyId || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
+    const token = mutationFence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusyId(personId);
     try {
       const result = await removeSharedWallMember(wallId, personId);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (result.status === "removed" || result.status === "revoked") {
         setBusyId(null); void load();
       } else {
         setError("That membership has already changed.");
       }
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) { setError(cause?.message ?? "Couldn't update that member."); setBusyId(null); }
-    } finally { endExclusiveMutation(mutationInFlight); if (fence.isCurrent(token, currentUserId.current)) setBusyId(null); }
+      if (mutationFence.isCurrent(token, currentUserId.current)) { setError(cause?.message ?? "Couldn't update that member."); setBusyId(null); }
+    } finally {
+      // A previous screen/account response must never release the new owner's lock.
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight);
+        setBusyId(null);
+      }
+    }
   }
 
   function confirmTransfer(member: WallMemberWithProfile) {
@@ -125,15 +139,21 @@ export default function SharedWallMembersScreen() {
 
   async function transfer(personId: string) {
     if (!userId || busyId || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
+    const token = mutationFence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusyId(personId);
     try {
       const transferred = await transferSharedWallOwnership(wallId, personId);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (transferred) router.replace(`/shared/${wallId}`); else { setError("Ownership couldn't be transferred. The membership may have changed."); setBusyId(null); }
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) { setError(cause?.message ?? "Couldn't transfer ownership."); setBusyId(null); }
-    } finally { endExclusiveMutation(mutationInFlight); if (fence.isCurrent(token, currentUserId.current)) setBusyId(null); }
+      if (mutationFence.isCurrent(token, currentUserId.current)) { setError(cause?.message ?? "Couldn't transfer ownership."); setBusyId(null); }
+    } finally {
+      // A previous screen/account response must never release the new owner's lock.
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight);
+        setBusyId(null);
+      }
+    }
   }
 
   return (
