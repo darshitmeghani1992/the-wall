@@ -108,6 +108,17 @@ class PilotTests(unittest.TestCase):
             env=dict(ENV,GITHUB_EVENT_NAME="pull_request")
             with self.assertRaises(ValueError):
                 m.run(env,lambda *_:self.fail("network called"),Path(d)/"state.db")
+    def test_reject_hidden_parameters(self):
+        for source in [
+            "def add(x, /, a,b): return a+b",
+            "def add(a,b,*args): return a+b",
+            "def add(a,b,**kwargs): return a+b",
+            "def add(a:int,b): return a+b",
+        ]:
+            with self.subTest(source=source):
+                with self.assertRaises(ValueError):
+                    m.verify_synthetic_code(source,"add",ast.Add)
+
     def test_empty_response_rejected(self):
         with self.assertRaises(ValueError):
             m.extract({"candidates":[]})
