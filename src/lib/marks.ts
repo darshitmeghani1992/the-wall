@@ -181,7 +181,14 @@ export async function revealSecret(markId: string): Promise<SecretRevealResult> 
 
 /** Owner-only: pin/unpin a mark to the top of the wall. */
 export async function setPinned(markId: string, pinned: boolean): Promise<void> {
-  await supabase.from("marks").update({ pinned }).eq("id", markId);
+  // A denied write can silently affect zero rows under RLS. Never claim a pin
+  // succeeded until the server confirms exactly one updated Mark.
+  const { error, count } = await supabase
+    .from("marks")
+    .update({ pinned }, { count: "exact" })
+    .eq("id", markId);
+  if (error) throw error;
+  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
 }
 
 /** The sender edit/delete window — 10 minutes (Master Spec §32). Server-enforced. */
