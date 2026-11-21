@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-33 · Status removal guard account-switch lease isolation — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #116 immutable `d6c60a9796fbfe734a630ffed2fabfefb0ca0f8f`, retaining #30–#116 drafts. Status save/remove shared the read-generation fence and unconditionally finished the reusable navigation removal guard in late `finally`; an A-account request could clear B's exclusive operation or old `approved`/dirty navigation state could carry into B. Separate action/read fences, reset session-scoped guard/confirmation state on focus/blur, release guard **only** under the current action lease, and reject stale modal callbacks/old route subjects. Keep server-authoritative save/remove, existing prompts, denial/dirty behavior and UI intact. Add `StatusRemovalGuard.resetSession()`, a unit regression and `tests/frontend-status-action-actor-lease.test.mjs`.
+
+**Gates:** exact new SHA CI and independent Reviewer + separate native behavioral QA for delayed A-save/remove while B edits, read refresh vs save, stale Alert dismissal, unsaved confirmation and back navigation. #116 actor-render privacy checks don't certify this distinct change. No hosted writes, production access, migrations, main merge, external billing, deployment, tester invitation or protected feature activation. Enhanced Beta **NO-GO** pending real OTP/3 JWT actors, C2/C3 private media, Secret cron, account deletion 0031/purge, native QA/rollback and Founder release gates. Domain/DNS and Apple held.
+
+**Next:** check exact child SHA/tree and CI; independently review/test on device, continue remaining unblocked tasks on new isolated branches.
+
+
 ## BETA-P0-32 · Status editor actor/Wall render privacy guard — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #115 immutable `b1ed1637c86f5349f41ded85d4f0eeea9108b415`. The Status editor already fences delayed network responses and clears state on focus, but could briefly render the previous account's or previous Personal Wall's Status text/draft **before** the focus effect clears it. Bind the visible Status/body, save eligibility, dirty/remove controls and loading/error transition to the current `userId:wallId` subject; mark both authorized results and denied/failed loads as settled for that subject so authorized retry still works. Loading and navigation preserve the existing user journey. New source/state regression `tests/frontend-status-actor-render-fence.test.mjs`. Backend permission remains authoritative; no UI redesign, auth/schema/API/flag changes.

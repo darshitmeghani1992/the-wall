@@ -25,6 +25,17 @@ assert.equal(dirtyGuard.shouldPreventRemoval(), true);
 dirtyGuard.approveRemoval();
 assert.equal(dirtyGuard.removalDecision(), "allow", "explicit discard permits the captured removal action");
 
+const recycledGuard = new StatusRemovalGuard();
+recycledGuard.setDirty(true);
+recycledGuard.approveRemoval();
+recycledGuard.resetSession();
+recycledGuard.setDirty(true);
+assert.equal(recycledGuard.removalDecision(), "confirm", "new actor must not inherit approved discard");
+assert.equal(recycledGuard.beginOperation(), true);
+recycledGuard.resetSession();
+assert.equal(recycledGuard.beginOperation(), true, "old actor busy state cannot block a new editor");
+recycledGuard.finishOperation();
+
 async function testDelayedOperations() {
   for (const operation of ["save", "remove"] as const) {
     const busyGuard = new StatusRemovalGuard();

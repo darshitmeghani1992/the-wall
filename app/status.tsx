@@ -36,6 +36,7 @@ export default function StatusScreen() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadedSubject, setLoadedSubject] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
+  const actionFence = useRef(new SessionFocusFence()).current;
   const removalGuard = useRef(new StatusRemovalGuard()).current;
   const pendingRemovalAction = useRef<RemovalAction | null>(null);
   const pendingConfirmedClose = useRef(false);
@@ -44,6 +45,8 @@ export default function StatusScreen() {
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
   const subject = userId && wallId ? `${userId}:${wallId}` : null;
+  const currentSubjectRef = useRef(subject);
+  currentSubjectRef.current = subject;
   const currentSubjectLoaded = subject !== null && loadedSubject === subject;
   const visibleStatus = currentSubjectLoaded ? status : null;
   const visibleBody = currentSubjectLoaded ? body : "";
@@ -92,6 +95,11 @@ export default function StatusScreen() {
   useFocusEffect(
     useCallback(() => {
       fence.focus(userId ?? null);
+      actionFence.focus(userId ?? null);
+      removalGuard.resetSession();
+      pendingRemovalAction.current = null;
+      pendingConfirmedClose.current = false;
+      promptOpen.current = false;
       setStatus(null);
       setBody("");
       setOriginalBody("");
@@ -108,6 +116,9 @@ export default function StatusScreen() {
       }
       return () => {
         fence.blur();
+        actionFence.blur();
+        removalGuard.resetSession();
+        promptOpen.current = false;
         setStatus(null);
         setBody("");
         setOriginalBody("");
@@ -117,7 +128,7 @@ export default function StatusScreen() {
         setLoadFailed(false);
         setLoading(true);
       };
-    }, [fence, load, userId, wallId]),
+    }, [actionFence, fence, load, removalGuard, userId, wallId]),
   );
 
   const draft = normalizeStatusDraft(visibleBody);
@@ -134,20 +145,30 @@ export default function StatusScreen() {
   }, [removalGuard]);
 
   const confirmDiscard = useCallback((action?: RemovalAction) => {
-    if (promptOpen.current) return;
+    if (promptOpen.current || subject !== currentSubjectRef.current) return;
+    const token = actionFence.begin(userId ?? null);
+    if (!token) return;
     promptOpen.current = true;
     Alert.alert("Discard Status changes?", "Your changes haven't been saved.", [
-      { text: "Keep editing", style: "cancel", onPress: () => { promptOpen.current = false; } },
+      {
+        text: "Keep editing",
+        style: "cancel",
+        onPress: () => {
+          if (actionFence.isCurrent(token, currentUserId.current)) promptOpen.current = false;
+        },
+      },
       {
         text: "Discard",
         style: "destructive",
         onPress: () => {
+          if (!actionFence.isCurrent(token, currentUserId.current)
+            || subject !== currentSubjectRef.current) return;
           promptOpen.current = false;
           queueApprovedRemoval(action);
         },
       },
     ]);
-  }, [queueApprovedRemoval]);
+  }, [actionFence, queueApprovedRemoval, subject, userId]);
 
   useEffect(
     () => navigation.addListener("beforeRemove", (event) => {
@@ -187,9 +208,9 @@ export default function StatusScreen() {
   }
 
   async function save() {
-    if (!userId || !currentSubjectLoaded || !canSave) return;
+    if (!userId || !currentSubjectLoaded || subject !== currentSubjectRef.current || !canSave) return;
     if (!removalGuard.beginOperation()) return;
-    const token = fence.begin(userId);
+    const token = actionFence.begin(userId);
     if (!token) {
       removalGuard.finishOperation();
       return;
@@ -198,26 +219,28 @@ export default function StatusScreen() {
     setError(null);
     try {
       const confirmed = await saveWallStatus(wallId, draft.body);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!actionFence.isCurrent(token, currentUserId.current)) return;
       setStatus(confirmed);
       setBody(confirmed.body);
       setOriginalBody(confirmed.body);
       removalGuard.finishOperation();
       queueApprovedRemoval();
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) {
+      if (actionFence.isCurrent(token, currentUserId.current)) {
         setError(cause?.message ?? "Couldn't save your Status. Try again.");
       }
     } finally {
-      removalGuard.finishOperation();
-      if (fence.isCurrent(token, currentUserId.current)) setBusy(null);
+      if (actionFence.isCurrent(token, currentUserId.current)) {
+        removalGuard.finishOperation();
+        setBusy(null);
+      }
     }
   }
 
   async function remove() {
-    if (!userId || !currentSubjectLoaded || !visibleStatus || busy) return;
+    if (!userId || !currentSubjectLoaded || subject !== currentSubjectRef.current || !visibleStatus || busy) return;
     if (!removalGuard.beginOperation()) return;
-    const token = fence.begin(userId);
+    const token = actionFence.begin(userId);
     if (!token) {
       removalGuard.finishOperation();
       return;
@@ -226,24 +249,26 @@ export default function StatusScreen() {
     setError(null);
     try {
       await removeWallStatus(wallId);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!actionFence.isCurrent(token, currentUserId.current)) return;
       setStatus(null);
       setBody("");
       setOriginalBody("");
       removalGuard.finishOperation();
       queueApprovedRemoval();
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) {
+      if (actionFence.isCurrent(token, currentUserId.current)) {
         setError(cause?.message ?? "Couldn't remove your Status. Try again.");
       }
     } finally {
-      removalGuard.finishOperation();
-      if (fence.isCurrent(token, currentUserId.current)) setBusy(null);
+      if (actionFence.isCurrent(token, currentUserId.current)) {
+        removalGuard.finishOperation();
+        setBusy(null);
+      }
     }
   }
 
   function confirmRemove() {
-    if (busy || !currentSubjectLoaded || !visibleStatus) return;
+    if (busy || !currentSubjectLoaded || subject !== currentSubjectRef.current || !visibleStatus) return;
     Alert.alert("Remove Status?", "It will disappear from your Personal Wall.", [
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: () => void remove() },
