@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-25 · Home friend count actor reset — 21 Nov 2026
+
+**ARCHITECT → FRONTEND:** New isolated child of #108 at `677db50ab226ce47259cf3605f5d118d1b429544`. On every main My Wall load `friendCount` now becomes unavailable before the new actor/Wall data arrives, rather than displaying the previous session's stale total. Current-user server result still overwrites when available; failure stays unavailable. Added source/regression test `tests/frontend-home-friend-count-session-reset.test.mjs`. CI/Reviewer/QA exact-SHA gates and device slow-counter testing remain open, no backend or hosted changes, Enhanced Beta NO-GO.
+
+**Next:** monitor own CI, request independent Reviewer and QA on unchanged tree; proceed with the next separately-owned unblocked queue item. 6-digit SMTP OTP, three actual staging JWT actors, private media/Secret/deletion/device and Founder gates remain.
+
 ## BETA-P0-24 · My Wall Shared Wall tab actor reset — 21 Nov 2026
 
 **ARCHITECT → FRONTEND:** Stacked on #107 immutable source `99d8d7612d5a4cbcc616743940f1523bc3872329`, isolated new branch. The home tab's async Shared Wall response was actor-fenced, but already-loaded tab names remained visible until the new account's fetch completed. `app/(tabs)/home.tsx` now clears the prior list and error synchronously on focus/session/route changes before refreshing authorized current-actor Walls. `tests/frontend-home-shared-wall-session-reset.test.mjs` adds source-order and actor-fence unit coverage. CI and real native behavior are distinct; exact SHA needs independent Reviewer and QA before any release. No backend/hosted/production/flag change.

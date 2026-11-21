@@ -144,6 +144,8 @@ export default function MyWall() {
     const generationGuard = pageGeneration;
     const generation = ++generationGuard.current;
     setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    // Never render a prior account's friend total while a new Wall loads.
+    setFriendCount(null);
     setLoadedSubject(null);
     (async () => {
       if (!userId) {

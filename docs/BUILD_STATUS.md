@@ -1,5 +1,13 @@
 # The-Wall Build Status
 
+## BETA-P0-25 · Prevent old account friend totals during My Wall reload — 21 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of [#108](https://github.com/darshitmeghani1992/the-wall/pull/108) immutable source `677db50ab226ce47259cf3605f5d118d1b429544`. My Wall's friend counter was not reset at the start of the actor-dependent main loading effect. Because `setWall(personalWall)` happens before optional friend-count query settles, the next account's Wall could briefly display the previous actor's count. Set `friendCount=null` at the beginning of every main account/Wall load, before network requests; retain server count and `FRIENDS UNAVAILABLE` until current account's value arrives. No product design, schema, RPC, permission, flag or backend changes.
+
+**Verification:** Adds `tests/frontend-home-friend-count-session-reset.test.mjs` for reset-before-fetch, sourced count wiring and simple state progression. Requires own exact-head GitHub CI, independent Reviewer and real simulator/device QA for account A→B when B's counts are delayed/failed; not a native QA pass. No hosted staging writes, main merge, production access, deployments, feature activation or tester invitations. Core + Enhanced Beta NO-GO pending genuine OTP/three actor JWT, media C2/C3, Secret scheduler, deletion 0031, installed-device/rollback, independent Reviewer/QA and Founder release gates.
+
+**Next:** verify own CI, route exact tree to independent Reviewer and QA; continue next unblocked slice separately. Domain/DNS and Apple Developer held.
+
 ## BETA-P0-24 · My Wall removes prior actor Shared Wall tabs on session/focus changes — 21 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** This isolated stacked draft descends from [#107](https://github.com/darshitmeghani1992/the-wall/pull/107) source `99d8d7612d5a4cbcc616743940f1523bc3872329`. My Wall previously fenced async Shared Wall response writes by actor, but it kept already-rendered Shared Wall tabs while a different account's replacement list was loading; a quick sign-out/account switch could transiently display previous-account private Shared Wall names. On every focused actor/route transition, reset tab data and its prior error before issuing the new actor's `getAccessibleSharedWalls` request. Keep existing read fence, backend RLS/permissions and retry behavior unchanged. No visual design, navigation, schema, API, migration, flags or hosted operations changed.
