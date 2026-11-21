@@ -5,6 +5,14 @@ date · decision · reason · alternatives · reversibility · Founder Gate?
 
 ---
 
+## D-14 · 2026-11-21 · Single tracked first-beta release train and exact-SHA evidence
+- **Decision:** Use `docs/BUILD_STATUS.md` as the single resumable development queue and issue #57 as its linked human-facing tracker. The first-beta scope is explicitly expanded through Enhanced Beta; a controlled text-first source candidate is only an **internal certification checkpoint**. Complete photo/voice/video and Secret runtime verification before any final first-beta GO. Keep domain/DNS and Apple Developer enrollment/signing held per Founder; no implication that SMTP delivery can be skipped.
+- **Reason:** A linear set of unmerged draft PRs and multiple older checkpoint documents have allowed stale source/status claims. The latest source line descends from #30; CI #221 succeeded for #58, but independent review and E2E/device/hosted requirements remain open.
+- **Alternatives:** Treat `main` or an older September status percentage as current (rejected); mark feature-flagged media and Secret functionality complete (rejected); merge the entire long stack without independent review (rejected).
+- **Reversibility:** Documentation and sequencing only; reversible. No role charter, Constitution, schema, prod environment or feature-flag modification. **Founder Gate?** This decision records explicit Founder sequencing and does not grant permission to merge/deploy, mutate hosted state, create accounts or activate unfinished features.
+- **Process:** Every task records role, acceptance criteria, dependency, evidence, blocker, next action; every certification binds exact SHA and staging runtime. Changing source invalidates earlier SHA CI/Review/QA where affected.
+
+
 ## D-0 · 2026-08-20 · Verify the security layer against a real Postgres each session
 - **Decision:** Run `supabase/tests/run_tests.sh` against a locally-initialized Postgres 16
   cluster (server binaries are present in the environment) as the standard QA/Security gate,
