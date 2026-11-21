@@ -38,6 +38,23 @@ test("rejects encoded traversal and double encoding", () => {
   }
 });
 
+test("Storage URL requires exactly one usable bearer token, not arbitrary query", () => {
+  for (const suffix of [
+    "", "?download=1", "?token=", "?token=%20", "?token=first&token=second",
+  ]) {
+    const url = `https://project.supabase.co/storage/v1/object/sign/mark-media/${objectPath}${suffix}`;
+    assert.throws(() => assertStorageObjectUrl(url, objectPath, "download", policy));
+  }
+  for (const suffix of ["?upload=1", "?token=", "?token=first&token=second"]) {
+    const url = `https://project.supabase.co/storage/v1/object/upload/sign/mark-media/${objectPath}${suffix}`;
+    assert.throws(() => assertStorageObjectUrl(url, objectPath, "upload", policy));
+  }
+  assert.doesNotThrow(() => assertStorageObjectUrl(
+    `https://project.supabase.co/storage/v1/object/sign/mark-media/${objectPath}?token=valid&download=1`,
+    objectPath, "download", policy,
+  ));
+});
+
 test("callback must be the exact configured endpoint", () => {
   assert.doesNotThrow(() => assertCallbackUrl("https://project.supabase.co/functions/v1/mark-media-worker/worker/complete", policy));
   assert.throws(() => assertCallbackUrl("https://project.supabase.co/functions/v1/mark-media-worker/worker/complete?next=evil", policy));
