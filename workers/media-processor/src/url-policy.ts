@@ -54,8 +54,11 @@ export function assertCallbackUrl(rawUrl: string, policy: UrlPolicy): URL {
 
 export function assertFinalResponseOrigin(responseUrl: string, expectedUrl: URL): void {
   const actual = parseSafeHttpsUrl(responseUrl);
-  if (actual.origin !== expectedUrl.origin || actual.pathname !== expectedUrl.pathname) {
-    throw new Error("network response origin or path changed");
+  // Signed Storage query tokens are bearer credentials. A response must keep
+  // the exact signed request URL, not merely its host and object pathname.
+  if (actual.origin !== expectedUrl.origin || actual.pathname !== expectedUrl.pathname
+    || actual.search !== expectedUrl.search) {
+    throw new Error("network response URL changed");
   }
 }
 
