@@ -38,7 +38,13 @@ export function assertStorageObjectUrl(
   if (!prefix || decodedPath.slice(prefix.length) !== expectedObjectPath) {
     throw new Error("storage URL is not bound to the expected object path");
   }
-  if (url.search === "") throw new Error("unsigned Storage URL is forbidden");
+  // A nonempty query alone does not prove that Supabase issued a signed URL.
+  // Both signed upload and download URLs carry one bearer token parameter.
+  // Reject duplicate tokens so URL consumers cannot disagree which is active.
+  const tokens = url.searchParams.getAll("token");
+  if (tokens.length !== 1 || !tokens[0] || /\\s/.test(tokens[0])) {
+    throw new Error("Storage URL requires one nonempty signed token");
+  }
   return url;
 }
 
