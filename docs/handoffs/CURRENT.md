@@ -1,5 +1,13 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-01 · Integrated regression candidate — 21 Nov 2026
+
+ARCHITECT selected this internal draft to bring three independent test changes onto one reviewable revision. Base [#87](https://github.com/darshitmeghani1992/the-wall/pull/87) `7ec1e31507fabe93fd6279b9e2bc03e65506d200` retains the fixture-shape check and passed [CI #267](https://github.com/darshitmeghani1992/the-wall/actions/runs/44895508196) (4/4). The integrated SQL test matches [#88](https://github.com/darshitmeghani1992/the-wall/pull/88) `a40b33c26cb4ff5146819ba55912dcad4f0503b8` byte for byte. The integrated Mark edit/delete source contracts match [#89](https://github.com/darshitmeghani1992/the-wall/pull/89) `acc7fe56ee84c43b66a8d09c2bb9ee7461c4eeca` byte for byte. The independent drafts remain open.
+
+**Verified locally.** Twelve targeted JWT mock and Mark source checks passed, and the DB runner passed shell syntax. The full disposable SQL run requires GitHub CI because PostgreSQL is unavailable locally. GitHub CI, independent Reviewer and independent behavioral QA must bind to the new candidate's exact head. Real staging JWT/OTP and device evidence require verified SMTP, authorized actors and an approved preview/device path.
+
+**Next.** Verify exact candidate CI, route the 351-path source baseline and new regressions to independent Reviewer, then run independent QA on the same revision. Remaining BACKEND work can continue separately with the BETA-P0-04 definer callsite audit within existing contracts. Keep Enhanced Beta NO-GO pending release gates.
+
 ## 21 Nov 2026 · BACKEND three-JWT HTTP fixture-shape hardening
 
 Branch `codex/beta-three-jwt-fixture-kind-20261121-run2` is based on #86 corrected commit `5e6c5de25489b4ddd365382788c5551523622ff1`. In `scripts/staging-three-jwt-readonly.mjs` an owner/member's positive result now must be a `shared`, `private` Wall with requested ID; tests reject Personal/public false fixtures even if the GET count looks right. Six read-only staging requests remain the contract; no actor sign-up or tokens supplied. The pre-existing JWT identity checks remain. `tests/staging-three-jwt-readonly.test.mjs` and the controlled preparation runbook updated. Check exact-head CI, obtain independent Reviewer/QA, and execute genuine hosted actor/OTP after Founder-approved setup. No beta GO, no irreversible action.
