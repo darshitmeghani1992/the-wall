@@ -3,6 +3,7 @@ import { track } from "./analytics";
 import type { MarkWithAuthor } from "./marks";
 import {
   isMarkShareable,
+  personalWallDeepLink,
   markDeepLink,
   markSharePreview,
   type MarkShareDestination,
@@ -22,25 +23,27 @@ export function futureWallWebLink(handle?: string | null): string {
 
 /** Custom-scheme deep link for a Personal Wall, by handle. */
 export function wallDeepLink(handle?: string | null): string | null {
-  return handle ? `thewall://u/${handle}` : null;
+  return personalWallDeepLink(handle);
 }
 
 export async function shareMyWall(handle?: string | null): Promise<void> {
   const link = wallDeepLink(handle);
-  const message = handle
-    ? `Leave something on my Wall 👀 — I'm @${handle} on The Wall\n${link}`
+  const safeHandle = link?.slice("thewall://u/".length);
+  const message = safeHandle
+    ? `Leave something on my Wall 👀 — I'm @${safeHandle} on The Wall\n${link}`
     : "Leave something on my Wall 👀 — find me on The Wall";
   await Share.share({ message });
-  track("Wall Shared", { has_handle: Boolean(handle) });
+  track("Wall Shared", { has_handle: Boolean(safeHandle) });
 }
 
 export async function inviteFriends(handle?: string | null): Promise<void> {
   const link = wallDeepLink(handle);
-  const message = handle
-    ? `Come leave a Mark on my Wall ✦ I'm @${handle} on The Wall\n${link}`
+  const safeHandle = link?.slice("thewall://u/".length);
+  const message = safeHandle
+    ? `Come leave a Mark on my Wall ✦ I'm @${safeHandle} on The Wall\n${link}`
     : "Come leave a Mark on my Wall ✦ find me on The Wall";
   await Share.share({ message });
-  track("Invite Sent", { has_handle: Boolean(handle) });
+  track("Invite Sent", { has_handle: Boolean(safeHandle) });
 }
 
 export async function sharePersonWall(
@@ -48,12 +51,13 @@ export async function sharePersonWall(
   displayName?: string | null,
 ): Promise<void> {
   const link = wallDeepLink(handle);
-  const name = displayName?.trim() || (handle ? `@${handle}` : "someone");
-  const message = handle
+  const safeHandle = link?.slice("thewall://u/".length);
+  const name = displayName?.trim() || (safeHandle ? `@${safeHandle}` : "someone");
+  const message = safeHandle
     ? `Check out ${name}'s Wall on The Wall 👀\n${link}`
     : `Check out ${name}'s Wall on The Wall 👀`;
   await Share.share({ message });
-  track("Wall Shared", { has_handle: Boolean(handle), context: "person" });
+  track("Wall Shared", { has_handle: Boolean(safeHandle), context: "person" });
 }
 
 /** Shared links enter through an auth-safe resolver so sign-in never loses the target. */
