@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { isMarkShareable, markDeepLink, markSharePreview } from "./share-contract.ts";
+import { isMarkShareable, markDeepLink, markSharePreview, personalWallDeepLink } from "./share-contract.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { parseDeferredDestinationUrl } from "./deferred-destination-contract.ts";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const WALL = "22222222-2222-4222-8222-222222222222";
 const MARK = "33333333-3333-4333-8333-333333333333";
+
+assert.equal(personalWallDeepLink("maya"), "thewall://u/maya");
+assert.equal(personalWallDeepLink("  MaYa_27  "), "thewall://u/maya_27");
+assert.deepEqual(parseDeferredDestinationUrl(personalWallDeepLink("MaYa")), {
+  kind: "personal_handle", handle: "maya",
+});
+for (const invalid of [
+  null, undefined, "", "ab", "@maya", "ma/ya", "ma\\\\ya", "maya?focusMark=bad",
+  "maya#fragment", "ma ya", "m%2Faya", "maya\\nfriend", "a".repeat(9_000),
+]) {
+  assert.equal(personalWallDeepLink(invalid), null, `must not create unopenable handle link: ${String(invalid).slice(0, 30)}`);
+}
 
 assert.equal(
   markDeepLink(MARK, { kind: "personal", ownerId: OWNER }),
