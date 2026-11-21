@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-04 · Shared Wall write regression integration — 21 Nov 2026
+
+**ROLE: ARCHITECT integration → BACKEND test implementation.** Branch `codex/beta-shared-wall-regression-integration-20261121` preserves both draft parents, #82 at `a019b54b20bf67b3cf1885cb9d439529a3ed2b2b` and #75 at `a7e40b0228acda35c547b82ad252fe4e3d040e49`. Test commit `5e771ee55957e1a85dc422d425a70176a7a90e02` adds plain INSERT denials alongside INSERT RETURNING and a successful own-wall write by the active outsider. This checks the write guard independently of the SELECT policy. The tests use a disposable Postgres transaction. The staging JWT preflight stays on the same branch.
+
+**Evidence and routing:** GitHub reports CI for the published PR head, including this handoff commit. Independent Reviewer should check both parents and the SQL assertions. Independent QA should verify the unchanged PR head, then run the authorized three-actor read-only HTTP smoke when staging actors and OTP are available. No hosted database, deployment, release flag or production change. Enhanced Beta remains NO-GO.
+
+**Exact next engineering task:** BETA-P0-01, reconcile #74's file-level audit evidence with this integrated draft and check remaining sibling PRs for source overlap before proposing an immutable release candidate. Live staging actor testing remains gated separately.
+
+
 ## BACKEND staging JWT audit key and actor guard — 21 Nov 2026 (draft only)
 
 **ARCHITECT sequencing → BACKEND implementation; BETA-P0-04.** New isolated branch `codex/staging-jwt-public-key-guard-20261121` descends from #77 head `3a79cdd2fb6e15fb1a6df5edefc4550b26d4eaf9` (CI 44886602983 success, no independent reviews). Read-only HTTP audit refuses service-role or secret API keys and JWTs without staging authenticated user role, subject, issuer, audience, expiry before network. Local claim decoding **does not verify signatures**, so existing server-side Auth identity check is mandatory. Added no-network hostile tests and legacy public anon-key positive test. No staging authorized three-actor fixture exists: **no real hosted JWT RLS test has run**. No Supabase write, production, deployment or feature activation. Next: new PR immutable-head CI and independent Reviewer/QA, then live authorized fixture. Enhanced Beta NO-GO.

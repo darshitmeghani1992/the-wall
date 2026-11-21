@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-04 · Shared Wall write regression integration — 21 Nov 2026
+
+**ROLE: ARCHITECT integration → BACKEND test implementation.** Branch `codex/beta-shared-wall-regression-integration-20261121` preserves both draft parents, #82 at `a019b54b20bf67b3cf1885cb9d439529a3ed2b2b` and #75 at `a7e40b0228acda35c547b82ad252fe4e3d040e49`. Test commit `5e771ee55957e1a85dc422d425a70176a7a90e02` adds plain INSERT denials alongside INSERT RETURNING and a successful own-wall write by the active outsider. This checks the write guard independently of the SELECT policy. The tests use a disposable Postgres transaction. The staging JWT preflight stays on the same branch.
+
+**Evidence and routing:** GitHub reports CI for the published PR head, including this handoff commit. Independent Reviewer should check both parents and the SQL assertions. Independent QA should verify the unchanged PR head, then run the authorized three-actor read-only HTTP smoke when staging actors and OTP are available. No hosted database, deployment, release flag or production change. Enhanced Beta remains NO-GO.
+
+**Exact next engineering task:** BETA-P0-01, reconcile #74's file-level audit evidence with this integrated draft and check remaining sibling PRs for source overlap before proposing an immutable release candidate. Live staging actor testing remains gated separately.
+
+
 ## Staging HTTP three-JWT privileged-key guard — 21 Nov 2026
 
 **BETA-P0-04; ARCHITECT sequencing → BACKEND implementation.** Isolated draft `codex/staging-jwt-public-key-guard-20261121` from PR #77 immutable head `3a79cdd2fb6e15fb1a6df5edefc4550b26d4eaf9`, not cloud-worker branch #81. Added public-only API-key and staging Auth JWT local claims preflight with hostile no-network tests to prevent misleading RLS results from privileged service-role/secret keys. No app/schema/hosted users/config/feature flags altered. Exact CI and independent Reviewer/QA required; **no authorized hosted three-actor fixture is available, so live JWT RLS PASS is not claimed**. Next: check draft PR CI/review; when verified SMTP and authorized staging identities exist, run real actor HTTP tests. Text-first internal-only; Enhanced Beta NO-GO.
