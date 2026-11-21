@@ -124,14 +124,12 @@ export default function MyWall() {
   useFocusEffect(
     useCallback(() => {
       sharedWallsFence.focus(userId ?? null);
+      // An actor/route change must not show the prior session's Shared Walls.
+      setSharedWalls([]);
+      setSharedWallsError(false);
       if (hasFocused.current) setReloadKey((value) => value + 1);
       hasFocused.current = true;
-      if (!userId) {
-        setSharedWalls([]);
-        setSharedWallsError(false);
-      } else if (accountRoute === "ready") {
-        void refreshSharedWalls();
-      }
+      if (userId && accountRoute === "ready") void refreshSharedWalls();
       return () => {
         pageGeneration.current++;
         sharedWallsFence.blur();
