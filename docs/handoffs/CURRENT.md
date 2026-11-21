@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-42 · Synchronize moderation contract with actor-gated Settings — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND test correction.** New isolated child of #125 immutable `6ea34043e7ad8eab001c921b8812ec083b748ce0`. PR #124's exact-head CI `44952933951` caught a stale source assertion in `tests/frontend-moderation.test.mjs` expecting unsafe direct `profile?.is_admin` in Settings even though BETA-P0-40 correctly changed that screen to require `profile.id === authenticated actor`. This test-only correction now positively checks that the Settings administrator affordance derives from `actorProfile` and that `actorProfile` is fail-closed on identity mismatch, while rejecting a direct stale-profile conditional. No production code, permissions or runtime changed. Historical #124 CI failed and cannot be called green by inheritance. This child must earn its own 4/4 CI and independent review/QA.
+
+**Gates:** exact commit/typecheck/lint/contracts/Postgres/Edge/media/Expo+native outputs. Status history #124/#125 source CI should be treated as noncertifying and the corrected accumulated candidate reviewed independently. No original production, hosted writes, migrations, main merge, deployment or tester invitation. First Enhanced Beta NO-GO: 6-digit SMTP OTP, 3 hosted JWT actors, C2/C3, Secret cron, 0031 deletion, native QA/rollback and independent gates outstanding; media/Secret/analytics OFF, domain and Apple held.
+
+**Next:** Verify #126 CI, compare regression to #124–#125 and then route exact integrated source for Reviewer and native QA; continue separate unblocked engineering work.
+
+
 ## CURRENT BETA-P0-41 · Profile tab header and sharing current-actor gate — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #124 immutable `951d19aeb9e2ebf4e2898a983505942f1ab65fe1`. The Profile tab counters already had actor-specific async fencing, but the avatar, name, handle, bio, social links and share destination still used the raw `profile` context without verifying `profile.id === session.user.id`. If a new session renders before its profile resolves, old-account private/identifying details and potentially the wrong Wall invite could be displayed. Bind all identity presentation and Share/Edit actions to matched actor profile, preserve the existing anonymous/empty fallback and counter fences. New source/matrix regression `tests/frontend-profile-view-actor-gate.test.mjs`. No new design, API, Auth, storage, schema or feature flag.
