@@ -50,7 +50,10 @@ def verify_synthetic_code(source, expected_name, expected_op):
     fn = tree.body[0]
     if fn.name != expected_name or fn.decorator_list or fn.returns is not None:
         raise ValueError("unexpected fixture function metadata")
-    if [a.arg for a in fn.args.args] != ["a", "b"] or fn.args.defaults or fn.args.kwonlyargs:
+    if ([a.arg for a in fn.args.args] != ["a", "b"]
+            or fn.args.defaults or fn.args.kwonlyargs or fn.args.kw_defaults
+            or fn.args.posonlyargs or fn.args.vararg or fn.args.kwarg
+            or any(arg.annotation is not None for arg in fn.args.args)):
         raise ValueError("unexpected fixture signature")
     if len(fn.body) != 1 or not isinstance(fn.body[0], ast.Return):
         raise ValueError("unexpected fixture body")
