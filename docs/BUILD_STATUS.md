@@ -1,5 +1,11 @@
 # The-Wall Build Status
 
+## Staging HTTP three-JWT privileged-key guard — 21 Nov 2026
+
+**BETA-P0-04; ARCHITECT sequencing → BACKEND implementation.** Isolated draft `codex/staging-jwt-public-key-guard-20261121` from PR #77 immutable head `3a79cdd2fb6e15fb1a6df5edefc4550b26d4eaf9`, not cloud-worker branch #81. Added public-only API-key and staging Auth JWT local claims preflight with hostile no-network tests to prevent misleading RLS results from privileged service-role/secret keys. No app/schema/hosted users/config/feature flags altered. Exact CI and independent Reviewer/QA required; **no authorized hosted three-actor fixture is available, so live JWT RLS PASS is not claimed**. Next: check draft PR CI/review; when verified SMTP and authorized staging identities exist, run real actor HTTP tests. Text-first internal-only; Enhanced Beta NO-GO.
+
+
+
 ## BETA-P0-04 authorized three-JWT HTTP read-only harness — 21 Nov 2026 (BACKEND draft)
 
 New isolated BACKEND test-only branch `codex/staging-three-jwt-readonly-20261121` descends from integrated application candidate PR #67 (not cloud-loop drafts). Added `scripts/staging-three-jwt-readonly.mjs`, six mock HTTP contract tests `tests/staging-three-jwt-readonly.test.mjs` (discovered by existing `npm run test:contracts`), and `docs/handoffs/STAGING_3_JWT_HTTP_READONLY_PREP_2026-11-21.md`. **Staging-only**, read-only six GETs, fail-closed on wrong origin/production, mismatched or duplicate JWT actor, unauthorized/missing known fixture and HTTP 401; checks actual `/auth/v1/user` identities and one private Shared-Wall owner/member/outsider RLS view. **No real JWTs or accounts supplied; not executed against staging**, which still has zero Auth users/Walls; mock success will not count as authentic HTTP E2E or QA. Next: exact-SHA CI, independent Reviewer review of harness, then authorized real tester identities and OTP/SMTP before live execution. Original production protected; Secret/media off; 0031 withheld; Enhanced Beta NO-GO.

@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BACKEND staging JWT audit key and actor guard — 21 Nov 2026 (draft only)
+
+**ARCHITECT sequencing → BACKEND implementation; BETA-P0-04.** New isolated branch `codex/staging-jwt-public-key-guard-20261121` descends from #77 head `3a79cdd2fb6e15fb1a6df5edefc4550b26d4eaf9` (CI 44886602983 success, no independent reviews). Read-only HTTP audit refuses service-role or secret API keys and JWTs without staging authenticated user role, subject, issuer, audience, expiry before network. Local claim decoding **does not verify signatures**, so existing server-side Auth identity check is mandatory. Added no-network hostile tests and legacy public anon-key positive test. No staging authorized three-actor fixture exists: **no real hosted JWT RLS test has run**. No Supabase write, production, deployment or feature activation. Next: new PR immutable-head CI and independent Reviewer/QA, then live authorized fixture. Enhanced Beta NO-GO.
+
+
+
 ## Three-actor authenticated HTTP negative harness PREPARED — 21 Nov 2026 (BACKEND only)
 
 Current isolated branch `codex/staging-three-jwt-readonly-20261121` based on application PR #67 `ebdf28c196a3f50e4b5218dd6038d12277d12953`. New opt-in, read-only 3-JWT staging HTTP probe and mocked unit tests + `docs/handoffs/STAGING_3_JWT_HTTP_READONLY_PREP_2026-11-21.md`. **No real JWT/auth user; no hosted execution**; staging has zero Auth users, Wall fixtures and marks. Exact next action: verify immutable PR CI tests (Node `test:contracts`), genuine independent Reviewer/QA; only after verified SMTP and authorized actors exercise six actual GETs then expand to caller-negative writes in separately approved disposable context. Media/Secret/analytics OFF, deletion 0031 withheld; production and Apple/domain protected. First Enhanced Beta NO-GO.

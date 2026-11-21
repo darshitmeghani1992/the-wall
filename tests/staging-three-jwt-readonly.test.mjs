@@ -4,17 +4,40 @@ import { runStagingJwtAudit } from '../scripts/staging-three-jwt-readonly.mjs';
 
 const HOST = 'https://ewintxgdxdvschiqodkq.supabase.co';
 const WALL_ID = '99999999-9999-4999-8999-999999999999';
+const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
+const OUTSIDER_ID = '33333333-3333-4333-8333-333333333333';
+
+// Deliberately unsigned mock JWT-shaped strings: no credentials are supplied.
+// The runtime separately calls the real staging Auth server to verify identity.
+function mockJwt(claims, suffix = 'mock') {
+  return [
+    Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
+    Buffer.from(JSON.stringify(claims)).toString('base64url'),
+    suffix,
+  ].join('.');
+}
+function actorJwt(id, override = {}) {
+  return mockJwt({
+    iss: HOST + '/auth/v1',
+    sub: id,
+    aud: 'authenticated',
+    role: 'authenticated',
+    exp: 4102444800,
+    ...override,
+  });
+}
 const base = {
   TW_STAGING_JWT_AUDIT_APPROVED: 'true',
   TW_STAGING_URL: HOST,
-  TW_STAGING_ANON_KEY: 'not-a-real-public-test-key',
+  TW_STAGING_ANON_KEY: 'sb_publishable_mock_staging_public',
   TW_PRIVATE_WALL_ID: WALL_ID,
-  TW_OWNER_ID: '11111111-1111-4111-8111-111111111111',
-  TW_MEMBER_ID: '22222222-2222-4222-8222-222222222222',
-  TW_OUTSIDER_ID: '33333333-3333-4333-8333-333333333333',
-  TW_OWNER_JWT: 'mockheader.owner.signature',
-  TW_MEMBER_JWT: 'mockheader.member.signature',
-  TW_OUTSIDER_JWT: 'mockheader.outsider.signature',
+  TW_OWNER_ID: OWNER_ID,
+  TW_MEMBER_ID: MEMBER_ID,
+  TW_OUTSIDER_ID: OUTSIDER_ID,
+  TW_OWNER_JWT: actorJwt(OWNER_ID),
+  TW_MEMBER_JWT: actorJwt(MEMBER_ID),
+  TW_OUTSIDER_JWT: actorJwt(OUTSIDER_ID),
 };
 
 function fakeNetwork(options = {}) {
@@ -28,7 +51,7 @@ function fakeNetwork(options = {}) {
     calls.push([url, init]);
     assert.equal(init.method, 'GET');
     assert.equal(init.redirect, 'error');
-    assert.equal(init.headers.apikey, base.TW_STAGING_ANON_KEY);
+    assert.equal(init.headers.apikey, options.apiKey || base.TW_STAGING_ANON_KEY);
     assert.equal(new URL(url).origin, HOST);
     const token = init.headers.Authorization.replace(/^Bearer /, '');
     if (options.http401) return { status: 401 };
@@ -98,4 +121,49 @@ test('auth checks happen before any wall lookup for each actor', async () => {
     ['/auth/v1/user', '/rest/v1/walls',
      '/auth/v1/user', '/rest/v1/walls',
      '/auth/v1/user', '/rest/v1/walls']);
+});
+
+test('rejects service-role/secret API keys before any HTTP request', async () => {
+  let calls = 0;
+  const noNetwork = async () => { calls++; throw Error('not allowed'); };
+  for (const key of [
+    'sb_secret_example_server_key',
+    mockJwt({ role: 'service_role' }, 'service'),
+    mockJwt({ role: 'authenticated' }, 'user'),
+    mockJwt({ role: 'anon' }, 'bad token with spaces'),
+    'opaque_unclassified_key',
+  ]) {
+    await assert.rejects(runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, noNetwork),
+      /Staging publishable\/anon key required/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('accepts legacy anon JWT-shaped public key only with anon role', async () => {
+  const key = mockJwt({ role: 'anon', iss: 'supabase' }, 'anon-signature');
+  const mock = fakeNetwork({ apiKey: key });
+  const result = await runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, mock.handler);
+  assert.equal(result.status, 'PASS');
+  assert.equal(mock.calls.length, 6);
+});
+
+test('refuses mismatched, expired and privileged actor claims before HTTP', async () => {
+  let calls = 0;
+  const noNetwork = async () => { calls++; throw Error('not allowed'); };
+  for (const claims of [
+    { sub: OUTSIDER_ID },
+    { role: 'service_role' },
+    { role: 'anon' },
+    { iss: 'https://wfsfafmgvxevpzrurofz.supabase.co/auth/v1' },
+    { aud: 'service_role' },
+    { exp: 1 },
+    { exp: '4102444800' },
+    { exp: undefined },
+  ]) {
+    await assert.rejects(runStagingJwtAudit({
+      ...base,
+      TW_OWNER_JWT: actorJwt(OWNER_ID, claims),
+    }, noNetwork), /Three distinct authenticated actor IDs\/JWTs required/);
+  }
+  assert.equal(calls, 0);
 });
