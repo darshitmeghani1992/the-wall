@@ -10,6 +10,38 @@
 const STAGING = 'https://ewintxgdxdvschiqodkq.supabase.co';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const STAGING_ISSUER = STAGING + '/auth/v1';
+
+// Decoding claims is only a local fail-closed sanity check, NOT signature
+// verification. /auth/v1/user still verifies each token on the staging server.
+function jwtClaims(token) {
+  if (typeof token !== 'string' || !TOKEN.test(token)) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    return claims && typeof claims === 'object' && !Array.isArray(claims) ? claims : null;
+  } catch {
+    return null;
+  }
+}
+
+function isPublicApiKey(key) {
+  if (typeof key !== 'string' || !key || /\s/.test(key)) return false;
+  if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) return true;
+  // Legacy Supabase anon keys are JWTs. Never accept a service_role token
+  // or a secret key in this RLS audit, even if the network calls look healthy.
+  return jwtClaims(key)?.role === 'anon';
+}
+
+function isStagingUserJwt(jwt, userId) {
+  const claims = jwtClaims(jwt);
+  return claims?.role === 'authenticated' &&
+    claims.sub === userId &&
+    claims.iss === STAGING_ISSUER &&
+    (claims.aud === 'authenticated' ||
+      (Array.isArray(claims.aud) && claims.aud.includes('authenticated'))) &&
+    Number.isSafeInteger(claims.exp) &&
+    claims.exp > Math.floor(Date.now() / 1000);
+}
 
 function checkedConfig(env) {
   if (env.TW_STAGING_JWT_AUDIT_APPROVED !== 'true') {
@@ -25,7 +57,7 @@ function checkedConfig(env) {
       base.search || base.hash || base.username || base.password) {
     throw new Error('Refusing non-staging Supabase URL');
   }
-  if (!env.TW_STAGING_ANON_KEY || /\s/.test(env.TW_STAGING_ANON_KEY)) {
+  if (!isPublicApiKey(env.TW_STAGING_ANON_KEY)) {
     throw new Error('Staging publishable/anon key required');
   }
   const actors = [
@@ -38,7 +70,7 @@ function checkedConfig(env) {
   }
   if (new Set(actors.map(a => a.id)).size !== 3 ||
       new Set(actors.map(a => a.jwt)).size !== 3 ||
-      actors.some(a => !UUID.test(a.id || '') || !TOKEN.test(a.jwt || ''))) {
+      actors.some(a => !UUID.test(a.id || '') || !isStagingUserJwt(a.jwt, a.id))) {
     throw new Error('Three distinct authenticated actor IDs/JWTs required');
   }
   return { apiKey: env.TW_STAGING_ANON_KEY, wallId: env.TW_PRIVATE_WALL_ID, actors };
