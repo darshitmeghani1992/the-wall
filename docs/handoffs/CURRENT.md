@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-46 · Generic unavailable deep-link acknowledgement bound to actor/reference — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #129 exact `c623076a6953da0fd10aff42ffb8f2dbecc895b1`, preserving previous stacked history without altering shared branches. The generic unavailable destination route stored one raw token and deduplicated claims only by opaque reference. If a viewer or reference changed during auth navigation, the previous token could continue to render a stale terminal state or be acknowledged from the old route. Scope claimed token to the authenticated viewer plus exact opaque reference; only acknowledge/display the matching token, and safely return Home for invalid/missing current claims. Helper has an executable actor/reference/readiness matrix and source wiring regression `tests/frontend-unavailable-link-actor.test.mjs`. No changes to deferred coordinator or permissions.
+
+**Gates:** Exact SHA GitHub CI (TS/lint/contracts/SQL/Edge/media/Expo/exports), independent REVIEWER and behavioral QA for A→B, ref R1→R2, invalid reference, signout and return from onboarding. No real-device or JWT proof from source tests. Staging-only, original production untouched. No hosted write, schema/Auth/RLS/API/flag, migration 0031, merge, deployment or tester invites. Enhanced Beta **NO-GO** pending real six-digit SMTP OTP, three JWT actors, private media C2/C3, Secret expiry, account deletion, device and rollback, independent gates and Founder GO. Secret/media/analytics OFF; domain/DNS/Apple held.
+
+**Next:** Verify PR #130 exact-head CI and request independent Reviewer/QA; continue remaining unblocked scope on a new branch.
+
+
 ## CURRENT BETA-P0-45 · Shared Wall invite preview, response and lock actor/route isolation — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #128 exact `d4b12e83bb78d8984ccf8bf335554f31b2a121d7` preserving draft ancestry. `app/shared/invite/[id].tsx` held prior account's invitation name, inviter, privacy and response state until focus cleanup; a route change could show a previous private invitation, while claimed deferred references were deduplicated only by reference and a stale `respond` finally could release another account's mutation lock. Add viewer+Wall+deferred-reference key; show invite/errors/actions only after the exact key loads; reject stale resolution and retry, scope deferred token to exact key, and separate mutation fence from read fence to avoid stale response unlocks. No changes to backend invite authorization or existing coordinator. Executable key matrix + source guards in `tests/frontend-shared-invite-actor-route.test.mjs`.
