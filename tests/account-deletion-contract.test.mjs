@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   canOfferAccountRecovery,
+  currentAccountRecoveryStatus,
   parseAccountDeletionRequest,
   parseCurrentAccountDeletion,
   reconcileCommittedDeletion,
@@ -67,6 +68,32 @@ test("recovery is offered only after an authoritative restorable status", () => 
     requestedAt: scheduled.requested_at,
     purgeAfter: scheduled.purge_after,
   }), true);
+});
+
+test("recovery status never exposes another actor's deadline or stale retry result", () => {
+  const deletion = {
+    status: "scheduled",
+    requestedAt: scheduled.requested_at,
+    purgeAfter: scheduled.purge_after,
+  };
+  const snapshot = { actorId: "actor-a", requestId: 2, loadState: "ready", deletion };
+  const available = { loadState: "ready", deletion };
+  const hidden = { loadState: "loading", deletion: null };
+  assert.deepEqual(currentAccountRecoveryStatus("actor-a", "deactivated", 2, snapshot), available);
+  for (const [actor, route, revision] of [
+    ["actor-b", "deactivated", 2],
+    ["actor-a", "ready", 2],
+    ["actor-a", "deactivated", 3],
+    [null, "deactivated", 2],
+  ]) {
+    const result = currentAccountRecoveryStatus(actor, route, revision, snapshot);
+    assert.deepEqual(result, hidden);
+    assert.equal(canOfferAccountRecovery(result.loadState, result.deletion), false);
+  }
+  const failed = currentAccountRecoveryStatus("actor-a", "deactivated", 2, {
+    actorId: "actor-a", requestId: 2, loadState: "error", deletion,
+  });
+  assert.deepEqual(failed, { loadState: "error", deletion: null });
 });
 
 test("a post-commit refresh failure is never reported as a scheduling failure", async () => {

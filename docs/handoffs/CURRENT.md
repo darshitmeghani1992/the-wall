@@ -1,5 +1,13 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-47 · Recovery deletion status actor/retry fence — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** New draft child of #130 immutable `1370796449febf194051ead38d4b67755e6d06ea` on `codex/beta-recovery-status-actor-revision-20261122-run15`. The account-recovery screen's fetched deletion schedule and restore affordance were not actor-scoped during pre-effect account switches. The current render now derives status and deadline only when actor, `deactivated` route and retry revision match the fetched result; former actor's pending restore cannot keep a new actor busy. Regression covers A→B, expired/ready/error, retry, signout and delayed promises at source/contract level. Independent Reviewer and real behavioral QA still required for this exact candidate; static tests alone are not device proof.
+
+**Unchanged release gates:** Staging `ewintxgdxdvschiqodkq` only; original production untouched. No hosted writes, 0031, merge, deployment, tester invitation, domain/DNS or Apple work. Media/Secret/analytics OFF. Enhanced Beta **NO-GO** until true SMTP six-digit OTP, real three-JWT positive/negative access, protected media C2/C3, Secret cleanup, account deletion and native/device/rollback/independent review evidence.
+
+**Next:** Verify own exact-head CI and SHA/tree, record independent Reviewer/QA, continue next unblocked scoped beta implementation.
+
 ## CURRENT BETA-P0-46 · Generic unavailable deep-link acknowledgement bound to actor/reference — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #129 exact `c623076a6953da0fd10aff42ffb8f2dbecc895b1`, preserving previous stacked history without altering shared branches. The generic unavailable destination route stored one raw token and deduplicated claims only by opaque reference. If a viewer or reference changed during auth navigation, the previous token could continue to render a stale terminal state or be acknowledged from the old route. Scope claimed token to the authenticated viewer plus exact opaque reference; only acknowledge/display the matching token, and safely return Home for invalid/missing current claims. Helper has an executable actor/reference/readiness matrix and source wiring regression `tests/frontend-unavailable-link-actor.test.mjs`. No changes to deferred coordinator or permissions.
