@@ -1,5 +1,13 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-48 · Composer draft reset on account/destination change — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** New child of #131 exact `c415d1bd6c4151dca795533b91c331f18dce647e` on isolated `codex/beta-composer-actor-target-remount-20261122-run15`. Compose screen uses authenticated actor+Wall/recipient/Shared destination as the child React key. A switched actor/target no longer inherits previous draft, verified target, media upload state or submit locks during pre-effect render. Old draft's cleanup remains attached to its unmounted editor. Pure actor/destination matrix and source wiring test added; server authorization unchanged.
+
+**Pending:** exact candidate CI, independent REVIEWER and behavioral QA on device/simulator for A→B, target X→Y, in-flight send/upload, unsaved draft and deep links. No staging writes, 0031, main merge, rollout, invitations or original production access. Enhanced Beta NO-GO: real OTP, 3 JWT actors, C2/C3 media, Secret cron, deletion, device/rollback independent gates. Media/Secret/analytics OFF; domain/Apple held.
+
+**Next:** Check own SHA/tree CI and independent verification, proceed on the next nonoverlapping task.
+
 ## CURRENT BETA-P0-47 · Recovery deletion status actor/retry fence — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** New draft child of #130 immutable `1370796449febf194051ead38d4b67755e6d06ea` on `codex/beta-recovery-status-actor-revision-20261122-run15`. The account-recovery screen's fetched deletion schedule and restore affordance were not actor-scoped during pre-effect account switches. The current render now derives status and deadline only when actor, `deactivated` route and retry revision match the fetched result; former actor's pending restore cannot keep a new actor busy. Regression covers A→B, expired/ready/error, retry, signout and delayed promises at source/contract level. Independent Reviewer and real behavioral QA still required for this exact candidate; static tests alone are not device proof.

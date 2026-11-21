@@ -20,6 +20,7 @@ import {
   type PreparedTextMarkSubmission,
 } from "@/lib/mark-writer-contract";
 import { createTextMark, protectedMediaWriterRpc, type MarkWithAuthor } from "@/lib/marks";
+import { composerScopeKey } from "@/lib/composer-scope";
 import { getPersonalWall } from "@/lib/profiles";
 import { formatDuration, MAX_VIDEO_MS, useVoiceRecorder } from "@/lib/recording";
 import {
@@ -114,7 +115,18 @@ function DraftCard({ draft, index, count, disabled, onRemove, onRetry, onMove, o
   </View>;
 }
 
+/** Mount a fresh editor for each authenticated actor and exact navigation destination. */
 export default function Composer() {
+  const { session } = useAuth();
+  const { wallId, recipientId, handle, sharedWallId, wallName } = useLocalSearchParams<{
+    wallId?: string; recipientId?: string; handle?: string; sharedWallId?: string; wallName?: string;
+  }>();
+  return <ComposerSession key={composerScopeKey(session?.user.id ?? null, {
+    wallId, recipientId, handle, sharedWallId, wallName,
+  })} />;
+}
+
+function ComposerSession() {
   const router = useRouter();
   const navigation = useNavigation();
   const { wallId: targetWallId, recipientId, handle, sharedWallId, wallName } = useLocalSearchParams<{
