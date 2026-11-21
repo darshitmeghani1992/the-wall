@@ -101,6 +101,14 @@ reset role;
 update public.profiles
    set account_status='suspended',deactivated_at=null
  where id='88888888-8888-8888-8888-888888888888';
+do $suspension_fixture$
+begin
+  if (select account_status from public.profiles
+      where id='88888888-8888-8888-8888-888888888888') is distinct from 'suspended'
+  then
+    raise exception '73 FAIL: suspended owner fixture did not transition to suspended';
+  end if;
+end $suspension_fixture$;
 set local role authenticated;
 set local "test.uid"='88888888-8888-8888-8888-888888888888';
 do $suspended_owner$
@@ -110,6 +118,18 @@ begin
     raise exception '73 FAIL: suspended owner can SELECT private Shared Wall';
   end if;
 end $suspended_owner$;
+-- A denied read can mask an overly permissive write policy when RETURNING
+-- is present, so exercise the INSERT policy by itself as well.
+do $suspended_owner_plain_insert$
+begin
+  begin
+    insert into public.walls(owner_id,type,name,visibility,open_join,allow_anonymous)
+    values(auth.uid(),'shared','73 forbidden suspended owner plain insert','private',false,false);
+    raise exception '73 FAIL: suspended owner created Shared Wall via plain INSERT';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $suspended_owner_plain_insert$;
 do $suspended_owner$
 declare v_suspended_id uuid; did_deny boolean:=false;
 begin
