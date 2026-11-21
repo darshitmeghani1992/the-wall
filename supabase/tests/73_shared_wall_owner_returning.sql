@@ -103,14 +103,14 @@ update public.profiles
  where id='88888888-8888-8888-8888-888888888888';
 set local role authenticated;
 set local "test.uid"='88888888-8888-8888-8888-888888888888';
-do $
+do $suspended_owner$
 declare wid uuid:=current_setting('tw.returning_wall')::uuid;
 begin
   if exists(select 1 from public.walls where id=wid) then
     raise exception '73 FAIL: suspended owner can SELECT private Shared Wall';
   end if;
-end $;
-do $
+end $suspended_owner$;
+do $suspended_owner$
 declare v_suspended_id uuid; did_deny boolean:=false;
 begin
   begin
@@ -123,7 +123,7 @@ begin
   if not did_deny then
     raise exception '73 FAIL: suspended owner created Shared Wall via INSERT RETURNING';
   end if;
-end $;
+end $suspended_owner$;
 
 rollback;
 \echo '73 (owner RETURNING + outsider spoof + deactivated/suspended denial): PASS'
