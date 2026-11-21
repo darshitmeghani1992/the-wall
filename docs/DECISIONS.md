@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-18 · 2026-11-21 · Free-first agent preparation with no billing or credentials
+- **Decision:** Use existing public GitHub-hosted standard runner for zero-charge development smoke; keep Gemini headless integration unconfigured until free-tier eligibility/account authentication is verified. Do not use potentially billed model endpoints merely because an API key exists.
+- **Evidence:** GitHub public-runner free policy and Gemini API free-model/headless-auth documentation linked in `docs/architecture/FREE_FIRST_WORKER_V2.md`. New smoke has read-only GitHub token, no cloud API credential, preflight denial of production/project and paid settings.
+- **Limits:** Manual dry run is not autonomous cloud coding. Durable leases, triggered execution and authenticated AI agent remain missing; external account action unavoidable. Reversible draft-only change; no main merge, payment, hosted write, or release.
+
+
 ## D-17 · 2026-11-21 · Choose GitHub-hosted ephemeral Linux as cloud worker computer, keep AI billing separate and disabled
 - **Decision:** Prefer existing GitHub-hosted Ubuntu runners instead of a dedicated paid VM for first external coding-agent loop; reserve model/provider decision for explicit account/cost approval. GitHub public standard runner compute may be included, but model inference and optional hosting remain separately billable.
 - **Security:** The configuration begins disabled and zero budget; no secrets in PR CI, no privileged service-role Supabase credentials, no auto-merge/deploy, staging only; three-worker ceiling, durable leases and independent Reviewer/QA required before activation.
