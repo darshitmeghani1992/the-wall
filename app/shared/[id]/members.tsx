@@ -30,6 +30,8 @@ export default function SharedWallMembersScreen() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
+  // Invite-lookup requests have a separate generation from member loads and mutations.
+  const searchFence = useRef(new SessionFocusFence()).current;
   // Keep mutation ownership separate from fetch/search generations.
   const mutationFence = useRef(new SessionFocusFence()).current;
   const mutationInFlight = useRef(false);
@@ -58,21 +60,29 @@ export default function SharedWallMembersScreen() {
   }, [fence, userId, wallId]);
 
   useFocusEffect(useCallback(() => {
-    fence.focus(userId ?? null); mutationFence.focus(userId ?? null); setWall(null); setMembers([]); setRemoved([]); setResults([]); setBusyId(null);
+    fence.focus(userId ?? null); searchFence.focus(userId ?? null); mutationFence.focus(userId ?? null);
+    setWall(null); setMembers([]); setRemoved([]); setResults([]); setBusyId(null);
+    // Invite searches and their query belong only to the current screen/account.
+    setQuery(""); setSearching(false); setError(null); setIsOwner(false);
     if (userId && wallId) void load(); else setLoading(false);
-    return () => { fence.blur(); mutationFence.blur(); endExclusiveMutation(mutationInFlight); setBusyId(null); };
-  }, [fence, load, mutationFence, userId, wallId]));
+    return () => { fence.blur(); searchFence.blur(); mutationFence.blur(); endExclusiveMutation(mutationInFlight); setBusyId(null); };
+  }, [fence, load, mutationFence, searchFence, userId, wallId]));
 
   async function search() {
-    if (!userId || !isOwner || !query.trim()) return;
-    const token = fence.begin(userId); if (!token) return;
+    const queryAtStart = query.trim();
+    if (!userId || !isOwner || !queryAtStart) return;
+    const token = searchFence.begin(userId); if (!token) return;
     setSearching(true); setError(null);
     try {
-      const people = await searchPeople(userId, query);
-      if (fence.isCurrent(token, currentUserId.current)) setResults(people.filter((person) => person.profile.id !== wall?.owner_id));
+      const people = await searchPeople(userId, queryAtStart);
+      if (searchFence.isCurrent(token, currentUserId.current)) {
+        setResults(people.filter((person) => person.profile.id !== wall?.owner_id));
+      }
     } catch (cause: any) {
-      if (fence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Search didn't work.");
-    } finally { if (fence.isCurrent(token, currentUserId.current)) setSearching(false); }
+      if (searchFence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Search didn't work.");
+    } finally {
+      if (searchFence.isCurrent(token, currentUserId.current)) setSearching(false);
+    }
   }
 
   async function invite(personId: string) {
@@ -163,7 +173,7 @@ export default function SharedWallMembersScreen() {
       {error ? <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: 12 }}>{error}</Text> : null}
       {loading ? <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 36 }} /> : wall ? (
         <>
-          {isOwner ? <View style={{ marginTop: 20 }}><Input label="INVITE A REGISTERED USER" value={query} onChangeText={(value) => { setQuery(value); setResults([]); }} onSubmitEditing={() => void search()} placeholder="name or handle" autoCapitalize="none" returnKeyType="search" /><Pressable accessibilityRole="button" accessibilityState={{ disabled: !query.trim() || searching, busy: searching }} disabled={!query.trim() || searching} onPress={() => void search()} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>{searching ? <ActivityIndicator color={markColors.brandYellow} /> : <Text variant="label">SEARCH</Text>}</Pressable>{results.map((person) => <PersonRow key={person.profile.id} profile={person.profile} detail="Registered user" action="Invite" disabled={busyId === person.profile.id} onPress={() => router.push(`/person/${person.profile.id}`)} onAction={() => void invite(person.profile.id)} />)}</View> : null}
+          {isOwner ? <View style={{ marginTop: 20 }}><Input label="INVITE A REGISTERED USER" value={query} onChangeText={(value) => { setQuery(value); searchFence.focus(userId ?? null); setSearching(false); setResults([]); setError(null); }} onSubmitEditing={() => void search()} placeholder="name or handle" autoCapitalize="none" returnKeyType="search" /><Pressable accessibilityRole="button" accessibilityState={{ disabled: !query.trim() || searching, busy: searching }} disabled={!query.trim() || searching} onPress={() => void search()} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>{searching ? <ActivityIndicator color={markColors.brandYellow} /> : <Text variant="label">SEARCH</Text>}</Pressable>{results.map((person) => <PersonRow key={person.profile.id} profile={person.profile} detail="Registered user" action="Invite" disabled={busyId === person.profile.id} onPress={() => router.push(`/person/${person.profile.id}`)} onAction={() => void invite(person.profile.id)} />)}</View> : null}
 
           <Section label={`ACCEPTED · ${members.filter((member) => member.status === "accepted").length}`}>
             {members.filter((member) => member.status === "accepted").map((member) => <PersonRow key={member.user_id} profile={member.profile ?? unavailableProfile(member.user_id)} detail="Member" action={isOwner ? "Remove" : undefined} secondaryAction={isOwner ? "Transfer" : undefined} disabled={busyId === member.user_id} secondaryDisabled={busyId === member.user_id || !member.profile} onPress={member.profile ? () => router.push(`/person/${member.user_id}`) : undefined} onAction={isOwner ? () => confirmRemove(member) : undefined} onSecondaryAction={isOwner ? () => confirmTransfer(member) : undefined} />)}
