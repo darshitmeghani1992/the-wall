@@ -23,7 +23,7 @@ jobs:
   two-task-pilot:
     permissions:
       contents: read
-    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && inputs.confirmation == 'FREE' }}
+    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && github.ref == 'refs/heads/main' && github.actor == 'darshitmeghani1992' && inputs.confirmation == 'FREE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: gemini-free-smoke
