@@ -34,6 +34,7 @@ export default function StatusScreen() {
   const [busy, setBusy] = useState<"saving" | "removing" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loadedSubject, setLoadedSubject] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
   const removalGuard = useRef(new StatusRemovalGuard()).current;
   const pendingRemovalAction = useRef<RemovalAction | null>(null);
@@ -42,10 +43,15 @@ export default function StatusScreen() {
   const [removalRevision, setRemovalRevision] = useState(0);
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
+  const subject = userId && wallId ? `${userId}:${wallId}` : null;
+  const currentSubjectLoaded = subject !== null && loadedSubject === subject;
+  const visibleStatus = currentSubjectLoaded ? status : null;
+  const visibleBody = currentSubjectLoaded ? body : "";
 
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null);
     if (!token || !wallId) return;
+    setLoadedSubject(null);
     setLoading(true);
     setError(null);
     setLoadFailed(false);
@@ -56,6 +62,10 @@ export default function StatusScreen() {
       ]);
       if (!fence.isCurrent(token, currentUserId.current)) return;
       if (!capabilities || capabilities.wallType !== "personal" || !capabilities.isOwner) {
+        setStatus(null);
+        setBody("");
+        setOriginalBody("");
+        setLoadedSubject(`${token.userId}:${wallId}`);
         setLoadFailed(true);
         setError("This Status isn't available.");
         return;
@@ -64,8 +74,13 @@ export default function StatusScreen() {
       setStatus(nextStatus);
       setBody(nextBody);
       setOriginalBody(nextBody);
+      setLoadedSubject(`${token.userId}:${wallId}`);
     } catch (cause: any) {
       if (fence.isCurrent(token, currentUserId.current)) {
+        setStatus(null);
+        setBody("");
+        setOriginalBody("");
+        setLoadedSubject(`${token.userId}:${wallId}`);
         setError(cause?.message ?? "Couldn't load your Status.");
         setLoadFailed(true);
       }
@@ -80,6 +95,7 @@ export default function StatusScreen() {
       setStatus(null);
       setBody("");
       setOriginalBody("");
+      setLoadedSubject(null);
       setBusy(null);
       setError(null);
       setLoadFailed(false);
@@ -95,6 +111,7 @@ export default function StatusScreen() {
         setStatus(null);
         setBody("");
         setOriginalBody("");
+        setLoadedSubject(null);
         setBusy(null);
         setError(null);
         setLoadFailed(false);
@@ -103,10 +120,10 @@ export default function StatusScreen() {
     }, [fence, load, userId, wallId]),
   );
 
-  const draft = normalizeStatusDraft(body);
-  const inputCount = statusCharacterCount(body);
-  const changed = draft.body !== originalBody;
-  const canSave = !loading && !busy && !loadFailed && draft.valid && changed;
+  const draft = normalizeStatusDraft(visibleBody);
+  const inputCount = statusCharacterCount(visibleBody);
+  const changed = currentSubjectLoaded && draft.body !== originalBody;
+  const canSave = currentSubjectLoaded && !loading && !busy && !loadFailed && draft.valid && changed;
   removalGuard.setDirty(changed);
 
   const queueApprovedRemoval = useCallback((action?: RemovalAction) => {
@@ -170,7 +187,7 @@ export default function StatusScreen() {
   }
 
   async function save() {
-    if (!userId || !canSave) return;
+    if (!userId || !currentSubjectLoaded || !canSave) return;
     if (!removalGuard.beginOperation()) return;
     const token = fence.begin(userId);
     if (!token) {
@@ -198,7 +215,7 @@ export default function StatusScreen() {
   }
 
   async function remove() {
-    if (!userId || !status || busy) return;
+    if (!userId || !currentSubjectLoaded || !visibleStatus || busy) return;
     if (!removalGuard.beginOperation()) return;
     const token = fence.begin(userId);
     if (!token) {
@@ -226,7 +243,7 @@ export default function StatusScreen() {
   }
 
   function confirmRemove() {
-    if (busy || !status) return;
+    if (busy || !currentSubjectLoaded || !visibleStatus) return;
     Alert.alert("Remove Status?", "It will disappear from your Personal Wall.", [
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: () => void remove() },
@@ -236,7 +253,7 @@ export default function StatusScreen() {
   return (
     <Screen dockInset={false}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-        <Text variant="display" style={{ fontSize: 26 }}>{status ? "Edit Status" : "Set a Status"}</Text>
+        <Text variant="display" style={{ fontSize: 26 }}>{visibleStatus ? "Edit Status" : "Set a Status"}</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close Status editor"
@@ -248,17 +265,19 @@ export default function StatusScreen() {
         </Pressable>
       </View>
 
-      {loading ? (
+      {loading || (Boolean(subject) && !currentSubjectLoaded) ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} />
+      ) : !subject ? (
+        <Text accessibilityRole="alert" variant="body" color={colors.error}>This Status isn't available.</Text>
       ) : (
         <View style={{ gap: 16, marginTop: 22 }}>
           <Input
             label="Your Status"
             accessibilityLabel="Your Status"
             placeholder="What should your people know?"
-            value={body}
+            value={visibleBody}
             onChangeText={setBody}
-            editable={!busy && !loadFailed}
+            editable={currentSubjectLoaded && !busy && !loadFailed}
             multiline
             textAlignVertical="top"
             style={{ minHeight: 132, paddingTop: 14 }}
@@ -291,13 +310,13 @@ export default function StatusScreen() {
           ) : null}
 
           <Button
-            label={status ? "Save Status" : "Set Status"}
+            label={visibleStatus ? "Save Status" : "Set Status"}
             variant="yellow"
             loading={busy === "saving"}
             disabled={!canSave}
             onPress={() => void save()}
           />
-          {status ? (
+          {visibleStatus ? (
             <Button
               label="Remove Status"
               variant="ghost"
