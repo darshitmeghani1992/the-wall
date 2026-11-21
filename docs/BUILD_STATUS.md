@@ -1,5 +1,13 @@
 # The-Wall Build Status
 
+## BETA-P0-29 · Hide previous-account blocked-user roster before focus reset — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated descendant of #112 immutable `9ffc0e947dcc085d2c71be8a7cba6396d39a2541` while preserving historical #30→#112 draft lineage. In `app/blocked-users.tsx` stale blocked user names, pagination or prior errors could briefly appear on a new account's pre-focus render, although already-ongoing HTTP reads were fenced by authenticated actor. A new `loadedActorId` render gate now hides blocked-list UI until a result or error belongs to the current actor. Current-actor failed/unavailable responses still reach existing retry, including API error states. Adds `tests/frontend-blocked-user-actor-display.test.mjs` covering wiring and A→B display behavior.
+
+**Verification:** Parent #112 CI and exact child CI are distinct; new HEAD CI, independent Reviewer and behavioral QA remain required (account A→B before focus, delayed response, block list pages, authorized empty/error/retry, logout). Source/Node tests do not certify native behavior or RLS. No backend/API, Auth, schema, flags, migrations, hosted writes, production access, merge, deployment, or invitations. Enhanced Beta **NO-GO** pending real six-digit SMTP OTP, three real JWT actors, private media C2/C3, Secret scheduler, deletion 0031/worker, installed-device QA/rollback, Reviewer and Founder GO. Domain/DNS and Apple held.
+
+**Next:** Record immutable SHA/tree and CI, request independent code review and distinct behavioral QA; continue remaining unblocked work without editing leased branches.
+
 ## BETA-P0-28 · Admin moderation queue actor-bound render guard — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated descendant of #111 exact `2ab2890dcfef1e296e0edab167fec99cecfa4d96`, preserving #30→#111 draft ancestry and not modifying prior worker branches. The moderation screen fenced asynchronous report requests by actor, but retained already-rendered administrator report rows, action audit history and errors until the next focus effect. During admin A→admin B switching, a render before the focus cleanup could disclose A's sensitive report queue. A render-level `loadedActorId` guard now hides previous actor data immediately, preserves current-actor error/retry on failure, and does not modify server authorization or moderation actions. Added `tests/frontend-moderation-actor-display.test.mjs` source and state regression.

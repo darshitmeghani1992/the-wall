@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-29 · Blocked identities actor-bound display guard — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #112 exact `9ffc0e947dcc085d2c71be8a7cba6396d39a2541`. Account-switch renders could disclose cached previous-account blocked users before `useFocusEffect` cleanup. `app/blocked-users.tsx` now gates roster and errors on currently loaded actor, while tagging current-actor success and error/expired page states so retries still work. Regression `tests/frontend-blocked-user-actor-display.test.mjs`. Requires exact-commit CI, independent Reviewer and actual simulator/device QA of account A→B, failure/retry and pagination. No hosted/production mutation, main merge or release. Enhanced Beta NO-GO; media/Secret/analytics OFF; Founder domain/Apple holds remain.
+
+**Next:** Complete exact-tree verification and independent Reviewer/QA; return to higher-impact staging OTP and three-JWT gates once authorized accounts/sender exist.
+
 ## BETA-P0-28 · Moderator report visibility on administrator account switch — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Child of #111 exact `2ab2890dcfef1e296e0edab167fec99cecfa4d96`. Fixed a pre-focus-render privacy exposure in `app/moderation.tsx`: old administrator report/audit rows or error could be visible to a newly signed-in administrator while current-actor fetch was still starting. Gate entire report UI to the actor that produced the current fetch result; retain non-admin deny and error/retry. New Node source/state contract; child CI plus independent Reviewer and simulator/device QA are required, not self-certified. No hosted/production writes or feature flag activation, mergers, deployments or invitations.
