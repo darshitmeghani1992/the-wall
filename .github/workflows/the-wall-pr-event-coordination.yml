@@ -1,0 +1,169 @@
+name: The-Wall PR event coordination
+
+# SECURITY: pull_request_target runs this trusted workflow from the default
+# branch. NEVER checkout a PR head or execute user-provided PR code here.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, closed]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  actions: read
+  issues: write
+
+# Exactly one coordinator at a time. GitHub Actions may coalesce queued PR
+# events; every completed run reads the latest canonical repository state.
+concurrency:
+  group: the-wall-pr-event-coordinator
+  cancel-in-progress: false
+
+jobs:
+  coordinate:
+    name: PR activity -> canonical issue 57
+    if: github.repository == 'darshitmeghani1992/the-wall'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect event, verify current PR SHA/CI/reviews, reconcile checkpoint
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owner = 'darshitmeghani1992';
+            const repo = 'the-wall';
+            const issue_number = 57;
+            const marker = '<!-- the-wall-native-pr-event-coordinator-v1 -->';
+            const prNumber = context.payload.pull_request?.number;
+            if (!Number.isInteger(prNumber) || prNumber < 1) {
+              core.info('No PR number in the event; do nothing.');
+              return;
+            }
+
+            // Fetch only via typed GitHub APIs. Never checkout head code,
+            // run a PR-authored script, invoke external models or use secrets.
+            const pr = (await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            })).data;
+            const sha = pr.head.sha;
+            const [checks, reviews, issue, openPulls, branches] = await Promise.all([
+              github.paginate(github.rest.checks.listForRef, {
+                owner, repo, ref: sha, per_page: 100,
+              }),
+              github.paginate(github.rest.pulls.listReviews, {
+                owner, repo, pull_number: prNumber, per_page: 100,
+              }),
+              github.rest.issues.get({ owner, repo, issue_number }),
+              github.paginate(github.rest.pulls.list, {
+                owner, repo, state: 'open', per_page: 100,
+              }),
+              github.paginate(github.rest.repos.listBranches, {
+                owner, repo, per_page: 100,
+              }),
+            ]);
+
+            // Superseded approvals are NOT valid for a later SHA. This is an
+            // informational snapshot only; independent Reviewer/QA remain gates.
+            const currentReview = new Map();
+            for (const review of reviews) {
+              if (!review.user || !review.submitted_at) continue;
+              const old = currentReview.get(review.user.login);
+              if (!old || old.submitted_at < review.submitted_at) {
+                currentReview.set(review.user.login, review);
+              }
+            }
+            const verified = checks.filter(c => c.head_sha === sha);
+            const checkSummary = verified.map(c => ({
+              name: c.name,
+              status: c.status,
+              conclusion: c.conclusion ?? 'pending',
+            })).sort((a, b) => a.name.localeCompare(b.name));
+            const reviewSummary = [...currentReview.values()].map(r => ({
+              reviewer: r.user.login,
+              state: r.state,
+              commit: r.commit_id || 'unknown',
+              currentHead: r.commit_id === sha,
+            })).sort((a, b) => a.reviewer.localeCompare(b.reviewer));
+
+            // Prefer the current integrated candidate's canonical BUILD_STATUS.
+            // It is read as TEXT, never evaluated as directions or code.
+            let buildStatus = 'Unavailable from current integrated candidate';
+            try {
+              const file = await github.rest.repos.getContent({
+                owner, repo, path: 'docs/BUILD_STATUS.md',
+                ref: 'codex/beta-reconciled-test-candidate',
+              });
+              if (!Array.isArray(file.data) && file.data.content) {
+                const body = Buffer.from(file.data.content, 'base64').toString('utf8');
+                const headings = body.split('\\n')
+                  .filter(line => /^#{2,3} /.test(line))
+                  .slice(0, 8);
+                buildStatus = headings.join(' | ').slice(0, 900) || 'Document read; no headings';
+              }
+            } catch (e) {
+              core.warning('Canonical BUILD_STATUS could not be read; issue #57 remains source of queue.');
+            }
+
+            // Candidate, NOT a certified "unblocked" assertion. Any worker
+            // must verify ownership, CI, dependency and Founder gates itself.
+            const queue = (issue.data.body || '').split('\\n')
+              .filter(line => /^- \\[ \\] /.test(line));
+            const candidate = queue.find(line =>
+              !/founder-owned|external setup|signing|smtp|testflight/i.test(line)
+            ) || 'Reconcile latest open PRs and issue #57; no independently verified unblocked item';
+            const refs = openPulls.map(p => p.head.ref);
+            const ownedBranchHint = refs.includes(pr.head.ref)
+              ? 'PR branch is active; do not edit it without verifying worker ownership'
+              : 'Closed PR branch; do not assume it is available for edits';
+
+            const snapshot = JSON.stringify({
+              pr: prNumber, sha, state: pr.state, draft: pr.draft,
+              base: pr.base.ref, checks: checkSummary, reviews: reviewSummary,
+              candidate, branchCount: branches.length,
+            });
+            // The stable marker allows a single checkpoint comment, without
+            // flooding issue #57 or duplicating an existing engineering loop.
+            const content = [
+              marker,
+              '### PR-event coordinator — latest snapshot',
+              `- Event: ${context.eventName} / ${context.payload.action || 'updated'}`,
+              `- PR: #${prNumber}; state=${pr.state}; draft=${pr.draft}`,
+              `- Exact HEAD SHA: \`${sha}\`; base branch: \`${pr.base.ref}\``,
+              `- CI on exact SHA: ${JSON.stringify(checkSummary).slice(0, 3500)}`,
+              `- Review states (independent approval still required): ${JSON.stringify(reviewSummary).slice(0, 2800)}`,
+              `- Active open PR branches: ${refs.length}; repository branch names read: ${branches.length}`,
+              `- Ownership: ${ownedBranchHint}`,
+              `- Canonical queue: [issue #57](https://github.com/${owner}/${repo}/issues/57), and \`docs/BUILD_STATUS.md\` on the integrated candidate`,
+              `- BUILD_STATUS sections seen: ${buildStatus}`,
+              `- Next candidate to revalidate: ${candidate.slice(0, 700)}`,
+              '- Dispatch: **not performed**; no verified Codex Cloud dispatch tool is exposed to this workflow.',
+              '- Limits: **one coordination worker**, no branch edits, model API calls, migrations, merges, deployments, or production Supabase access.',
+              '- Release gates: Founder → independent Reviewer → independent QA; no certification inferred from green CI.',
+              `<!-- fingerprint:${Buffer.from(snapshot).toString('base64url').slice(0, 4000)} -->`,
+            ].join('\\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c =>
+              c.body?.startsWith(marker) && c.user?.type === 'Bot'
+            );
+            if (existing?.body === content) {
+              core.info('Identical checkpoint already recorded. No duplicate edit.');
+              return;
+            }
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body: content,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number, body: content,
+              });
+            }
+            core.info('PR-event checkpoint reconciled; no Codex dispatch performed.');
