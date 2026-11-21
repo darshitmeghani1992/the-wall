@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-19 · 2026-11-21 · Prepare one-request Gemini free-tier authentication smoke, not coding activation
+- **Founder evidence:** User reports creating Google AI Studio Free-tier project and saving `GEMINI_API_KEY` through GitHub secrets. Never disclose or copy the key. Billing absence cannot be inferred from user's free tier label alone.
+- **Decision:** Probe only `gemini-2.5-flash-lite` with an exact static test phrase, using the secret **only** inside a manual GitHub workflow after independent review. No repository source/metadata sent, no response body logged, one request/no retries. Environment, permissions and no-spend configuration fail closed. Paid fallback never configured.
+- **Activation gate:** New workflow must be reviewed and integrated with approved GitHub workflow controls before manual dispatch; no source SHA or CI proof can claim live authentication before that explicit run. Review Github permissions and default-branch workflow availability. A working credential probe is not a coding-agent runtime or continuing dispatch.
+- **Next:** PR review and CI, then one manual credential proof, and separate durable task leasing/agent-sandbox execution work.
+
+
 ## D-18 · 2026-11-21 · Free-first agent preparation with no billing or credentials
 - **Decision:** Use existing public GitHub-hosted standard runner for zero-charge development smoke; keep Gemini headless integration unconfigured until free-tier eligibility/account authentication is verified. Do not use potentially billed model endpoints merely because an API key exists.
 - **Evidence:** GitHub public-runner free policy and Gemini API free-model/headless-auth documentation linked in `docs/architecture/FREE_FIRST_WORKER_V2.md`. New smoke has read-only GitHub token, no cloud API credential, preflight denial of production/project and paid settings.
