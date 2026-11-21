@@ -34,8 +34,7 @@ test("switching Discover category invalidates the old result and clears its spin
   assert.match(tabPress, /searchFence\.current\.focus\(userId \?\? null\)/);
   assert.match(tabPress, /setMode\(choice\)/);
   assert.match(tabPress, /setSearching\(false\)/);
-  assert.match(tabPress, /setQuery\(""
-?\)/);
+  assert.match(tabPress, /setQuery\(""\)/);
   assert.match(tabPress, /setError\(null\)/);
   assert.match(tabPress, /setResults\(\[\]\)/);
   assert.match(tabPress, /setWallResults\(\[\]\)/);
