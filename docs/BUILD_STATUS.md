@@ -1,5 +1,13 @@
 # The-Wall Build Status
 
+## BETA-P0-31 · Fence Approved Writers roster and controls by account — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #114 immutable `dfb8270e96764be9a1bdd20f985e51b643883b13`, preserving prior stacked drafts. Approved Writers cached roster and search UI persisted until `useFocusEffect` cleanup; a new account render could expose prior actor writer names or accept stale UI actions. An actor-bound `loadedActorId` gate hides cached content until current actor's settings and roster load. Search, add, remove and confirmation fail closed on actor mismatch. Current actor error/retry and non-selected explanation still function. Added dedicated Node contract `tests/frontend-approved-writers-actor-display.test.mjs`. No server permissions, API, UX design, schema or flags changed.
+
+**Gates:** Child exact SHA/tree CI, independent Reviewer and separate behavioral QA (A→B, delayed/failed loads, unselected/selected, stale confirm, retry) pending. This implementation is NOT release certification. No production, hosted writes, migrations, merge, deployment or invites. Enhanced Beta **NO-GO** pending real six-digit SMTP/OTP, three real JWT actors, media C2/C3, Secret cron, deletion 0031/purge, device QA/rollback and Founder GO. Domain/DNS and Apple signing held.
+
+**Next:** Capture CI and exact tree, independent review/QA and continue next authorized unblocked queue item.
+
 ## BETA-P0-30 · Enhanced Beta release packet and rollback preparation — 22 Nov 2026
 
 **ROLE: ARCHITECT documentation.** Independent source-only release packet `docs/handoffs/ENHANCED_BETA_RELEASE_PACKET_2026-11-22.md` prepared as a separately owned descendant of #113 exact `138391e3dccd0aad5d760f1001761b01376c0161`. Captures verified staging emptiness/absence of cron, exact feature flag names, server controls, interim private beta release copy explicitly **NOT PUBLISHED**, migration 0031/Secret safety ordering, immutable GO evidence and rollback/release artifact prerequisites. Does **not** declare source/CI/QA certification, merge or authorize hosted writes.

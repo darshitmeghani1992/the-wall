@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-31 · Approved Writers actor-bound roster guard — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #114 `dfb8270e96764be9a1bdd20f985e51b643883b13` adds pre-focus session render gate to Approved Writers roster/search, and blocks stale search/add/remove/confirm actions. Current actor selected/unselected, loading, error and retry unchanged. New static/regression test; exact-head CI, independent Reviewer and native behavioral QA still pending. No hosted writes/production, merge or deploy. Enhanced Beta **NO-GO**, external holds unchanged.
+
+**Next:** Verify exact child SHA/tree/CI, route to independent Reviewer and device QA, then next unblocked task or future actual authorized three-JWT tests.
+
 ## BETA-P0-30 · Internal Enhanced Beta release/rollback packet — 22 Nov 2026
 
 **ARCHITECT:** New `docs/handoffs/ENHANCED_BETA_RELEASE_PACKET_2026-11-22.md` documents exact source ancestry through #113 `138391e3dccd0aad5d760f1001761b01376c0161`, pending build/identity/sender/device gates, withheld media/Secret/deletion, build-time client flags versus server-authoritative disable, future rollback, and draft (unpublished) tester release notes. No new deployment/feature switch, no production contact or tester invite. Treat it as a preparation checklist, **not** a GO. Independent review and QA remain separate.
