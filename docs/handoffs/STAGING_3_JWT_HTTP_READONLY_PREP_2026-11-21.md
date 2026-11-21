@@ -1,0 +1,24 @@
+# Staging three-actor authenticated HTTP boundary — safe read-only preparation
+
+**Date:** 2026-11-21 · **ROLE: BACKEND test harness, ARCHITECT sequencing** · Release issue #57/BETA-P0-04 · **Status: prepared, NOT executed with actual credentials**
+
+## Purpose
+
+The current PostgreSQL SQL suite (including 73 Shared-Wall INSERT RETURNING) uses `SET ROLE authenticated` and synthetic `auth.uid()` test fixtures. That is valuable **database contract** evidence but does not verify real HTTP JWT authorization. This opt-in Node 22 harness independently targets only **staging** `ewintxgdxdvschiqodkq`, checks three truly distinct authenticated user identities via `GET /auth/v1/user`, and checks one existing **private Shared Wall** via `GET /rest/v1/walls?select=id&id=eq.<uuid>`. Expected results: owner=1, accepted/allowed member=1, unrelated outsider=0. An HTTP 401/403 is **not** accepted as proof that an unrelated actor was denied (credentials must first work). Every API call is a GET; no user signup, OTP send, data write or feature switch occurs.
+
+This is **not** a complete security suite: it does not test Personal Wall, friend/follower transitions, Mark RPC mutations, blocked/removed memberships, `INSERT RETURNING`, Secret, media, token refresh, offline, UX or physical-device behavior. Independent QA/Reviewer and the genuine broader 3-actor acceptance suite remain required.
+
+## Fixture and permissions preflight (do not run until authorized)
+
+1. Obtain three pre-existing approved authorized staging accounts: actual owner, accepted member of one private Shared Wall, and unrelated nonmember. Verify membership and test expectations separately; there are currently **zero staging Auth users/Walls**, so there is **nothing to execute**. Never fabricate identities, bypass SMTP, or create accounts solely to make a CI badge pass.
+2. Securely provide their actual JWTs *only to the local authorized test runtime* as `TW_OWNER_JWT`, `TW_MEMBER_JWT`, `TW_OUTSIDER_JWT`. Match the account UUIDs using `TW_OWNER_ID`, `TW_MEMBER_ID`, `TW_OUTSIDER_ID`; supply existing `TW_PRIVATE_WALL_ID`. Use a staging publishable/anon key in `TW_STAGING_ANON_KEY`; never paste tokens, keys or headers into chat, GitHub issues, PRs, stdout or committed files.
+3. Set `TW_STAGING_URL=https://ewintxgdxdvschiqodkq.supabase.co` and `TW_STAGING_JWT_AUDIT_APPROVED=true` only after the authorized fixture exists. Invoke `node scripts/staging-three-jwt-readonly.mjs --staging --read-only`. It refuses every other origin/protocol/path, invalid or repeated actor identities/tokens and absent consent. CLI output is only pass/fail, HTTP status and generic role names; it does not print tokens, response bodies or wall identities.
+4. The local exit code is **1** for test failure, **2** for missing opt-in CLI flags. A PASS is only the six GETs described above. Record stage, immutable application tree, API config, run time and negative cases separately; do not mark beta GO.
+
+## Mock/unit execution
+
+`node --test tests/staging-three-jwt-readonly.test.mjs`. Included automatically by `npm run test:contracts` (`tests/*.test.mjs`) in existing GitHub CI. Tests use fake nonsecret JWT-shaped tokens and an injected fetch stub. They assert zero writes, strict staging host, distinct identities, outsider denial, failing HTTP 401, failing incorrect identities and forbidden production host. Normal CI never receives any real actor JWT.
+
+## Reversibility and next gate
+
+Remove this test utility without modifying database state. No schema, backend deployment, secrets configuration, production access or spending is required by its presence. **Next:** independently review source and test; wait for owner-authorized accounts/SMTP, then run against exact staging runtime and expand real JWT HTTP negative coverage separately. Hold media/Secret/analytics and migration 0031, preserve original project `wfsfafmgvxevpzrurofz`, no testers/production release.

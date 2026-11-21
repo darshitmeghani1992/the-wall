@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-22 · 2026-11-21 · Stage real-JWT privacy smoke without creating accounts or leaking tokens
+- **Purpose:** BETA-P0-04 distinguishes synthetic SQL role tests from actual authenticated HTTP JWT boundary checks. Pre-existing authorized staging accounts are required; current staging has none.
+- **Decision:** Build a **read-only**, opt-in Node test utility that verifies three distinct actor IDs via Auth `/user` and checks private Shared-Wall visibility for owner, permitted member and unrelated outsider using six GETs. Hard-code only the approved staging host; reject original production, missing opt-in, repeated actors, 401s, unexpected visibility; never log tokens or response bodies. Mock it in ordinary CI with zero credentials.
+- **Boundaries:** Does not create/modify accounts, invoke migrations, test mutation RPCs, send OTP or assert full three-user QA. Credential management stays with authorized runtime, not PR secrets or chat. Higher-risk follow-up real JWT tests and independent review still required. Rollback is removal of the source-only utility.
+
+
 Meaningful technical decisions. Trivial choices are omitted (§94). Format:
 date · decision · reason · alternatives · reversibility · Founder Gate?
 
