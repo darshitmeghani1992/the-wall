@@ -10,6 +10,8 @@
 
 **Execution slices after queue initialization:** draft [#59](https://github.com/darshitmeghani1992/the-wall/pull/59) initial checkpoint head `92b67504153e1b447e772069e43c4819e57aabdc`, [CI #222](https://github.com/darshitmeghani1992/the-wall/actions/runs/44877106745) in progress at observation; new FRONTEND [#60](https://github.com/darshitmeghani1992/the-wall/pull/60) commit `4595c1e4a1472815e76e8549c69ddc9515500fd3`, [CI #223](https://github.com/darshitmeghani1992/the-wall/actions/runs/44877228367) queued. Both separate branches from #58, not merged or deployed. This status section must be reconciled with live GitHub every run.
 
+**Internal integrated verification candidate:** draft [#61](https://github.com/darshitmeghani1992/the-wall/pull/61) `codex/internal-beta-candidate-20261121` based on #59, incorporating byte-identical PR #60 MarkDetailModal implementation (blob `23a4e1159e258ae19a8636c2927961f75b0fab84`). Resolve live head/tree/CI before any certification; independent Reviewer/QA remain absent. This is **not** a completed Enhanced Beta nor a merge into main.
+
 **Resumable queue (single source of truth; priority order; all outcomes require exact-SHA evidence):**
 
 | ID | Role | Acceptance criteria | Dependencies | Status / evidence | Exact next action |
