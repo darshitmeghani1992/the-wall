@@ -36,7 +36,15 @@ export default function AlertsScreen() {
   const receiptFence = useRef(new SessionFocusFence()).current;
   const pageLoadToken = useRef<ReturnType<SessionFocusFence["begin"]>>(null);
   const currentUserId = useRef<string | null>(userId ?? null);
+  const loadedActorId = useRef<string | null>(null);
   currentUserId.current = userId ?? null;
+  // A new session can render before useFocusEffect clears the old Alerts list.
+  const currentActorLoaded = Boolean(userId) && loadedActorId.current === userId;
+  const visibleItems = currentActorLoaded ? items : [];
+  const visibleError = currentActorLoaded ? error : null;
+  const visibleDetailsError = currentActorLoaded ? detailsError : null;
+  const visibleOlderError = currentActorLoaded ? olderError : null;
+  const visibleNextCursor = currentActorLoaded ? nextCursor : null;
 
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null);
@@ -44,6 +52,9 @@ export default function AlertsScreen() {
     const receiptToken = receiptFence.begin(token.userId);
     if (!receiptToken) return;
     pageLoadToken.current = null;
+    loadedActorId.current = null;
+    setItems([]);
+    setNextCursor(null);
     setLoadingOlder(false);
     setLoading(true);
     setError(null);
@@ -52,6 +63,7 @@ export default function AlertsScreen() {
     try {
       const page = await listNotifications(token.userId);
       if (!fence.isCurrent(token, currentUserId.current)) return;
+      loadedActorId.current = token.userId;
       setItems(page.items);
       setNextCursor(page.nextCursor);
       if (page.metadataIncomplete) {
@@ -68,6 +80,8 @@ export default function AlertsScreen() {
       }
     } catch (cause: any) {
       if (fence.isCurrent(token, currentUserId.current)) {
+        // A failed load belongs to this actor; never revive a prior actor's rows.
+        loadedActorId.current = token.userId;
         setError(cause?.message ?? "Couldn't load your Alerts.");
       }
     } finally {
@@ -76,7 +90,7 @@ export default function AlertsScreen() {
   }, [fence, receiptFence, userId]);
 
   const loadOlder = useCallback(async () => {
-    if (!userId || !nextCursor || loading || pageLoadToken.current) return;
+    if (!userId || loadedActorId.current !== userId || !nextCursor || loading || pageLoadToken.current) return;
     const token = fence.begin(userId);
     if (!token) return;
     pageLoadToken.current = token;
@@ -107,6 +121,7 @@ export default function AlertsScreen() {
       fence.focus(userId ?? null);
       receiptFence.focus(userId ?? null);
       pageLoadToken.current = null;
+      loadedActorId.current = null;
       if (!userId) {
         setItems([]);
         setNextCursor(null);
@@ -122,6 +137,7 @@ export default function AlertsScreen() {
         fence.blur();
         receiptFence.blur();
         pageLoadToken.current = null;
+        loadedActorId.current = null;
         setItems([]);
         setNextCursor(null);
         setError(null);
@@ -134,7 +150,7 @@ export default function AlertsScreen() {
   );
 
   function open(notification: NotificationWithActor) {
-    if (!userId || notification.user_id !== userId) return;
+    if (!userId || !currentActorLoaded || currentUserId.current !== userId || notification.user_id !== userId) return;
     const token = fence.begin(userId);
     if (!token) return;
 
@@ -157,11 +173,11 @@ export default function AlertsScreen() {
         Alerts
       </Text>
 
-      {loading ? (
+      {loading || (Boolean(userId) && !currentActorLoaded) ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
-      ) : error ? (
+      ) : visibleError ? (
         <View style={{ alignItems: "center", marginTop: 32, gap: 12 }}>
-          <Text variant="body" color={colors.error} style={{ textAlign: "center" }}>{error}</Text>
+          <Text variant="body" color={colors.error} style={{ textAlign: "center" }}>{visibleError}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Try loading Alerts again"
@@ -171,7 +187,7 @@ export default function AlertsScreen() {
             <Text variant="label">TRY AGAIN</Text>
           </Pressable>
         </View>
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <View style={{ paddingVertical: 48, gap: 12 }}>
           <Text variant="headline">No Alerts yet</Text>
           <Text variant="body" color={colors.outline}>
@@ -184,10 +200,10 @@ export default function AlertsScreen() {
         </View>
       ) : (
         <View accessibilityRole="list" style={{ gap: 10 }}>
-          {detailsError ? (
-            <Text accessibilityRole="alert" variant="body" color={colors.outline}>{detailsError}</Text>
+          {visibleDetailsError ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.outline}>{visibleDetailsError}</Text>
           ) : null}
-          {items.map((notification) => (
+          {visibleItems.map((notification) => (
             <Pressable
               key={notification.id}
               accessibilityRole="button"
@@ -244,10 +260,10 @@ export default function AlertsScreen() {
               ) : null}
             </Pressable>
           ))}
-          {olderError ? (
-            <Text accessibilityRole="alert" variant="body" color={colors.error}>{olderError}</Text>
+          {visibleOlderError ? (
+            <Text accessibilityRole="alert" variant="body" color={colors.error}>{visibleOlderError}</Text>
           ) : null}
-          {nextCursor ? (
+          {visibleNextCursor ? (
             <Button
               label={loadingOlder ? "Loading older Alerts…" : "Load older Alerts"}
               variant="ghost"

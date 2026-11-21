@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-36 · Fail-closed Alerts across account changes — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #119 immutable `07f191bdc3cf9285111935573be4c1e50e4c9dbe`, original tree `810de7276b69ce236c74b9ad9451994c350d2cc9`. The Alerts tab already checks asynchronous responses against the authenticated user, but previously cached sensitive Alerts (actor name, recipient notifications, unread state, pages and errors) could render for account B before `useFocusEffect` cleared account A. Gate every rendered Alert, error and history cursor by its settled authenticated actor; clear items and cursor at the start of a new load, settle failed loads for a current-actor retry, and reject old-actor open/page actions before navigation or writes. Retain owner-scoped receipt behavior, pagination and current empty/retry UX. New `tests/frontend-alerts-actor-display.test.mjs` checks the source wiring and A→B data selection.
+
+**Evidence/Gates:** Requires exact new SHA GitHub CI, independent Reviewer approval and separate native behavioral QA for A→B before focus, delayed initial/error/older-page load, Alert open, receipt, retry and sign-out. CI/source tests are NOT device E2E proof. Staging `ewintxgdxdvschiqodkq` only; protected production `wfsfafmgvxevpzrurofz` untouched. No hosted write, schema/auth/API/flag change, paid service, merge, deployment or invitation. Enhanced Beta **NO-GO** pending verified 6-digit SMTP OTP, 3 real hosted JWT actors, private media C2/C3, Secret cron, migration 0031/purge, independent QA, installed devices/rollback and Founder GO. Media/Secret/analytics OFF; domain/DNS/Apple held.
+
+**Next:** Check new branch/head CI; obtain independent Reviewer and simulator/device QA; continue next unblocked scoped task without editing another worker's branch.
+
+
 ## BETA-P0-35 · Personal settings discard prompt actor lease — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #118 `074824a77d2ae1c771a3c6fe758cd4b886fd441b`. Previously a delayed Discard callback could navigate after account change, and simultaneous back gestures could stack prompts during pending save. The before-remove dialog now captures an action-fence lease, aborts stale A→B callbacks, limits dialogs and blocks removal during saving; lifecycle resets prompt state. New `tests/frontend-personal-settings-discard-lease.test.mjs`. Must verify new exact-head CI, obtain independent Reviewer and separate real device/simulator QA. No hosted/staging writes, production access, merge/deploy/feature activation. Enhanced Beta remains NO-GO. 
