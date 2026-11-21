@@ -151,15 +151,27 @@ export function MarkDetailModal({
     }
   }
 
-  async function run(action: () => Promise<void>) {
+  async function run(action: (isCurrent: () => boolean) => Promise<void>) {
+    // Edit/delete must use the same immediate single-flight + session/target fence
+    // as report/removal. React's busy state alone cannot stop rapid double taps.
+    if (!viewerId || actionInFlight.current) return;
+    const subjectToken = subjectFence.current.begin(viewerId);
+    const markToken = markFence.current.capture(markId);
+    if (!subjectToken || !markToken) return;
+    const isCurrent = () => subjectFence.current.isCurrent(subjectToken, currentViewerId.current)
+      && markFence.current.isCurrent(markToken, currentMarkId.current);
+    actionInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      await action();
+      await action(isCurrent);
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (isCurrent()) setError(errorMessage(cause));
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        actionInFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -169,18 +181,20 @@ export function MarkDetailModal({
       setError("A Mark can't be empty.");
       return;
     }
-    await run(async () => {
+    await run(async (isCurrent) => {
       await editMarkText(markId, next);
+      if (!isCurrent()) return;
       onMarkUpdated(markId, next);
-      setPanel("detail");
+      if (isCurrent()) setPanel("detail");
     });
   }
 
   async function confirmDelete() {
-    await run(async () => {
+    await run(async (isCurrent) => {
       await deleteMark(markId);
+      if (!isCurrent()) return;
       onMarkRemoved(markId);
-      onClose();
+      if (isCurrent()) onClose();
     });
   }
 
