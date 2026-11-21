@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Alert, Pressable, Switch, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Switch, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
@@ -20,6 +20,7 @@ export default function ReportUserScreen() {
   const actorId = session?.user.id ?? null;
   const targetId = typeof id === "string" ? id : null;
   const [reason, setReason] = useState<ReportReason | null>(null);
+  const [loadedSubject, setLoadedSubject] = useState<string | null>(null);
   const [details, setDetails] = useState("");
   const [alsoBlock, setAlsoBlock] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -31,24 +32,31 @@ export default function ReportUserScreen() {
   const submissionInFlight = useRef(false);
   currentActorId.current = actorId;
   currentTargetId.current = targetId;
+  const subject = actorId && targetId ? `${actorId}:${targetId}` : null;
+  const currentSubjectLoaded = subject !== null && loadedSubject === subject;
 
   useFocusEffect(useCallback(() => {
     subjectFence.current.focus(actorId);
     targetFence.current.focus(targetId);
     submissionInFlight.current = false;
     setBusy(false);
+    setLoadedSubject(null);
     setReason(null);
     setDetails("");
     setAlsoBlock(false);
     setReportSubmitted(false);
+    setLoadedSubject(subject);
     return () => {
       subjectFence.current.blur();
       targetFence.current.blur();
+      setLoadedSubject(null);
     };
-  }, [actorId, targetId]));
+  }, [actorId, targetId, subject]));
 
   async function submit() {
-    if (!actorId || !targetId || !reason || submissionInFlight.current) return;
+    if (!actorId || !targetId || !currentSubjectLoaded
+      || currentActorId.current !== actorId || currentTargetId.current !== targetId
+      || !reason || submissionInFlight.current) return;
     const subjectToken = subjectFence.current.begin(actorId);
     const targetToken = targetFence.current.capture(targetId);
     if (!subjectToken || !targetToken) return;
@@ -106,12 +114,24 @@ export default function ReportUserScreen() {
       <Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 6, marginBottom: 20 }}>
         Choose the reason that best describes the problem. Reports are sent to moderation.
       </Text>
+      {!subject ? (
+        <Text accessibilityRole="alert" variant="body" color={colors.error}>
+          Sign in and choose a person to report.
+        </Text>
+      ) : !currentSubjectLoaded ? (
+        <ActivityIndicator accessibilityLabel="Loading report form" color={markColors.brandYellow} style={{ marginTop: 36 }} />
+      ) : (
+        <>
       <ReportReasonForm
         reason={reason}
         details={details}
         disabled={busy || reportSubmitted}
-        onReasonChange={setReason}
-        onDetailsChange={setDetails}
+        onReasonChange={(next) => {
+          if (currentSubjectLoaded && currentActorId.current === actorId && currentTargetId.current === targetId) setReason(next);
+        }}
+        onDetailsChange={(next) => {
+          if (currentSubjectLoaded && currentActorId.current === actorId && currentTargetId.current === targetId) setDetails(next);
+        }}
       />
       <View style={{ flexDirection: "row", alignItems: "center", marginTop: 20, gap: 12 }}>
         <View style={{ flex: 1 }}>
@@ -124,7 +144,9 @@ export default function ReportUserScreen() {
           accessibilityLabel="Also block this person"
           value={alsoBlock}
           disabled={busy || reportSubmitted}
-          onValueChange={setAlsoBlock}
+          onValueChange={(next) => {
+            if (currentSubjectLoaded && currentActorId.current === actorId && currentTargetId.current === targetId) setAlsoBlock(next);
+          }}
           trackColor={{ false: colors.outlineVariant, true: markColors.brandYellow }}
           thumbColor={colors.ink}
         />
@@ -134,10 +156,12 @@ export default function ReportUserScreen() {
           label={reportSubmitted ? "Retry blocking" : alsoBlock ? "Submit report & block" : "Submit report"}
           variant="primary"
           loading={busy}
-          disabled={!reason || !actorId || !targetId || (reportSubmitted && !alsoBlock)}
+          disabled={!reason || !currentSubjectLoaded || (reportSubmitted && !alsoBlock)}
           onPress={submit}
         />
       </View>
+        </>
+      )}
     </Screen>
   );
 }
