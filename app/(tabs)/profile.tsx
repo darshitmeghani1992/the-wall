@@ -66,9 +66,20 @@ export default function ProfileScreen() {
     const userId = session?.user.id ?? null;
     countsFence.current.focus(userId);
     friendFence.current.focus(userId);
+    // Never render one account's totals after an account switch or sign-out.
+    setFollowers(0);
+    setFollowing(0);
     setFriendCount(null);
-    void refreshCounts();
-    void refreshFriends();
+    setCountsError(false);
+    setFriendCountError(false);
+    if (userId) {
+      void refreshCounts();
+      void refreshFriends();
+    } else {
+      // Neither fetch can start without an actor: clear any previous spinner.
+      setCountsLoading(false);
+      setFriendCountLoading(false);
+    }
     return () => {
       countsFence.current.blur();
       friendFence.current.blur();
