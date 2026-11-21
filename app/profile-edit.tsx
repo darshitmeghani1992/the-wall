@@ -42,27 +42,34 @@ export default function ProfileEdit() {
   // keep whatever avatar the profile already has.
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "uploading" | "saving">("idle");
+  // Guard account-scoped draft fields before useFocusEffect runs after a session switch.
+  const [loadedActorId, setLoadedActorId] = useState<string | null>(null);
   const actionFence = useRef(new SessionFocusFence());
   const currentActorId = useRef<string | null>(actorId);
   const actionInFlight = useRef(false);
   currentActorId.current = actorId;
+  const currentActorLoaded = actorId !== null && profile?.id === actorId && loadedActorId === actorId;
 
   useFocusEffect(useCallback(() => {
     actionFence.current.focus(actorId);
     actionInFlight.current = false;
     setPhase("idle");
-    setName(profile?.display_name ?? "");
-    setBio(profile?.bio ?? "");
-    setInstagram(profile?.instagram ?? "");
-    setTiktok(profile?.tiktok ?? "");
-    setYoutube(profile?.youtube ?? "");
-    setX(profile?.x ?? "");
-    setWebsite(profile?.website ?? "");
+    const profileForActor = actorId && profile?.id === actorId ? profile : null;
+    setLoadedActorId(null);
+    setName(profileForActor?.display_name ?? "");
+    setBio(profileForActor?.bio ?? "");
+    setInstagram(profileForActor?.instagram ?? "");
+    setTiktok(profileForActor?.tiktok ?? "");
+    setYoutube(profileForActor?.youtube ?? "");
+    setX(profileForActor?.x ?? "");
+    setWebsite(profileForActor?.website ?? "");
     setAvatarUri(null);
+    setLoadedActorId(profileForActor ? actorId : null);
     return () => {
       actionFence.current.blur();
       actionInFlight.current = false;
       setPhase("idle");
+      setLoadedActorId(null);
     };
   }, [actorId, profile]));
 
@@ -70,7 +77,7 @@ export default function ProfileEdit() {
   const trimmedName = name.trim();
   const bioOver = bio.length > MAX_BIO;
   const nameEmpty = trimmedName.length === 0;
-  const canSave = !busy && !nameEmpty && !bioOver;
+  const canSave = currentActorLoaded && !busy && !nameEmpty && !bioOver;
 
   const shownAvatar = avatarUri ?? profile?.avatar_url ?? null;
   const initial = useMemo(
@@ -79,6 +86,7 @@ export default function ProfileEdit() {
   );
 
   async function pickAvatar() {
+    if (!currentActorLoaded || !actorId || currentActorId.current !== actorId) return;
     const token = actionFence.current.begin(actorId);
     if (!token || actionInFlight.current) return;
     try {
@@ -103,6 +111,7 @@ export default function ProfileEdit() {
   }
 
   async function save() {
+    if (!currentActorLoaded || !actorId || currentActorId.current !== actorId) return;
     const token = actionFence.current.begin(actorId);
     if (!token || !canSave || actionInFlight.current) return;
     const submission = {
@@ -147,6 +156,12 @@ export default function ProfileEdit() {
 
   return (
     <Screen dockInset={false}>
+      {!actorId ? (
+        <Text accessibilityRole="alert" variant="body" color={colors.error}>Sign in to edit your profile.</Text>
+      ) : !currentActorLoaded ? (
+        <ActivityIndicator accessibilityLabel="Loading profile" color={colors.ink} style={{ marginTop: 32 }} />
+      ) : (
+        <>
       <View
         style={{
           flexDirection: "row",
@@ -312,6 +327,8 @@ export default function ProfileEdit() {
           />
         </View>
       </View>
+        </>
+      )}
     </Screen>
   );
 }
