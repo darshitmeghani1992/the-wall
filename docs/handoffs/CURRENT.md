@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-04 · Suspended-owner write policy isolation — 21 Nov 2026
+
+ARCHITECT assigned BACKEND to extend disposable database test 73. The test verifies the owner fixture is suspended and requires plain INSERT to fail independently of INSERT RETURNING, which can fail because of SELECT policy alone. Diff whitespace and runner shell syntax passed locally. PostgreSQL is unavailable locally. Next eligible work is exact draft CI and independent Reviewer and QA verification of test 73 on the disposable DB.
+
+Base #86 `5e6c5de25489b4ddd365382788c5551523622ff1` passed all four jobs in [CI #266](https://github.com/darshitmeghani1992/the-wall/actions/runs/44895296649). #85 passed all four jobs in [CI #264](https://github.com/darshitmeghani1992/the-wall/actions/runs/44895081431). Neither draft had submitted reviews at inspection. Independent Reviewer and QA remain pending. Real staging OTP and three-actor HTTP/device evidence remain blocked by verified SMTP and authorized fixtures. Core + Enhanced Beta remains NO-GO.
+
 ## 21 Nov 2026 · BACKEND suspended owner test handoff
 
 Branch `codex/beta-suspended-owner-returning-tests-20261121-run2` is an isolated child of PR #85 immutable docs+application candidate (SHA `3e13b30cde449ac8023edaf01df6b1b35a8a734a`). Added negative `SELECT` and `INSERT RETURNING` for an existing Shared Wall owner with `profiles.account_status='suspended'`, using the disposable transaction in `supabase/tests/73_shared_wall_owner_returning.sql`; no migration or hosted write. Preserve and independently review BETA-P0-01 lineage audit. GitHub CI must run on **this branch's new head**; no local Postgres executable exists in this environment. Real JWT actors/OTP and Reviewer/QA remain open. Next: check exact CI; independent Reviewer check SQL denial assertions; QA verify unchanged head, then perform hosted actors when approved; keep all Founder launch gates.
