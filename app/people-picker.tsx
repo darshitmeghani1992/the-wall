@@ -48,6 +48,10 @@ export default function PeoplePicker() {
     actionFence.current.focus(userId ?? null);
     selectionInFlight.current = false;
     setSelectingId(null);
+    // Do not display the previous actor's friends while a new session loads.
+    setQuery("");
+    setPeople([]);
+    setError(null);
     if (userId) void loadFriends();
     else setLoading(false);
     return () => {
@@ -61,12 +65,13 @@ export default function PeoplePicker() {
   }, [loadFriends, userId]));
 
   async function search() {
+    const queryAtStart = query.trim();
     const token = loadFence.current.begin(userId ?? null);
-    if (!token || !query.trim()) return;
+    if (!token || !queryAtStart) return;
     setLoading(true);
     setError(null);
     try {
-      const results = await searchPeople(token.userId, query);
+      const results = await searchPeople(token.userId, queryAtStart);
       if (loadFence.current.isCurrent(token, currentUserId.current)) {
         setPeople(results.filter((person) => person.relationship === "friends"));
       }
@@ -117,7 +122,15 @@ export default function PeoplePicker() {
       <Input
         prefix="@"
         value={query}
-        onChangeText={setQuery}
+        onChangeText={(value) => {
+          setQuery(value);
+          // Invalidate pending list/search results when the query changes.
+          loadFence.current.focus(userId ?? null);
+          setPeople([]);
+          setError(null);
+          setLoading(false);
+          if (!value.trim() && userId) void loadFriends();
+        }}
         onSubmitEditing={search}
         placeholder="search friends"
         autoCapitalize="none"
