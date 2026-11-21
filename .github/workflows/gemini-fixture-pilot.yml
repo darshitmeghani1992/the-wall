@@ -1,0 +1,49 @@
+name: Gemini two-task coding pilot (manual, no repo writes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Enter FREE to acknowledge Gemini project has no linked paid billing'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: the-wall-gemini-fixture-pilot
+  cancel-in-progress: false
+
+jobs:
+  two-task-pilot:
+    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && inputs.confirmation == 'FREE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: gemini-free-smoke
+    env:
+      THE_WALL_SUPABASE_PROJECT: ewintxgdxdvschiqodkq
+      GEMINI_BILLING_TIER: free
+      GEMINI_FIXTURE_PILOT_APPROVED: 'true'
+      GEMINI_PILOT_STATE: ${{ runner.temp }}/fixture_state.sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify default-off production policy
+        run: python scripts/free_worker_preflight.py
+      - name: Run mock contract tests (no model)
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_gemini_fixture_pilot_v2.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_engineering_outbox_v2.py' -v
+      - name: Two bounded model fixture coding tasks
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/gemini_fixture_pilot_v2.py
+
+# Manual job uses GitHub-hosted public-repo runner, two model requests maximum,
+# no repo write token, no generated code execution, no billing fallback.
+# No task engine, webhook, GitHub PR creation or live deployment is activated.

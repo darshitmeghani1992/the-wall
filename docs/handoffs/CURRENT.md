@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Gemini real-code fixture pilot, prepared but **not launched** — 21 Nov 2026
+
+Branch `codex/gemini-fixture-agent-pilot-20261121` based on #76 immutable `c2c4e9c8906465df767c5c2d759de66776d07b7f` adds one manual-only read-only GitHub Actions job, `scripts/gemini_fixture_pilot_v2.py`, mock/AST security tests and exact-SHA PR CI contracts. Its intended runtime makes two bounded Gemini Flash-Lite calls to generate trivial Python functions, validates AST without executing them and immediately dispatches the second using the existing local fenced lease/outbox. **This has not been authenticated/run against Gemini** and is not a continuous cloud agent, shared cross-run coordinator or code-changing PR worker. **Next exact action:** check new draft PR contract/full CI and independent Reviewer/QA; independently authorize/default-branch integrate credential workflow; run one genuine free-tier two-task pilot; record live usage. No production, no paid fallback, no hosted writes or merges authorized by this branch; first Enhanced Beta NO-GO.
+
+
 ## Loop v2 immediately-triggered engineering continuation — 21 November 2026
 
 Existing hourly engineering automation was explicitly triggered for this request; task continues inline on authorized isolated branch `codex/loop-v2-crash-safe-outbox-20261121`, based on PR #73 exact SHA `4f3ef5f15f20d0b4c79254ac967afe109ebc4272` (CI/contract both SUCCESS). This branch atomically records next-dispatch intent with fenced completion in `scripts/engineering_leases_v2.py`, tests crash/reopen/duplicate/stale tokens and adds exact-SHA CI requirement. **Not a live Gemini cloud agent**: #71 credential workflow remains draft/unreviewed and cannot safely dispatch from default branch yet; shared state, cloud callback/auth and sandbox agent missing. No external API call, hosted change, merge or billing. Next: run CI for new draft, request genuine independent Reviewer/QA; scope safe multi-host coordination and approved credential test. Keep existing hourly fallback and Enhanced Beta NO-GO.
