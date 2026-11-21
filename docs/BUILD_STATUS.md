@@ -1,5 +1,12 @@
 # The-Wall Build Status
 
+## Integrated internal security candidate (after #64/#65) — 21 Nov 2026
+
+**ROLE: ARCHITECT controlled draft reconciliation.** The previous paragraphs below record historical work on separate branches. New [PR #67](https://github.com/darshitmeghani1992/the-wall/pull/67), branch `codex/internal-beta-verified-security-candidate-20261121`, **combines** the latest [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64) canonical audit docs with **byte-identical** worker source and test blobs from [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65). Origin: PR #64 docs head `2c919ee1728fe48a157ab282eb8bcb7ce73a0cf7`; source `workers/media-processor/src/url-policy.ts` blob `88b235eb5c818b110abcd798ec63af766c1414aa`; test blob `8473f47ca63d9096ad245ec7ec7512246df9f4b5`. GitHub contents reads confirmed both source blobs exactly match #65. This is a **draft internal verification candidate only**; no main merge, hosted deploy, Secret/media activation, real tester access or production change. The merged files are not a release certification.
+
+**Independent verification gates:** query live PR #67 head and its own four CI job conclusions on the **unchanged head**; do not inherit #65 CI #231 or #64 CI #230. Reviewers and QA must independently approve/pass the exact integrated candidate; verify staging HTTPS/JWT actor tests and hardware/egress controls separately. Next after CI: source-level review of Secret risk [#66](https://github.com/darshitmeghani1992/the-wall/issues/66) and remaining RLS/RPC caller testing; request genuine independent Reviewer and QA; preserve original production, hold Apple/domain. **Beta GO = NO.**
+
+
 ## 21 Nov 2026 continuation — verified CI and staging caller inventory
 
 **ROLE: ARCHITECT integration + BACKEND read-only security triage.** This continuation is a **documentation-only, isolated draft descendant** of the existing [PR #63](https://github.com/darshitmeghani1992/the-wall/pull/63) source candidate. No earlier open draft has been merged/closed; do not mark any feature complete merely from this audit.
