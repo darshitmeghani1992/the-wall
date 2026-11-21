@@ -69,6 +69,27 @@ test("resolved private and reserved addresses are rejected", async () => {
 });
 
 
+test("IPv6 translation and tunnelling prefixes cannot hide private IPv4 endpoints", async () => {
+  const embeddedPrivate = [
+    "::127.0.0.1",          // IPv4-compatible
+    "64:ff9b::7f00:1",     // NAT64 well-known prefix -> 127.0.0.1
+    "64:ff9b:1::a00:1",    // NAT64 local-use prefix -> 10.0.0.1
+    "2002:7f00:1::",       // 6to4 -> 127.0.0.1
+    "2001:0:7f00:1::",     // Teredo transition allocation
+    "::ffff:192.168.1.1", // IPv4-mapped must remain blocked
+  ];
+  for (const address of embeddedPrivate) {
+    const resolver = (async () => [{ address, family: 6 }]) as never;
+    await assert.rejects(
+      assertHostnameResolvesPublic("project.supabase.co", resolver),
+      /private or reserved/,
+      `transition address ${address} must not be allowed`,
+    );
+  }
+  const publicIpv6 = (async () => [{ address: "2606:4700::1111", family: 6 }]) as never;
+  await assert.doesNotReject(assertHostnameResolvesPublic("project.supabase.co", publicIpv6));
+});
+
 test("final Storage responses preserve the exact signed query and path", () => {
   const expected = assertStorageObjectUrl(
     `https://project.supabase.co/storage/v1/object/sign/mark-media/${objectPath}?token=original&download=1`,
