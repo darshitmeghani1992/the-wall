@@ -6,6 +6,16 @@ function isCanonicalUuid(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_UUID.test(value);
 }
 
+/** Keep outgoing Personal Wall links inside the native intent parser's allowed path shape. */
+export function personalWallDeepLink(handle?: string | null): string | null {
+  if (typeof handle !== "string") return null;
+  const normalized = handle.trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,}$/.test(normalized)) return null;
+  const link = `thewall://u/${normalized}`;
+  // Native intent parser rejects payloads exceeding 8 KiB. Do not share a link it cannot open.
+  return link.length <= 8 * 1024 ? link : null;
+}
+
 export type MarkShareDestination =
   | { kind: "personal"; ownerId: string }
   | { kind: "shared"; wallId: string };
