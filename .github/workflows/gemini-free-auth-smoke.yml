@@ -1,0 +1,47 @@
+name: Gemini free-tier credential smoke (manual)
+
+# Explicitly gated. workflow_dispatch only runs after this workflow has
+# undergone independent review and is present on the repository default branch.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_free_tier:
+        description: 'Enter FREE to confirm API project remains on free tier (no billing)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: the-wall-gemini-free-smoke
+  cancel-in-progress: false
+
+jobs:
+  credential-smoke:
+    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && inputs.confirm_free_tier == 'FREE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: gemini-free-smoke
+    env:
+      THE_WALL_SUPABASE_PROJECT: ewintxgdxdvschiqodkq
+    steps:
+      - name: Checkout immutable workflow branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check read-only no-billing policy
+        run: python scripts/free_worker_preflight.py
+      - name: One Gemini request; no workspace files sent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_FREE_SMOKE_APPROVED: 'true'
+          GEMINI_BILLING_TIER: 'free'
+        run: python scripts/gemini_free_smoke.py
+
+# This test is not a coder; no write access to GitHub, Supabase or storage.
+# Requires a separately approved protected environment and workflow integration.
