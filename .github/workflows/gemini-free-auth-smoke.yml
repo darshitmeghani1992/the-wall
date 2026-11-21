@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   credential-smoke:
-    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && inputs.confirm_free_tier == 'FREE' }}
+    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && github.ref == 'refs/heads/main' && github.actor == 'darshitmeghani1992' && inputs.confirm_free_tier == 'FREE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: gemini-free-smoke
