@@ -240,6 +240,8 @@ export default function PeopleScreen() {
               onPress={() => {
                 searchFence.current.focus(userId ?? null);
                 setMode(choice);
+                // An in-flight search for the previous category is no longer active.
+                setSearching(false);
                 setQuery("");
                 currentQuery.current = "";
                 setResults([]);
@@ -274,6 +276,8 @@ export default function PeopleScreen() {
           currentQuery.current = value;
           searchFence.current.focus(userId ?? null);
           setSearching(false);
+          // A failure for an earlier query must not remain visible as this one changes.
+          setError(null);
           setSearchedQuery(null);
           setResults([]);
           setWallResults([]);
