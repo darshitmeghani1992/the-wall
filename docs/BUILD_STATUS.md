@@ -1,5 +1,16 @@
 # The-Wall Build Status
 
+## BETA-P0-01 · Integrated lineage audit, application candidate (21 Nov 2026)
+
+**ROLE: ARCHITECT**, documentation-only integration; source parent [#84](https://github.com/darshitmeghani1992/the-wall/pull/84) `f583ca520ad0dfa3b452dfc7ae85ece016597498`. Imported the exact audit text from [#74](https://github.com/darshitmeghani1992/the-wall/pull/74) `65a211c467a94e903bb74f1e3df7a4612e79104c` as `docs/handoffs/PR_LINEAGE_AUDIT_2026-11-21.md`. The audit's complete 351-path main→#30 blob inventory, historical PR base chain, and collision watchlist are preserved; this is not a 351-file semantic security review.
+
+GitHub compare: #74 and #84 are distinct descendants of #67 `ebdf28c196a3f50e4b5218dd6038d12277d12953`; #74 adds 7 commits / only 3 docs files; #84 adds 18 commits / 8 files (docs plus staging JWT harness/tests, Shared Wall SQL, moderation race harness). #84's `src/components/marks/MarkDetailModal.tsx` blob `23a4e1159e258ae19a8636c2927961f75b0fab84` exactly matches the earlier #60/#61 file, and worker URL policy blob `88b235eb5c818b110abcd798ec63af766c1414aa` matches #65/#67. #81's parallel Gemini/cloud-tooling tree is **not** combined with this application verification candidate; compared to #67, it touches 31 tool/workflow/docs files and overlaps #84 only on continuity docs. Retain all drafts; no claim of supersession or independent approval.
+
+**Source parent evidence:** #84 CI [44892196400](https://github.com/darshitmeghani1992/the-wall/actions/runs/44892196400) SUCCESS, 4/4; no submitted Reviewer approvals at inspection, no independent QA. This documentation integration has its **own new commit/tree** and must receive fresh exact-head CI and Reviewer/QA. Only after GitHub verifies this new head should it be a review candidate, **not** a certified release. Read-only staging 21 Nov: ACTIVE_HEALTHY; zero Auth users, Walls, Marks and private media objects; `pg_cron` absent. No hosted writes, production reads/writes, merges, releases, feature activations or invitations.
+
+**Next unblocked work:** independent Reviewer should do a source-critical semantic scan of the audited historical auth/security/permissions/Mark/media files on this unchanged candidate, then distinct QA should execute non-hosted contracts and, when SMTP/three authorized actors exist, hosted JWT/OTP and device behavior. BACKEND should prepare another isolated security regression while waiting; do not assert beta readiness. **Core + Enhanced Beta: NO-GO.**
+
+
 ## BETA-P0-04 · Moderation concurrency test ordering — 21 Nov 2026
 
 **ROLE: BACKEND test implementation.** Branch `codex/beta-moderation-race-readiness-20261121` stacks on [#83](https://github.com/darshitmeghani1992/the-wall/pull/83) at `e2e85511fdada01e6f5a1c9eb05b8980d0fca871`. The Shared Wall test passed on disposable PostgreSQL 16. The same suite then failed in test 96 when two sessions raced to claim the final normal-removal quota slot. The harness now waits for the first session to hold its transaction open and verifies that the contender reached a lock wait in all six quota, deactivation and suspension scenarios. All six passed in a targeted PostgreSQL 16 run. GitHub CI and independent Reviewer/QA must bind to this PR's exact head.

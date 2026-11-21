@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## 21 Nov 2026 · BETA-P0-01 application lineage integrated (ROLE: ARCHITECT)
+
+This new isolated draft follows #84 source head `f583ca520ad0dfa3b452dfc7ae85ece016597498` and incorporates the **byte-identical** #74 artifact `docs/handoffs/PR_LINEAGE_AUDIT_2026-11-21.md`. Fresh compare from #67 confirms #74's docs-only lineage and #84's test/harness lineage; #81 tooling remains a parallel, **excluded** draft (shared continuity docs reconciled here, not silently cherry-picked). Exact source equivalence rechecked for MarkDetailModal blob `23a4e1159e258ae19a8636c2927961f75b0fab84` and media URL policy blob `88b235eb5c818b110abcd798ec63af766c1414aa`. Audit confirms 351 main→#30 changed blob paths; **semantic** audit still OPEN. #84 prior CI 44892196400 green, but new head requires its own CI; no independent Reviewer or QA observed. No staging actors; pg_cron absent. NEVER call this beta GO or merge/deploy on this evidence.
+
+**Next owner/task:** independent REVIEWER on exact new PR SHA for semantic source/security + cross-PR provenance, independent QA for unchanged candidate; BACKEND separate security test work while external verified SMTP/authorized actors block hosted three-JWT E2E. Continue queue BETA-P0-01/04 from BUILD_STATUS, hold all Founder gates.
+
+
 ## BETA-P0-04 · Moderation concurrency test ordering — 21 Nov 2026
 
 **ROLE: BACKEND test implementation.** Branch `codex/beta-moderation-race-readiness-20261121` stacks on [#83](https://github.com/darshitmeghani1992/the-wall/pull/83) at `e2e85511fdada01e6f5a1c9eb05b8980d0fca871`. The Shared Wall test passed on disposable PostgreSQL 16. The same suite then failed in test 96 when two sessions raced to claim the final normal-removal quota slot. The harness now waits for the first session to hold its transaction open and verifies that the contender reached a lock wait in all six quota, deactivation and suspension scenarios. All six passed in a targeted PostgreSQL 16 run. GitHub CI and independent Reviewer/QA must bind to this PR's exact head.
