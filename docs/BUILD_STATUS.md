@@ -1,5 +1,10 @@
 # The-Wall Build Status
 
+## Free-first cloud-loop implementation — 21 Nov 2026 (draft only)
+
+**Founder request:** Complete all possible no-charge preparation. **ROLE: ARCHITECT orchestration, DEVOPS-designated CI preparation.** New isolated branch `codex/free-first-cloud-loop-20261121`, descended from cloud-prep PR #69, adds manual `.github/workflows/free-worker-smoke.yml` (GitHub public runner, read-only permissions, no secrets, dry-run only), fail-closed `scripts/free_worker_preflight.py` and negative tests, and `docs/architecture/FREE_FIRST_WORKER_V2.md`. Config remains OFF, agent unconfigured, financial authority $0. Gemini headless requires an account-owned free-tier credential; no paid API, billing, key entry, worker or webhook dispatch was activated. **Next:** exact-commit CI and independent review; lease/webhook/agent adapter and simulated task transitions before any real agent pilot. Original production untouched, Enhanced Beta NO-GO.
+
+
 ## Cloud loop v2.0 prepared, default OFF — 21 Nov 2026
 
 **ROLE: ARCHITECT design / DEVOPS preparation.** Founder approved cloud-based execution environment preparation, **not paid activation**. Isolated branch `codex/cloud-loop-v2-preparation-20261121` extends draft #68, selects GitHub-hosted ephemeral Linux as candidate computer and documents AI coding-service options and prices in `docs/architecture/CLOUD_LOOP_V2_SETUP.md`. `config/engineering-cloud-v2.json` remains `enabled=false`, `coding_agent=unconfigured`, `financial_limit_usd=0` with three worker ceiling and staging-only gates; policy contract tests added. **No coding-agent runtime, paid service, webhook dispatch or durable lease executor is active.** Next: exact SHA contract CI and independent security review, billable provider/limit approval then implement secure event-driven coordinator and one real pilot. Existing hourly automation remains fallback. NO-GO.
