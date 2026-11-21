@@ -1,5 +1,10 @@
 # The-Wall Build Status
 
+## BETA-P0-04 · Suspended-owner Shared Wall regressions — 21 Nov 2026
+
+**ROLE: BACKEND** test implementation under ARCHITECT's BETA-P0-04 security acceptance. New isolated branch `codex/beta-suspended-owner-returning-tests-20261121-run2` starts at [PR #85](https://github.com/darshitmeghani1992/the-wall/pull/85) `3e13b30cde449ac8023edaf01df6b1b35a8a734a`. Added two independent suspended-account SQL negative assertions to existing disposable test 73: the suspended owner cannot read an existing private Shared Wall or create another by `INSERT ... RETURNING`. Deactivated, outsider-spoof, and legitimate active-owner cases retained. **No schema/config/API/hosted data changes.** New exact-head CI, independent Reviewer, and QA still required; local PostgreSQL unavailable to this run. Real three-actor HTTP/OTP security evidence remains blocked by staging's zero Auth users and unverified SMTP. **Next:** check published draft CI, hand off tests, then continue independent authorized security work. Enhanced Beta NO-GO.
+
+
 ## BETA-P0-01 · Integrated lineage audit, application candidate (21 Nov 2026)
 
 **ROLE: ARCHITECT**, documentation-only integration; source parent [#84](https://github.com/darshitmeghani1992/the-wall/pull/84) `f583ca520ad0dfa3b452dfc7ae85ece016597498`. Imported the exact audit text from [#74](https://github.com/darshitmeghani1992/the-wall/pull/74) `65a211c467a94e903bb74f1e3df7a4612e79104c` as `docs/handoffs/PR_LINEAGE_AUDIT_2026-11-21.md`. The audit's complete 351-path main→#30 blob inventory, historical PR base chain, and collision watchlist are preserved; this is not a 351-file semantic security review.
