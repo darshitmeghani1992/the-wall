@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-21 · 2026-11-21 · Atomic task-completion outbox for crash-safe next-dispatch intention
+- **Decision:** Persist next-dispatch event in the same SQLite transaction that validates and completes a fenced lease. Read pending events non-destructively, acknowledge only after downstream acceptance, and test restart/duplicates/stale tokens. Prevent losing the handoff when the process crashes after completion.
+- **Limit:** This is a **single-host simulator**; SQLite file is not shared by ephemeral GitHub Actions runners, and no global delivery lock or coding-agent worker is deployed. Event delivery to an external cloud run remains unimplemented, and no exact billed/free Gemini model invocation verified.
+- **Authority:** Founder approved autonomous coding/draft PRs with staging-only/independent gates, not bypass of workflow/main merge controls. Reversible isolated draft. Next DEVOPS-authorized shared coordinator implementation and external agent authentication after independent review.
+
+
 ## D-21 · 2026-11-21 · Atomic completion is mandatory before any event-driven worker pilot
 - **Finding:** On draft PR #72's simulated local dispatcher, a lease was released before an event ID was recorded and completed tasks were not stored; a repeated event could release a second valid lease, and a finished task could be reassigned on later ticks.
 - **Decision (reversible internal bugfix):** BACKEND makes the local SQLite completion/event/fencing/closed-task transition one `BEGIN IMMEDIATE` transaction, rejected duplicate/stale events have zero effect, and every next dispatch excludes durably completed simulation tasks. Add negative multi-tick and duplicate-event tests; do not change or rewrite the canonical queue.

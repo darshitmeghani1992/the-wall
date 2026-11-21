@@ -15,6 +15,7 @@ on:
       - "scripts/engineering_handoff_sim_v2.py"
       - "scripts/tests/test_engineering_leases_v2.py"
       - "scripts/tests/test_engineering_handoff_v2.py"
+      - "scripts/tests/test_engineering_outbox_v2.py"
       - ".github/workflows/gemini-free-auth-smoke.yml"
       - ".github/workflows/free-worker-smoke.yml"
       - ".github/workflows/engineering-loop-contracts.yml"
@@ -39,5 +40,6 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_gemini_free_smoke.py' -v
           python -m unittest discover -s scripts/tests -p 'test_engineering_leases_v2.py' -v
           python -m unittest discover -s scripts/tests -p 'test_engineering_handoff_v2.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_engineering_outbox_v2.py' -v
       - name: Canonical queue dry run
         run: python scripts/engineering_loop_v2.py --workers 3

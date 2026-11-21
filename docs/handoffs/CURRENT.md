@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Loop v2 immediately-triggered engineering continuation — 21 November 2026
+
+Existing hourly engineering automation was explicitly triggered for this request; task continues inline on authorized isolated branch `codex/loop-v2-crash-safe-outbox-20261121`, based on PR #73 exact SHA `4f3ef5f15f20d0b4c79254ac967afe109ebc4272` (CI/contract both SUCCESS). This branch atomically records next-dispatch intent with fenced completion in `scripts/engineering_leases_v2.py`, tests crash/reopen/duplicate/stale tokens and adds exact-SHA CI requirement. **Not a live Gemini cloud agent**: #71 credential workflow remains draft/unreviewed and cannot safely dispatch from default branch yet; shared state, cloud callback/auth and sandbox agent missing. No external API call, hosted change, merge or billing. Next: run CI for new draft, request genuine independent Reviewer/QA; scope safe multi-host coordination and approved credential test. Keep existing hourly fallback and Enhanced Beta NO-GO.
+
+
 ## Atomic loop completion fix — 21 November 2026, source/test draft only
 
 Base draft PR #72 exact head `538604d9f0b778698b9b6d53934c31cacc4986bc` passed 44885364695 full CI and 44885364694 engineering contracts. #72 still draft; no independent Reviewer/QA. New branch `codex/loop-v2-atomic-completion-20261121` is an isolated child for BACKEND internal tooling correction: transactional completion/event + closed task record, guarded by monotonic fenced token; the local dispatcher excludes already-completed tasks on every tick. New tests cover three consecutive task transitions, persistent exclusion and re-used events that must not release a live second lease. **Next:** open stacked draft PR and verify its exact SHA CI; then independent reviewer and QA, and a future shared durable outbox/event dispatcher before any real cloud activation. Local SQLite is not a multi-run cloud queue. Gemini live auth remains not verified. No paid provider, hosted writes, production, merges, or feature enablement; Enhanced Beta still NO-GO.
