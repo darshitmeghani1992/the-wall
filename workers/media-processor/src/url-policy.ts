@@ -42,7 +42,7 @@ export function assertStorageObjectUrl(
   // Both signed upload and download URLs carry one bearer token parameter.
   // Reject duplicate tokens so URL consumers cannot disagree which is active.
   const tokens = url.searchParams.getAll("token");
-  if (tokens.length !== 1 || !tokens[0] || /\\s/.test(tokens[0])) {
+  if (tokens.length !== 1 || !tokens[0] || /\s/.test(tokens[0])) {
     throw new Error("Storage URL requires one nonempty signed token");
   }
   return url;
