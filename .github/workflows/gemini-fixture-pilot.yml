@@ -7,6 +7,10 @@ on:
         description: 'Enter FREE to acknowledge Gemini project has no linked paid billing'
         required: true
         type: string
+      publish_draft:
+        description: 'Enter DRAFT to request an isolated synthetic draft PR (no merge)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,7 +21,9 @@ concurrency:
 
 jobs:
   two-task-pilot:
-    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && inputs.confirmation == 'FREE' }}
+    permissions:
+      contents: read
+    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && github.ref == 'refs/heads/main' && github.actor == 'darshitmeghani1992' && inputs.confirmation == 'FREE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: gemini-free-smoke
@@ -54,6 +60,43 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  publish-synthetic-draft:
+    needs: two-task-pilot
+    if: ${{ github.repository == 'darshitmeghani1992/the-wall' && github.actor == 'darshitmeghani1992' && inputs.confirmation == 'FREE' && inputs.publish_draft == 'DRAFT' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    environment: gemini-draft-pr-write
+    env:
+      THE_WALL_SUPABASE_PROJECT: ewintxgdxdvschiqodkq
+      GEMINI_BILLING_TIER: free
+      GEMINI_FIXTURE_PILOT_APPROVED: 'true'
+      GEMINI_PILOT_ARTIFACTS: ${{ runner.temp }}/gemini-generated
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download strictly-scoped generated source
+        uses: actions/download-artifact@v4
+        with:
+          name: gemini-synthetic-code-evidence
+          path: ${{ runner.temp }}/gemini-generated
+      - name: Recheck hostile artifact and authorization contracts
+        run: |
+          python scripts/free_worker_preflight.py
+          python -m unittest discover -s scripts/tests -p 'test_gemini_fixture_draft_pr_v2.py' -v
+      - name: Publish synthetic source on isolated branch as draft PR only
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/gemini_fixture_draft_pr_v2.py
+
+
 # Manual job uses GitHub-hosted public-repo runner, two model requests maximum,
-# no repo write token, no generated code execution, no billing fallback.
+# no repo write token in the Gemini model job, no generated code execution, no billing fallback.
+# A separately gated publish job can open a narrow draft PR, never merge.
 # No task engine, webhook, GitHub PR creation or live deployment is activated.

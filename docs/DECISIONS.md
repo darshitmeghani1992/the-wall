@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-25 · 2026-11-21 · Separate Gemini model generation from draft-only GitHub write token
+- **Decision:** Two-job manual workflow: read-only Gemini synthetic source generation and artifact validation first, then optional explicit `DRAFT` Founder-confirmed publisher with its own scoped `contents: write` / `pull-requests: write` GitHub token. Publisher revalidates fixture AST and creates exactly two allowlisted fixture files on isolated branch after checking unchanged `main` SHA, then a draft PR. Does not run generated source or merge.
+- **Threat boundary:** No token in model job, no repository content sent to Gemini, no write outside fixture allowlist, no auth/role/schema mutations, no billed fallback, no staging/production touches. GitHub Actions repository settings may block PR creation and `GITHUB_TOKEN` PR creation may not retrigger CI. Always fail closed and record actual result.
+- **Status:** Code and mock tests prepared on isolated draft only; no real Gemini/GitHub write worker used. High-risk workflow integration requires independent Reviewer/QA and existing Founder/default-branch merge gates.
+- **Next:** exact SHA tests, independent security review, controlled real Gemini fixture/code evidence run after review, then separately build durable shared coordination and real scoped app improvement worker.
+
+
 ## D-24 · 2026-11-21 · Capture validated Gemini coding output as an ephemeral read-only CI artifact
 - **Decision:** During a later authorized two-request live Gemini pilot, persist only strictly AST-validated fixed-function source into two allowlisted files in runner temp; record SHA256 and upload as a one-day workflow artifact. Never execute generated code or give Gemini a repository GitHub token.
 - **Reason:** Mock CI is insufficient evidence of an actual agent; code artifacts enable independent verification without prematurely allowing code writes or changing the app candidate.
