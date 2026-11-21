@@ -25,7 +25,7 @@ test("identity reconciliation finishes before a replacement session is exposed",
 test("root resume uses the exact coordinator href and handles in-flight explicitly", () => {
   const index = read("app/index.tsx");
   assert.match(index, /prepareDeferredDestinationResume/);
-  assert.match(index, /setTarget\(result\.href\)/);
+  assert.match(index, /setTarget\(\{ actorId: subject, href: result\.href \}\)/);
   assert.match(index, /`in_flight`/);
   assert.doesNotMatch(index, /pendingLink|consumePendingLink/);
 });
