@@ -28,7 +28,9 @@ jobs:
       - name: Verify zero-billing and default-off policy
         run: python scripts/free_worker_preflight.py
       - name: Check queue logic and hard caps
-        run: python -m unittest discover -s scripts/tests -p 'test_engineering_*v2.py' -v
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_engineering_*v2.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_free_worker_preflight.py' -v
       - name: Show eligible tasks (dry run)
         run: python scripts/engineering_loop_v2.py --workers 1
 
