@@ -19,11 +19,11 @@ set local "test.uid"='77777777-7777-7777-7777-777777777777';
 do $$ declare wid uuid:=current_setting('tw.returning_wall')::uuid; begin
   if exists(select 1 from public.walls where id=wid) then
     raise exception '73 FAIL: unrelated actor can SELECT private shared wall'; end if;
-end $;
+end $$;
 -- Actor spoof regression: a logged-in non-owner cannot create a Shared Wall
 -- whose owner_id points at Grace, even when the client requests RETURNING.
 -- Keep this within the disposable DB test transaction; no hosted writes.
-do $
+do $$
 declare did_deny boolean:=false; v_spoofed_id uuid;
 begin
   begin
@@ -37,7 +37,7 @@ begin
   if not did_deny then
     raise exception '73 FAIL: authenticated non-owner spoofed Shared Wall owner_id via INSERT RETURNING';
   end if;
-end $;
+end $$;
 reset role;
 update public.profiles set account_status='deactivated',deactivated_at=now()
  where id='88888888-8888-8888-8888-888888888888';
@@ -46,10 +46,10 @@ set local "test.uid"='88888888-8888-8888-8888-888888888888';
 do $$ declare wid uuid:=current_setting('tw.returning_wall')::uuid; begin
   if exists(select 1 from public.walls where id=wid) then
     raise exception '73 FAIL: deactivated owner can SELECT private wall'; end if;
-end $;
+end $$;
 -- Deactivated owners may neither read an existing private Shared Wall nor
 -- create another one; this is independent of their existing owner_id.
-do $
+do $$
 declare did_deny boolean:=false; v_inactive_id uuid;
 begin
   begin
@@ -63,6 +63,6 @@ begin
   if not did_deny then
     raise exception '73 FAIL: deactivated owner created Shared Wall via INSERT RETURNING';
   end if;
-end $;
+end $$;
 rollback;
 \echo '73 (owner RETURNING + outsider owner spoof + inactive owner denial): PASS'
