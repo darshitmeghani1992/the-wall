@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-22 · 2026-11-21 · Safe two-step Gemini code-generation pilot before real repository coding
+- **Decision:** Start with a manual, read-only, free-tier-only GitHub Actions job generating two fixed synthetic Python functions; use a single temporary runner's lease/outbox to prove immediate sequential dispatch. AST-inspect generated code without executing it, don't send repository content or secrets in the prompt, and never log model response bodies.
+- **Authority:** Founder requested Gemini activation ASAP but existing Founder/Reviewer/QA merge and infra gates remain; therefore the workflow stays draft and cannot be manually dispatched until independently reviewed and integrated into the default branch. No auth proof or model execution claimed yet.
+- **Rejected shortcuts:** Don't put Gemini secrets into PR-triggered Actions jobs; don't run unreviewed generated source as code; don't treat local SQLite as shared cloud coordination; don't allow paid API fallback or give an AI worker a privileged GitHub/Supabase token. No release GO implied.
+- **Next:** verify mock CI, review workflow, perform approved two-request manual pilot, then isolate real code task, durable shared coordinator and a draft PR-producing worker in a later gated slice.
+
+
 ## D-21 · 2026-11-21 · Atomic task-completion outbox for crash-safe next-dispatch intention
 - **Decision:** Persist next-dispatch event in the same SQLite transaction that validates and completes a fenced lease. Read pending events non-destructively, acknowledge only after downstream acceptance, and test restart/duplicates/stale tokens. Prevent losing the handoff when the process crashes after completion.
 - **Limit:** This is a **single-host simulator**; SQLite file is not shared by ephemeral GitHub Actions runners, and no global delivery lock or coding-agent worker is deployed. Event delivery to an external cloud run remains unimplemented, and no exact billed/free Gemini model invocation verified.
