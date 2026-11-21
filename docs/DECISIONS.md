@@ -1,5 +1,13 @@
 # The-Wall Decision Log
 
+## D-16 · 2026-11-21 · Founder-approved event-driven engineering loop; activation withheld pending actual runtime
+- **Decision:** Build a maximum-three-worker external coding-agent loop; keep canonical `docs/BUILD_STATUS.md` task queue, isolate FRONTEND/BACKEND execution roles, enforce unique durable leases, retain independent Reviewer/QA and all Founder release/security gates. Preserve the existing hourly engineering automation as fallback.
+- **Authority:** Explicit Founder approval of Continuous Engineering Loop v2.0. Architecture planned under ARCHITECT; implementation must retain its distinct authorized implementation role.
+- **Evidence:** Connected Mac device is online but `/usr/local/bin/claude` fails at dynamic load on macOS 11.7.11 (binary built for macOS 13); external runtime is **NOT VERIFIED**. Draft-only dry-run queue dispatcher, contract tests and workflow are a foundation, not a persistent worker.
+- **Alternatives:** Increasing hourly run frequency cannot provide uninterrupted execution; blindly running a broken Mac agent would fail unpredictably. Prefer an OS-compatible authenticated worker with idempotent event dispatch and bounded lease concurrency.
+- **Reversibility:** New isolated draft, no automated commits from worker, no deployment or infrastructure mutation. **Next:** independent review plus DEVOPS runtime provisioning, leasing and end-to-end test. See `docs/architecture/CONTINUOUS_ENGINEERING_LOOP_V2.md`.
+
+
 Meaningful technical decisions. Trivial choices are omitted (§94). Format:
 date · decision · reason · alternatives · reversibility · Founder Gate?
 
