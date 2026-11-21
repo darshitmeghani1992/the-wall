@@ -23,6 +23,7 @@ import {
   type OnboardingDraft,
   type WallPrivacyChoice,
   onboardingFailureMessage,
+  onboardingScreenScopeKey,
   persistOnboardingInOrder,
   snapshotOnboardingDraft,
 } from "@/lib/onboarding-contract";
@@ -68,12 +69,18 @@ function Choice({
   );
 }
 
-/** Functional setup. Each local change is durable, while completion remains a server-confirmed gate. */
+/** A changed authenticated actor or gate always receives a fresh draft and submit state. */
 export default function ProfileSetup() {
+  const { session, accountRoute } = useAuth();
+  return <ProfileSetupSession key={onboardingScreenScopeKey(session?.user.id ?? null, accountRoute)} />;
+}
+
+/** Functional setup. Each local change is durable, while completion remains a server-confirmed gate. */
+function ProfileSetupSession() {
   const router = useRouter();
   const { session, profile, accountRoute, refreshAccountRoute } = useAuth();
   const userId = session?.user.id ?? null;
-  const existingProfile = accountRoute === "onboarding" ? profile : null;
+  const existingProfile = accountRoute === "onboarding" && userId && profile?.id === userId ? profile : null;
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<OnboardingDraft>(DEFAULT_ONBOARDING_DRAFT);
   const [draftReady, setDraftReady] = useState(false);
