@@ -19,3 +19,13 @@ test("received Marks share an exact focused destination instead of only the encl
   assert.match(share, /const deepLink = markDeepLink\(mark\.id, destination\)/);
   assert.doesNotMatch(share, /mark\.media_url/);
 });
+
+test("every Personal Wall share path depends on the validated link, not raw handle truthiness", () => {
+  const share = read("src/lib/share.ts");
+  const contract = read("src/lib/share-contract.ts");
+  assert.match(share, /return personalWallDeepLink\(handle\);/);
+  assert.equal((share.match(/const safeHandle = link\?\.slice\("thewall:\/\/u\/".length\)/g) ?? []).length, 3);
+  assert.equal((share.match(/has_handle: Boolean\(safeHandle\)/g) ?? []).length, 3);
+  assert.doesNotMatch(share, /has_handle: Boolean\(handle\)/);
+  assert.match(contract, /function personalWallDeepLink/);
+});
