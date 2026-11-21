@@ -31,18 +31,20 @@ SQL
   LAST_PID=$!
 }
 
-wait_for_lock() {
-  local name="$1" attempt waiting
+# Observe the first transaction holding its locks in pg_sleep, then observe
+# the contender waiting on a lock before checking either outcome.
+wait_for_session() {
+  local name="$1" event_column="$2" expected="$3" attempt waiting
   for attempt in $(seq 1 60); do
     waiting="$(psql_test -Atc "select count(*) from pg_catalog.pg_stat_activity
-      where application_name='actor96_$name' and wait_event_type='Lock';")"
+      where application_name='actor96_$name' and $event_column='$expected';")"
     if [ "$waiting" = "1" ]; then
       return 0
     fi
     sleep 0.05
   done
   cat "$TMP_DIR/$name.out"
-  echo "96 RACE FAIL: $name never reached the expected profile-lock wait" >&2
+  echo "96 RACE FAIL: $name never reached $event_column=$expected" >&2
   return 1
 }
 
@@ -97,11 +99,13 @@ verify_candidate() {
 # Concurrent third/fourth normal removal, first ordering.
 setup_quota
 run_session quota_a "$OWNER" \
-  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000003','normal'); select pg_sleep(0.8);"
-p1=$LAST_PID; sleep 0.1
+  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000003','normal'); select pg_sleep(4);"
+p1=$LAST_PID
+wait_for_session quota_a wait_event PgSleep
 run_session quota_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000004','normal');"
 p2=$LAST_PID
+wait_for_session quota_b wait_event_type Lock
 await_success "$p1" quota_a
 await_error "$p2" quota_b "MARK_REMOVAL_QUOTA: normal removal limit (3 per 30 days) reached"
 verify_candidate '96100000-0000-4000-8000-000000000003' '96100000-0000-4000-8000-000000000004'
@@ -109,11 +113,13 @@ verify_candidate '96100000-0000-4000-8000-000000000003' '96100000-0000-4000-8000
 # Same quota race, reverse ordering.
 setup_quota
 run_session quota_rev_a "$OWNER" \
-  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000004','normal'); select pg_sleep(0.8);"
-p1=$LAST_PID; sleep 0.1
+  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000004','normal'); select pg_sleep(4);"
+p1=$LAST_PID
+wait_for_session quota_rev_a wait_event PgSleep
 run_session quota_rev_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000003','normal');"
 p2=$LAST_PID
+wait_for_session quota_rev_b wait_event_type Lock
 await_success "$p1" quota_rev_a
 await_error "$p2" quota_rev_b "MARK_REMOVAL_QUOTA: normal removal limit (3 per 30 days) reached"
 verify_candidate '96100000-0000-4000-8000-000000000004' '96100000-0000-4000-8000-000000000003'
@@ -141,11 +147,13 @@ verify_lifecycle() {
 # Removal wins before deactivation: removal commits, then account deactivates.
 setup_lifecycle '96100000-0000-4000-8000-000000000011'
 run_session remove_deactivate_a "$OWNER" \
-  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000011','safety'); select pg_sleep(0.8);"
-p1=$LAST_PID; sleep 0.1
+  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000011','safety'); select pg_sleep(4);"
+p1=$LAST_PID
+wait_for_session remove_deactivate_a wait_event PgSleep
 run_session remove_deactivate_b "$OWNER" \
   "select public.deactivate_account('$OWNER');"
 p2=$LAST_PID
+wait_for_session remove_deactivate_b wait_event_type Lock
 await_success "$p1" remove_deactivate_a
 await_success "$p2" remove_deactivate_b
 verify_lifecycle '96100000-0000-4000-8000-000000000011' 'removed' 'deactivated'
@@ -156,11 +164,12 @@ verify_lifecycle '96100000-0000-4000-8000-000000000011' 'removed' 'deactivated'
 setup_lifecycle '96100000-0000-4000-8000-000000000012'
 run_session deactivate_remove_a "$OWNER" \
   "select public.deactivate_account('$OWNER'); select pg_sleep(4);"
-p1=$LAST_PID; sleep 0.1
+p1=$LAST_PID
+wait_for_session deactivate_remove_a wait_event PgSleep
 run_session deactivate_remove_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000012','safety');"
 p2=$LAST_PID
-wait_for_lock deactivate_remove_b
+wait_for_session deactivate_remove_b wait_event_type Lock
 await_success "$p1" deactivate_remove_a
 await_error "$p2" deactivate_remove_b "ACTOR_NOT_ACTIVE"
 verify_lifecycle '96100000-0000-4000-8000-000000000012' 'active' 'deactivated'
@@ -169,11 +178,13 @@ verify_lifecycle '96100000-0000-4000-8000-000000000012' 'active' 'deactivated'
 setup_lifecycle '96100000-0000-4000-8000-000000000021'
 psql_test -c "update public.profiles set is_admin=true where id='$AUTHOR';"
 run_session remove_suspend_a "$OWNER" \
-  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000021','safety'); select pg_sleep(0.8);"
-p1=$LAST_PID; sleep 0.1
+  "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000021','safety'); select pg_sleep(4);"
+p1=$LAST_PID
+wait_for_session remove_suspend_a wait_event PgSleep
 run_session remove_suspend_b "$AUTHOR" \
   "select public.admin_suspend_account('$AUTHOR','$OWNER','race');"
 p2=$LAST_PID
+wait_for_session remove_suspend_b wait_event_type Lock
 await_success "$p1" remove_suspend_a
 await_success "$p2" remove_suspend_b
 verify_lifecycle '96100000-0000-4000-8000-000000000021' 'removed' 'suspended'
@@ -184,11 +195,12 @@ setup_lifecycle '96100000-0000-4000-8000-000000000022'
 psql_test -c "update public.profiles set is_admin=true where id='$AUTHOR';"
 run_session suspend_remove_a "$AUTHOR" \
   "select public.admin_suspend_account('$AUTHOR','$OWNER','race'); select pg_sleep(4);"
-p1=$LAST_PID; sleep 0.1
+p1=$LAST_PID
+wait_for_session suspend_remove_a wait_event PgSleep
 run_session suspend_remove_b "$OWNER" \
   "select public.remove_mark('$OWNER','96100000-0000-4000-8000-000000000022','safety');"
 p2=$LAST_PID
-wait_for_lock suspend_remove_b
+wait_for_session suspend_remove_b wait_event_type Lock
 await_success "$p1" suspend_remove_a
 await_error "$p2" suspend_remove_b "ACTOR_NOT_ACTIVE"
 verify_lifecycle '96100000-0000-4000-8000-000000000022' 'active' 'suspended'
