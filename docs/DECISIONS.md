@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-20 · 2026-11-21 · Prototype fenced three-worker leases and immediate handoff without activating AI
+- **Decision:** Build a no-cost SQLite transactional single-host coordination **prototype** using `BEGIN IMMEDIATE`, monotonically increasing fencing token, bounded leases, task/branch ownership, deduplicated event ID, and max three active implementation leases. Simulate completion-to-next-task without hourly polling.
+- **Limits:** SQLite file is not shared across ephemeral GitHub Actions hosts and **must not be used as multi-run production coordinator**; any real cloud loop requires a shared durable transactional service plus security/operational review. A simulated task handoff is not evidence of authenticated Gemini coding, PR creation, QA or continuous deployment.
+- **Gate:** Founder authorized autonomous draft coding/testing only, not protected operations. No live model calls, secrets, hosted writes, merges or paid fallback; independent review and CI required. Existing queue remains canonical.
+- **Next:** verify branch contract CI, implement event-driven multi-host coordination design and sandbox actor with bounded Gemini free requests, first real no-charge pilot only after review.
+
+
 ## D-19 · 2026-11-21 · Prepare one-request Gemini free-tier authentication smoke, not coding activation
 - **Founder evidence:** User reports creating Google AI Studio Free-tier project and saving `GEMINI_API_KEY` through GitHub secrets. Never disclose or copy the key. Billing absence cannot be inferred from user's free tier label alone.
 - **Decision:** Probe only `gemini-2.5-flash-lite` with an exact static test phrase, using the secret **only** inside a manual GitHub workflow after independent review. No repository source/metadata sent, no response body logged, one request/no retries. Environment, permissions and no-spend configuration fail closed. Paid fallback never configured.
