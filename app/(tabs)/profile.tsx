@@ -31,8 +31,11 @@ export default function ProfileScreen() {
   const friendFence = useRef(new SessionFocusFence());
   const currentUserId = useRef<string | null>(session?.user.id ?? null);
   currentUserId.current = session?.user.id ?? null;
-  const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
   const actorId = session?.user.id ?? null;
+  // A refreshed session may render before its matching profile arrives.
+  // Never show the previous actor's avatar, bio, links or share destination.
+  const actorProfile = actorId && profile?.id === actorId ? profile : null;
+  const initial = (actorProfile?.display_name?.[0] ?? "?").toUpperCase();
   const countsAreForActor = Boolean(actorId && countsActorId === actorId);
   const friendsAreForActor = Boolean(actorId && friendsActorId === actorId);
 
@@ -103,14 +106,14 @@ export default function ProfileScreen() {
 
       <View style={{ alignItems: "center", gap: 10, marginBottom: 24 }}>
         <View style={{ width: 96, height: 96, borderRadius: 20, borderWidth: 2, borderColor: colors.ink, backgroundColor: markColors.brandYellow, alignItems: "center", justifyContent: "center", overflow: "hidden", transform: [{ rotate: "-3deg" }] }}>
-          {profile?.avatar_url ? (
-            <Image source={{ uri: profile.avatar_url }} style={{ width: "100%", height: "100%" }} />
+          {actorProfile?.avatar_url ? (
+            <Image source={{ uri: actorProfile.avatar_url }} style={{ width: "100%", height: "100%" }} />
           ) : (
             <Text variant="display" style={{ fontSize: 40 }}>{initial}</Text>
           )}
         </View>
-        <Text variant="display" style={{ fontSize: 24 }}>{profile?.display_name ?? "You"}</Text>
-        {profile?.handle ? <Text variant="label" color={colors.outline}>@{profile.handle}</Text> : null}
+        <Text variant="display" style={{ fontSize: 24 }}>{actorProfile?.display_name ?? "You"}</Text>
+        {actorProfile?.handle ? <Text variant="label" color={colors.outline}>@{actorProfile.handle}</Text> : null}
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 26, marginTop: 4 }}>
           {!actorId ? null : !countsAreForActor || countsLoading ? <ActivityIndicator color={markColors.brandYellow} /> : countsError ? (
@@ -142,13 +145,13 @@ export default function ProfileScreen() {
           </Pressable>
         ) : null}
 
-        {profile?.bio ? <Text variant="body" color={colors.onSurfaceVariant} style={{ textAlign: "center" }}>{profile.bio}</Text> : null}
-        {profile ? <SocialLinks profile={profile} /> : null}
+        {actorProfile?.bio ? <Text variant="body" color={colors.onSurfaceVariant} style={{ textAlign: "center" }}>{actorProfile.bio}</Text> : null}
+        {actorProfile ? <SocialLinks profile={actorProfile} /> : null}
       </View>
 
       <View style={{ gap: 12 }}>
-        <Button label="Share my Wall" variant="yellow" onPress={() => shareMyWall(profile?.handle)} />
-        <Button label="Edit profile" variant="ghost" onPress={() => router.push("/profile-edit")} />
+        <Button label="Share my Wall" variant="yellow" disabled={!actorProfile} onPress={() => shareMyWall(actorProfile?.handle)} />
+        <Button label="Edit profile" variant="ghost" disabled={!actorProfile} onPress={() => router.push("/profile-edit")} />
         <Button label="Help" variant="ghost" onPress={() => router.push("/help")} />
         <Button label="Settings" variant="primary" onPress={() => router.push("/settings")} />
       </View>

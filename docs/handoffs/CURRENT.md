@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-41 · Profile tab header and sharing current-actor gate — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #124 immutable `951d19aeb9e2ebf4e2898a983505942f1ab65fe1`. The Profile tab counters already had actor-specific async fencing, but the avatar, name, handle, bio, social links and share destination still used the raw `profile` context without verifying `profile.id === session.user.id`. If a new session renders before its profile resolves, old-account private/identifying details and potentially the wrong Wall invite could be displayed. Bind all identity presentation and Share/Edit actions to matched actor profile, preserve the existing anonymous/empty fallback and counter fences. New source/matrix regression `tests/frontend-profile-view-actor-gate.test.mjs`. No new design, API, Auth, storage, schema or feature flag.
+
+**Gates:** Exact new SHA CI, independent Reviewer, distinct behavioral QA for A→B pre-effect and delayed profile refresh, old share tap, logout, profile absent/retry and accessible avatar. Not verified on native devices. No hosted writes/prod access, migrations 0031, merge, deploy or invitations. Enhanced Beta **NO-GO** pending verified six-digit SMTP OTP, three real hosted JWT identities, C2/C3 media playback, Secret hourly cleanup, deletion/purge, device/rollback and independent gates/Founder approval; media/Secret/analytics OFF, domain/Apple held.
+
+**Next:** Verify exact-source CI/reviews/QA and continue next unblocked beta task after checkpoint.
+
+
 ## CURRENT BETA-P0-40 · Settings administrative and account-state actor binding — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #123 immutable `ab4393aec9ecedd8dc16d8b7f670d07a56e28889`. Settings showed Moderation queue when `profile.is_admin` and enabled account deactivation/deletion controls when `profile.account_status` was active, without requiring that profile to match the currently signed-in session. Account provider updates are asynchronous; old-role/profile metadata must not grant A's UI controls to B, even temporarily. Restrict these controls and the confirmation handler to a `profile.id === actorId` snapshot, leaving server authorization authoritative. Dedicated source/actor matrix `tests/frontend-settings-admin-actor-gate.test.mjs`. No product journey, admin backend/API/schema, or visual redesign.
