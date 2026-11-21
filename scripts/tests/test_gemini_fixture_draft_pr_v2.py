@@ -99,6 +99,12 @@ class TestDraftWriter(unittest.TestCase):
             self.dir/"generated_subtract.py")
         with self.assertRaises(ValueError):
             m.load_fixture_blobs(self.dir)
+    def test_secret_bearing_workflows_are_main_founder_only(self):
+        for workflow in ("gemini-fixture-pilot.yml", "gemini-free-auth-smoke.yml"):
+            source=(ROOT/".github"/"workflows"/workflow).read_text()
+            self.assertIn("github.ref == 'refs/heads/main'",source)
+            self.assertIn("github.actor == 'darshitmeghani1992'",source)
+
     def test_publisher_never_exposes_key_to_model(self):
         from gemini_fixture_pilot_v2 import TASKS
         self.assertTrue(all("GITHUB_TOKEN" not in prompt for _,prompt in TASKS))
