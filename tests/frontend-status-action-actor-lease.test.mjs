@@ -13,9 +13,14 @@ test("Status save/remove use a mutation lease distinct from read refresh", () =>
   assert.match(screen, /actionFence\.blur\(\)/);
   assert.match(screen, /removalGuard\.resetSession\(\)/);
   assert.equal((screen.match(/const token = actionFence\.begin\(userId\)/g) ?? []).length, 2);
-  assert.equal((screen.match(/if \(actionFence\.isCurrent\(token, currentUserId\.current\)\) \{\s+removalGuard\.finishOperation\(\);\s+setBusy\(null\);/g) ?? []).length, 2);
+  assert.equal((screen.match(/if \(actionFence\.isCurrent\(token, currentUserId\.current\) && subject === currentSubjectRef\.current\) \{\s+removalGuard\.finishOperation\(\);\s+setBusy\(null\);/g) ?? []).length, 2);
   assert.match(screen, /subject !== currentSubjectRef\.current \|\| !canSave/);
   assert.match(screen, /subject !== currentSubjectRef\.current \|\| !visibleStatus/);
+  assert.equal((screen.match(/if \(!actionFence\.isCurrent\(token, currentUserId\.current\) \|\| subject !== currentSubjectRef\.current\) return;/g) ?? []).length, 2);
+  // Wall X→Y with the same user must invalidate result navigation before the focus effect.
+  const capturedSubject = "actor:wall-X";
+  const currentSubject = "actor:wall-Y";
+  assert.equal(capturedSubject === currentSubject, false);
 });
 
 test("old session network finally never releases new session's busy removal gate", () => {

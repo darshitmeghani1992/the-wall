@@ -219,18 +219,18 @@ export default function StatusScreen() {
     setError(null);
     try {
       const confirmed = await saveWallStatus(wallId, draft.body);
-      if (!actionFence.isCurrent(token, currentUserId.current)) return;
+      if (!actionFence.isCurrent(token, currentUserId.current) || subject !== currentSubjectRef.current) return;
       setStatus(confirmed);
       setBody(confirmed.body);
       setOriginalBody(confirmed.body);
       removalGuard.finishOperation();
       queueApprovedRemoval();
     } catch (cause: any) {
-      if (actionFence.isCurrent(token, currentUserId.current)) {
+      if (actionFence.isCurrent(token, currentUserId.current) && subject === currentSubjectRef.current) {
         setError(cause?.message ?? "Couldn't save your Status. Try again.");
       }
     } finally {
-      if (actionFence.isCurrent(token, currentUserId.current)) {
+      if (actionFence.isCurrent(token, currentUserId.current) && subject === currentSubjectRef.current) {
         removalGuard.finishOperation();
         setBusy(null);
       }
@@ -249,18 +249,18 @@ export default function StatusScreen() {
     setError(null);
     try {
       await removeWallStatus(wallId);
-      if (!actionFence.isCurrent(token, currentUserId.current)) return;
+      if (!actionFence.isCurrent(token, currentUserId.current) || subject !== currentSubjectRef.current) return;
       setStatus(null);
       setBody("");
       setOriginalBody("");
       removalGuard.finishOperation();
       queueApprovedRemoval();
     } catch (cause: any) {
-      if (actionFence.isCurrent(token, currentUserId.current)) {
+      if (actionFence.isCurrent(token, currentUserId.current) && subject === currentSubjectRef.current) {
         setError(cause?.message ?? "Couldn't remove your Status. Try again.");
       }
     } finally {
-      if (actionFence.isCurrent(token, currentUserId.current)) {
+      if (actionFence.isCurrent(token, currentUserId.current) && subject === currentSubjectRef.current) {
         removalGuard.finishOperation();
         setBusy(null);
       }
