@@ -67,7 +67,7 @@ def claim(conn, *, task_id, branch, role, owner, now=None, ttl=300, max_workers=
         token = conn.execute("SELECT value FROM counters WHERE name='fence'").fetchone()[0]
         # Fully expire old branch assignments, but never steal an active lease.
         conn.execute(
-            "DELETE FROM leases WHERE branch=? AND task_id<>? AND expires_at<=?",
+            "DELETE FROM leases WHERE branch=? AND task_id<>? AND (state='released' OR expires_at<=?)",
             (branch, task_id, now),
         )
         conn.execute("""
