@@ -7,8 +7,8 @@ import { Button } from "@/components/Button";
 import { getCurrentAccountDeletion, reactivateAccount } from "@/lib/account";
 import {
   canOfferAccountRecovery,
-  type AccountDeletionStatusLoadState,
-  type CurrentAccountDeletion,
+  currentAccountRecoveryStatus,
+  type ScopedRecoveryStatus,
 } from "@/lib/account-deletion-contract";
 import { runAccountRecoveryFlow } from "@/lib/account-recovery-flow";
 import { useAuth } from "@/lib/auth";
@@ -23,13 +23,18 @@ export default function AccountRecovery() {
   currentUserId.current = userId;
   const fence = useRef(new AccountRouteFence());
   const [busy, setBusy] = useState(false);
-  const [deletion, setDeletion] = useState<CurrentAccountDeletion | null>(null);
-  const [statusLoadState, setStatusLoadState] = useState<AccountDeletionStatusLoadState>("loading");
+  const [statusSnapshot, setStatusSnapshot] = useState<ScopedRecoveryStatus | null>(null);
   const [statusRequest, setStatusRequest] = useState(0);
   const inFlight = useRef(false);
+  const { loadState: statusLoadState, deletion } = currentAccountRecoveryStatus(
+    userId, accountRoute, statusRequest, statusSnapshot,
+  );
 
   useEffect(() => {
     const currentFence = fence.current;
+    // The previous actor's delayed finally callback must not lock out this account.
+    inFlight.current = false;
+    setBusy(false);
     return () => currentFence.invalidate(currentUserId.current);
   }, [userId]);
 
@@ -39,18 +44,24 @@ export default function AccountRecovery() {
 
   useEffect(() => {
     let current = true;
-    setDeletion(null);
-    setStatusLoadState("loading");
+    setStatusSnapshot(userId ? {
+      actorId: userId, requestId: statusRequest, loadState: "loading", deletion: null,
+    } : null);
     if (!userId || accountRoute !== "deactivated") return () => { current = false; };
     void getCurrentAccountDeletion()
       .then((result) => {
         if (current && currentUserId.current === userId) {
-          setDeletion(result);
-          setStatusLoadState("ready");
+          setStatusSnapshot({
+            actorId: userId, requestId: statusRequest, loadState: "ready", deletion: result,
+          });
         }
       })
       .catch(() => {
-        if (current && currentUserId.current === userId) setStatusLoadState("error");
+        if (current && currentUserId.current === userId) {
+          setStatusSnapshot({
+            actorId: userId, requestId: statusRequest, loadState: "error", deletion: null,
+          });
+        }
       });
     return () => { current = false; };
   }, [accountRoute, statusRequest, userId]);

@@ -32,6 +32,31 @@ export function canOfferAccountRecovery(
     && (deletion?.status === "none" || deletion?.status === "scheduled");
 }
 
+/** A recovery-status response belongs to one signed-in actor and one request revision. */
+export type ScopedRecoveryStatus = Readonly<{
+  actorId: string;
+  requestId: number;
+  loadState: AccountDeletionStatusLoadState;
+  deletion: CurrentAccountDeletion | null;
+}>;
+
+/** Fail closed before the new actor/retry result resolves, including pre-effect renders. */
+export function currentAccountRecoveryStatus(
+  actorId: string | null,
+  accountRoute: string | null,
+  requestId: number,
+  snapshot: ScopedRecoveryStatus | null,
+): Readonly<{ loadState: AccountDeletionStatusLoadState; deletion: CurrentAccountDeletion | null }> {
+  if (!actorId || accountRoute !== "deactivated" || snapshot?.actorId !== actorId
+    || snapshot.requestId !== requestId) {
+    return { loadState: "loading", deletion: null };
+  }
+  return {
+    loadState: snapshot.loadState,
+    deletion: snapshot.loadState === "ready" ? snapshot.deletion : null,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -82,3 +82,12 @@ test("recovery screen keeps lifecycle invalidation separate from route redirects
   assert.match(source, /\}, \[accountRoute, router\]\);/);
   assert.match(source, /isCurrent: \(\) => fence\.current\.isCurrent\(token, currentUserId\.current\)/);
 });
+
+test("recovery status render and mutation use the same active actor and retry snapshot", () => {
+  const source = readFileSync("app/account-recovery.tsx", "utf8");
+  assert.match(source, /currentAccountRecoveryStatus\(\s*userId, accountRoute, statusRequest, statusSnapshot/);
+  assert.match(source, /setStatusSnapshot\(\{\s*actorId: userId, requestId: statusRequest, loadState: "ready", deletion: result/);
+  assert.match(source, /setStatusSnapshot\(\{\s*actorId: userId, requestId: statusRequest, loadState: "error", deletion: null/);
+  assert.match(source, /canOfferAccountRecovery\(statusLoadState, deletion\)/);
+  assert.match(source, /inFlight\.current = false;\s*setBusy\(false\);\s*return \(\) => currentFence\.invalidate/);
+});
