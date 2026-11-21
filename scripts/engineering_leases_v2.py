@@ -38,6 +38,11 @@ def connect(path):
           token INTEGER NOT NULL, event_id TEXT NOT NULL UNIQUE,
           completed_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS dispatch_outbox (
+          event_id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL,
+          delivered_at INTEGER
+        );
     """)
     return conn
 
@@ -145,11 +150,42 @@ def complete(conn, task_id, owner, token, event_id, *, now=None):
         """, (now, task_id, owner, token, now))
         if updated.rowcount != 1:
             raise RuntimeError("fenced lease changed during atomic completion")
+        conn.execute(
+            "INSERT INTO dispatch_outbox(event_id,task_id,created_at) VALUES(?,?,?)",
+            (event_id, task_id, now),
+        )
         conn.execute("COMMIT")
         return True
     except Exception:
         conn.execute("ROLLBACK")
         raise
+
+def pending_dispatches(conn):
+    """Read nondestructively; pending events survive crashes and DB reopening.
+
+    An external dispatcher must use a *shared* transactional outbox and an
+    idempotent delivery target before claiming actual cloud readiness.
+    """
+    return [
+        dict(row) for row in conn.execute(
+            "SELECT event_id,task_id,created_at FROM dispatch_outbox "
+            "WHERE delivered_at IS NULL ORDER BY created_at,event_id"
+        )
+    ]
+
+def mark_dispatched(conn, event_id, *, now=None):
+    """Acknowledge after downstream acceptance, not before.
+
+    This local-only operation is not a durable multi-host delivery lock.
+    """
+    now = int(time.time()) if now is None else int(now)
+    cur = conn.execute(
+        "UPDATE dispatch_outbox SET delivered_at=? "
+        "WHERE event_id=? AND delivered_at IS NULL",
+        (now, event_id),
+    )
+    return cur.rowcount == 1
+
 
 def completed_ids(conn):
     """Durable local bookkeeping prevents reassigning finished simulation tasks."""
