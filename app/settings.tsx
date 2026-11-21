@@ -20,6 +20,8 @@ export default function SettingsScreen() {
   const actionFence = useRef(new SessionFocusFence());
   const actionInFlight = useRef(false);
   currentActorId.current = actorId;
+  // Fail closed if the Auth profile has not caught up with a new session.
+  const actorProfile = actorId && profile?.id === actorId ? profile : null;
 
   useFocusEffect(useCallback(() => {
     actionFence.current.focus(actorId);
@@ -29,7 +31,7 @@ export default function SettingsScreen() {
   }, [actorId]));
 
   function confirmDeactivate() {
-    if (!actorId || actionInFlight.current) return;
+    if (!actorId || !actorProfile || currentActorId.current !== actorId || actionInFlight.current) return;
     const subjectToken = actionFence.current.begin(actorId);
     if (!subjectToken) return;
     Alert.alert(
@@ -94,7 +96,7 @@ export default function SettingsScreen() {
         <Button label="Personal Wall settings" variant="ghost" disabled={busy} onPress={() => router.push("/personal-wall-settings")} />
         <Button label="Blocked users" variant="ghost" disabled={busy} onPress={() => router.push("/blocked-users")} />
         <Button label="Help and quick tour" variant="ghost" disabled={busy} onPress={() => router.push("/help")} />
-        {profile?.is_admin ? (
+        {actorProfile?.is_admin ? (
           <Button label="Moderation queue" variant="yellow" disabled={busy} onPress={() => router.push("/moderation")} />
         ) : null}
         <Button label="Sign out" variant="primary" disabled={busy} onPress={signOut} />
@@ -107,7 +109,7 @@ export default function SettingsScreen() {
         </Text>
         <Pressable
           accessibilityRole="button"
-          disabled={busy || !actorId || profile?.account_status !== "active"}
+          disabled={busy || !actorId || actorProfile?.account_status !== "active"}
           onPress={confirmDeactivate}
           style={{ minHeight: 48, justifyContent: "center", opacity: busy ? 0.5 : 1 }}
         >
@@ -121,7 +123,7 @@ export default function SettingsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Delete account"
-          disabled={busy || !actorId || profile?.account_status !== "active"}
+          disabled={busy || !actorId || actorProfile?.account_status !== "active"}
           onPress={() => router.push("/delete-account")}
           style={{ minHeight: 48, justifyContent: "center", opacity: busy ? 0.5 : 1 }}
         >
