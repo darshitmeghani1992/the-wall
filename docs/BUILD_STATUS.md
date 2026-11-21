@@ -1,5 +1,10 @@
 # The-Wall Build Status
 
+## BETA-P0-04 Shared-Wall owner-spoof regression (21 Nov 2026, BACKEND test-only)
+
+Following read-only staging inspection of `delete_shared_wall`, `get_my_pending_shared_wall_invite`, `get_wall_capabilities` and `join_shared_wall`, new isolated `codex/shared-wall-returning-negative-20261121` branch (based on integrated draft PR #67, not the cloud-loop drafts) extends disposable Postgres `supabase/tests/73_shared_wall_owner_returning.sql`. Added explicit negative `INSERT ... RETURNING` attempts by a real seeded authenticated **different actor** spoofing another owner's ID, and by a **deactivated owner**, both expected to fail with insufficient privilege. No migration, schema, frontend, API, hosted DB or flags changed. **Next:** exact-SHA PostgreSQL security CI, independent Reviewer/QA and genuine 3-actor HTTP/JWT staging negative test still required; synthetic SQL role/test.uid does NOT replace live identity evidence. No original production writes or feature activation. Enhanced Beta NO-GO.
+
+
 ## Integrated internal security candidate (after #64/#65) — 21 Nov 2026
 
 **ROLE: ARCHITECT controlled draft reconciliation.** The previous paragraphs below record historical work on separate branches. New [PR #67](https://github.com/darshitmeghani1992/the-wall/pull/67), branch `codex/internal-beta-verified-security-candidate-20261121`, **combines** the latest [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64) canonical audit docs with **byte-identical** worker source and test blobs from [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65). Origin: PR #64 docs head `2c919ee1728fe48a157ab282eb8bcb7ce73a0cf7`; source `workers/media-processor/src/url-policy.ts` blob `88b235eb5c818b110abcd798ec63af766c1414aa`; test blob `8473f47ca63d9096ad245ec7ec7512246df9f4b5`. GitHub contents reads confirmed both source blobs exactly match #65. This is a **draft internal verification candidate only**; no main merge, hosted deploy, Secret/media activation, real tester access or production change. The merged files are not a release certification.
