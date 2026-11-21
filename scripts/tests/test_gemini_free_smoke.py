@@ -1,10 +1,12 @@
 """No network/credentials in unit tests for the free-tier Gemini smoke."""
 import importlib.util
 import json
+import sys
 from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("gemini_free_smoke", ROOT / "scripts/gemini_free_smoke.py")
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
