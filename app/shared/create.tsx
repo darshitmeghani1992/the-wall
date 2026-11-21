@@ -54,7 +54,10 @@ export default function CreateSharedWallScreen() {
         setSubmitting(false);
       }
     } finally {
-      endExclusiveMutation(mutationInFlight);
+      // A prior account's request must not unlock a newer actor's mutation.
+      if (fence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight);
+      }
     }
   }
 
