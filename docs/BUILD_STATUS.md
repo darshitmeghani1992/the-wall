@@ -1,5 +1,10 @@
 # The-Wall Build Status
 
+## BETA-P0-04 · False-positive private Shared Wall fixture guard — 21 Nov 2026
+
+**ROLE: ARCHITECT sequence → BACKEND implementation.** New isolated draft `codex/beta-three-jwt-fixture-kind-20261121-run2` descends from test-only #86 corrected source `5e6c5de25489b4ddd365382788c5551523622ff1`. Existing read-only three-JWT HTTP audit could report a misleading PRIVATE SHARED Wall PASS using a private Personal Wall fixture, because it queried/checked only `id`. It now GETs `id,type,visibility` and fail-closes unless owner/member rows are the exact private Shared Wall; mock tests cover wrong `type`, public `visibility`, outsider leakage, identity and HTTP 401. Runbook updated; zero new requests or mutations. **Local true JWT QA remains blocked:** staging has no authorized actors or verified SMTP. Exact-head CI and independent Reviewer/QA remain mandatory, no hosted/prod writes or activation. **Next:** check draft CI and hand off security fixture validation; retain Enhanced Beta NO-GO.
+
+
 ## BETA-P0-04 · Suspended-owner Shared Wall regressions — 21 Nov 2026
 
 **ROLE: BACKEND** test implementation under ARCHITECT's BETA-P0-04 security acceptance. New isolated branch `codex/beta-suspended-owner-returning-tests-20261121-run2` starts at [PR #85](https://github.com/darshitmeghani1992/the-wall/pull/85) `3e13b30cde449ac8023edaf01df6b1b35a8a734a`. Added two independent suspended-account SQL negative assertions to existing disposable test 73: the suspended owner cannot read an existing private Shared Wall or create another by `INSERT ... RETURNING`. Deactivated, outsider-spoof, and legitimate active-owner cases retained. **No schema/config/API/hosted data changes.** New exact-head CI, independent Reviewer, and QA still required; local PostgreSQL unavailable to this run. Real three-actor HTTP/OTP security evidence remains blocked by staging's zero Auth users and unverified SMTP. **Next:** check published draft CI, hand off tests, then continue independent authorized security work. Enhanced Beta NO-GO.
