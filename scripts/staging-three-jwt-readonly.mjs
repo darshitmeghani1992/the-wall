@@ -103,11 +103,12 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
       throw new Error('Authenticated actor identity mismatch: ' + actor.role);
     }
     const wallUrl = new URL('/rest/v1/walls', STAGING);
-    wallUrl.searchParams.set('select', 'id');
+    wallUrl.searchParams.set('select', 'id,type,visibility');
     wallUrl.searchParams.set('id', 'eq.' + wallId);
     const rows = await getJson(fetchImpl, wallUrl.toString(), apiKey, actor.jwt);
     if (!Array.isArray(rows) || rows.length !== actor.expect ||
-        (actor.expect === 1 && rows[0]?.id !== wallId)) {
+        (actor.expect === 1 && (rows[0]?.id !== wallId ||
+          rows[0]?.type !== 'shared' || rows[0]?.visibility !== 'private'))) {
       throw new Error('Private Shared Wall RLS visibility mismatch: ' + actor.role);
     }
   }
