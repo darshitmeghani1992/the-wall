@@ -1,5 +1,14 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-44 · Root deferred redirect bound to authenticated account — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #127 immutable `1290b956205f3b9906be47e68d7f7c0c2c361761`, maintaining untouched PR #30–#127 ancestry. The root `app/index.tsx` kept a plain resolved redirect string from account A. While session B became ready but before root `useEffect` invalidated that string, render could redirect B to A's previously resolved Wall, invite or fallback. A new `ActorRedirectTarget` records the resolving actor with its exact destination; `visibleRedirectForActor` fails closed until the currently authenticated actor matches. Async completion remains guarded by the pre-existing `preparedFor` lease and the deferred coordinator is not altered. Existing root contract adjusted to require scoped destination plus executable pure actor matrix `tests/frontend-root-redirect-actor.test.mjs`.
+
+**Gates:** Verify exact-head TypeScript/lint/contracts/Postgres/Edge/media CI and Expo/disposable native build where available. Independently review exact unchanged tree and behaviorally QA account A→B before effect, B→A, logged-out links, fallback Discover, slow coordinator response, onboarding return and no stale redirect. Source/unit checks are not installed-device or real-user proof. No hosted writes, auth/schema/API/flags, production, migrations 0031, main merge, deploy or tester invitations. Enhanced Beta **NO-GO**: six-digit SMTP OTP, 3 genuine JWT actors, private media C2/C3, Secret cron cleanup, deletion, native QA/rollback, independent gates and Founder GO outstanding. Media/Secret/analytics OFF; domain/DNS/Apple held.
+
+**Next:** Verify PR #128 immutable CI and REVIEWER/QA, then continue independent work on remaining beta items.
+
+
 ## CURRENT BETA-P0-43 · Handle deep-link resolution fenced to account + route + deferred reference — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #126 immutable parent `b1ce103aad7f379338ec9e391a30533a973da86b` (tree `018b4c0251a6f655dbe7bd0a7545fb2b36b9e900`), preserving stacked lineage #30–#126. The `/u/[handle]` route kept resolved target, retry and not-found state as unscoped component booleans/strings. If an authenticated viewer changed or an inbound handle/deferred reference changed before a new effect reset, the previous result could redirect a new session or present an outdated outcome. One explicit subject key (authenticated account, canonical handle, deferred reference, ready account state) now fences resolved display/redirect and claimed deferred attempts synchronously. Async completion and Retry are rejected after a route/account change even before focus-effect cleanup. Existing deferred coordinator, destination verification and safe fallback remain unchanged.

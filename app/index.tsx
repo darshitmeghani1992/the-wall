@@ -4,6 +4,7 @@ import { Redirect, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import { prepareDeferredDestinationResume } from "@/lib/deferred-destination";
 import { destinationForAccountRoute } from "@/lib/onboarding-contract";
+import { visibleRedirectForActor, type ActorRedirectTarget } from "@/lib/actor-redirect-target";
 import { Text } from "@/components/Text";
 import { colors, markColors } from "@/theme";
 
@@ -22,7 +23,7 @@ export default function Index() {
 
   // Resolved redirect target once the user is fully set up. `null` means the
   // consume effect hasn't run yet (we show a brief splash rather than routing).
-  const [target, setTarget] = useState<string | null>(null);
+  const [target, setTarget] = useState<ActorRedirectTarget | null>(null);
   // Guards single-use consume against StrictMode's double-invoke of effects.
   const preparedFor = useRef<string | null>(null);
 
@@ -40,13 +41,13 @@ export default function Index() {
     void prepareDeferredDestinationResume(subject).then((result) => {
       if (preparedFor.current !== subject) return;
       if (result.status === "navigate" || result.status === "terminal_unavailable") {
-        setTarget(result.href);
+        setTarget({ actorId: subject, href: result.href });
       } else if (result.status === "none" || result.status === "durable_disabled") {
-        setTarget(fallback === "discover" ? "/(tabs)/discover" : "/(tabs)/home");
+        setTarget({ actorId: subject, href: fallback === "discover" ? "/(tabs)/discover" : "/(tabs)/home" });
       }
       // `in_flight` means another invocation already owns the one navigation.
     }).catch(() => {
-      if (preparedFor.current === subject) setTarget(fallback === "discover" ? "/(tabs)/discover" : "/(tabs)/home");
+      if (preparedFor.current === subject) setTarget({ actorId: subject, href: fallback === "discover" ? "/(tabs)/discover" : "/(tabs)/home" });
     });
   }, [loading, session, accountRoute, fallback]);
 
@@ -55,7 +56,8 @@ export default function Index() {
   if (!accountRoute) return <Splash />;
   if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
 
-  // Fully set up, but the consume effect hasn't resolved a target yet.
-  if (target === null) return <Splash />;
-  return <Redirect href={target} />;
+  // Account B must not follow a destination resolved for account A before the effect resets.
+  const visibleTarget = visibleRedirectForActor(target, session.user.id);
+  if (visibleTarget === null) return <Splash />;
+  return <Redirect href={visibleTarget} />;
 }
