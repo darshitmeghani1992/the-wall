@@ -94,5 +94,36 @@ begin
     raise exception '73 FAIL: deactivated owner created Shared Wall via INSERT RETURNING';
   end if;
 end $$;
+-- Suspension is a separate inactive-account state from deactivation. Preserve
+-- fail-closed behavior for both SELECT and INSERT RETURNING on a known owner,
+-- without relying on a hosted user or any post-test persistence.
+reset role;
+update public.profiles
+   set account_status='suspended',deactivated_at=null
+ where id='88888888-8888-8888-8888-888888888888';
+set local role authenticated;
+set local "test.uid"='88888888-8888-8888-8888-888888888888';
+do $
+declare wid uuid:=current_setting('tw.returning_wall')::uuid;
+begin
+  if exists(select 1 from public.walls where id=wid) then
+    raise exception '73 FAIL: suspended owner can SELECT private Shared Wall';
+  end if;
+end $;
+do $
+declare v_suspended_id uuid; did_deny boolean:=false;
+begin
+  begin
+    insert into public.walls(owner_id,type,name,visibility,open_join,allow_anonymous)
+    values(auth.uid(),'shared','73 forbidden suspended owner','private',false,false)
+    returning id into v_suspended_id;
+  exception when insufficient_privilege then
+    did_deny:=true;
+  end;
+  if not did_deny then
+    raise exception '73 FAIL: suspended owner created Shared Wall via INSERT RETURNING';
+  end if;
+end $;
+
 rollback;
-\echo '73 (owner RETURNING + outsider owner spoof + inactive owner denial): PASS'
+\echo '73 (owner RETURNING + outsider spoof + deactivated/suspended denial): PASS'
