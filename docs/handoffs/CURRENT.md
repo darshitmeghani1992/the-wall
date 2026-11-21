@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Restricted Gemini draft PR worker candidate — 21 Nov 2026, NOT ACTIVATED
+
+Isolated `codex/gemini-controlled-draft-writer-20261121` from draft #80 exact head `ed86159d358248dacb064ed82fad0a80622694f8`. Adds `scripts/gemini_fixture_draft_pr_v2.py` and extensive no-network hostile-input tests plus a second optional manual workflow job for a **draft-only** GitHub write of exactly two synthetic fixture files. Secret-bearing generation job remains read-only and never receives GitHub write token; publisher job does not receive Gemini key. Full exact-SHA CI, independent Reviewer/QA, existing Founder/main-merge authorization and a first genuine API+draft PR run are still outstanding. **No Gemini free-tier usage or continuous cloud coding proven.** Next: verify new PR CI, independent review, approved default-branch integration/one-time pilot; reconcile GitHub Actions token-created PR CI limitation. Build bounded real app editing and multi-run event dispatch independently. Original production untouched; first beta Enhanced scope NO-GO.
+
+
 ## Gemini coding-output artifact draft — 21 Nov 2026 (NOT LIVE)
 
 Latest isolated branch `codex/gemini-code-artifact-pilot-20261121` descendant of #79 `0b207a14fea260064588d2ef8f7f9f675d76d499`. The two-task manual Gemini pilot can now save two syntactically and semantically constrained generated Python functions in short-lived GitHub Actions artifacts, without execution or repository write. Hash validation and malicious-output rejection covered by mock tests. **No real Gemini API call or continuous worker launch**; manual workflow still needs independent Reviewer/QA and approved default-branch integration. Next exact task: verify new PR immutable SHA CI, review/approve secret-bearing workflow, run controlled pilot, examine code artifacts and completion callback, then implement cross-run shared event dispatch and restricted real app coding. Keep $0 paid fallback, staging-only and original production untouched; Enhanced Beta NO-GO.
