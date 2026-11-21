@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-33 · Status editor guard / async lease separation — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #116 `d6c60a9796fbfe734a630ffed2fabfefb0ca0f8f`. A stale account's save/remove `finally` could release a new account's Status navigation guard; read refresh shared the operation fence. Separate action/read generation, current-subject protection of stale modal callbacks, reset per-focus approved/busy/dirty guard state, conditional final release. Adds `StatusRemovalGuard.resetSession` and unit/source race tests. Exact new-head CI, independent Reviewer and behavioral QA required; not an installed-device validation, do not merge/deploy. Staging-only `ewintxgdxdvschiqodkq`; original production protected. Media/Secret/analytics remain OFF.
+
+**Next:** CI exact head, Reviewer/QA on A→B delayed save/remove, concurrent reload and stale Alert; then resume independent task queue. All OTP/JWT/media/Secret/deletion/device/Founder gates remain.
+
+
 ## BETA-P0-32 · Status editor account/Wall render fence — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #115 `b1ed1637c86f5349f41ded85d4f0eeea9108b415`: before focus cleanup, old Status body/draft can be rendered for a changed account/Wall. Visible editor values, dirty/save/remove controls and loading are now gated by matching `userId:wallId`; success/denied/error states are tagged for authorized retry, with no server contract or UX redesign. Regression `tests/frontend-status-actor-render-fence.test.mjs`. New exact-head CI plus independent Reviewer and actual behavioral native QA required; no self-certification or release GO. Staging `ewintxgdxdvschiqodkq` only, original production untouched. No hosted writes, merge/deploy or invite. Media/Secret/analytics OFF.

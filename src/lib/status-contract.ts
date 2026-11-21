@@ -26,6 +26,13 @@ export class StatusRemovalGuard {
     this.approved = true;
   }
 
+  /** A new focused account/Wall must not inherit a prior draft's navigation state. */
+  resetSession(): void {
+    this.busy = false;
+    this.dirty = false;
+    this.approved = false;
+  }
+
   shouldPreventRemoval(): boolean {
     return !this.approved && (this.busy || this.dirty);
   }
