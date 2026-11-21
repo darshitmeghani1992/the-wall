@@ -118,6 +118,11 @@ export async function runForExpectedSubject<T>(
   return mutate();
 }
 
+/** Each setup draft/step/submit lease belongs to one actor and server account-route state. */
+export function onboardingScreenScopeKey(actorId: string | null, accountRoute: AccountRoute | null): string {
+  return JSON.stringify([actorId, accountRoute]);
+}
+
 export type AccountRouteToken = { subject: string | null; revision: number };
 
 /**

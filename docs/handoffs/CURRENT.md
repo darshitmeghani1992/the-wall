@@ -1,5 +1,13 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-51 · Onboarding account and route scoped editor — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** New stacked child of #134 SHA `45625552f065dc0f281004367b95789e08be0625` on `codex/beta-onboarding-actor-state-isolation-20261122-run15`. Previously, profile setup could show prior actor's draft/step/Avatar and cached profile handle/bio until effect cleanup on account transition. The profile setup editor now remounts on authenticated actor/account-route identity change, and `existingProfile` is only accepted if its ID matches the active authenticated subject. Per-actor draft persistence and server authority unchanged; source test added.
+
+**Gates:** Exact new head CI, independent Reviewer and distinct QA on account switches before effect, delayed local draft load, missing_profile→onboarding, existing avatar, completion and device/offline retries. Staging-only `ewintxgdxdvschiqodkq`; original production untouched. No hosted writes, migration 0031, merge, deploy, tester invitations, domain/DNS or Apple action. Enhanced Beta NO-GO while SMTP OTP, three actual JWT identities, protected C2/C3 media, Secret scheduler, deletion, native/rollback/independent gates remain outstanding; media/Secret/analytics OFF.
+
+**Next:** Check exact candidate SHA/CI, obtain independent verification and continue another unblocked scoped feature.
+
 ## CURRENT BETA-P0-50 · Composer sender preview actor guard — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Child of #133 immutable `fd6fee01505abe324354bc9818613f990af61240` on new branch `codex/beta-composer-author-preview-scope-20261122-run15`. Mark composer preview/author choice had read cached `profile` irrespective of current authenticated actor, potentially showing the previous account's handle, display name and avatar immediately after account switch. Both surfaces now derive a matching `actorProfile` and otherwise use existing neutral placeholders. No backend/API/flags or other UI design change; contract test added.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { ACCOUNT_ROUTES, AccountRouteFence, DEFAULT_ONBOARDING_DRAFT, LEGACY_ONBOARDING_DESTINATION, destinationAfterWalkthrough, destinationForAccountRoute, isAccountRoute, onboardingFailureMessage, persistOnboardingInOrder, runForExpectedSubject, sanitizeOnboardingDraft, snapshotOnboardingDraft, walkthroughRequiresPersistence } from "./onboarding-contract.ts";
+import { ACCOUNT_ROUTES, AccountRouteFence, DEFAULT_ONBOARDING_DRAFT, LEGACY_ONBOARDING_DESTINATION, destinationAfterWalkthrough, destinationForAccountRoute, isAccountRoute, onboardingFailureMessage, onboardingScreenScopeKey, persistOnboardingInOrder, runForExpectedSubject, sanitizeOnboardingDraft, snapshotOnboardingDraft, walkthroughRequiresPersistence } from "./onboarding-contract.ts";
 
 assert.deepEqual(
   ACCOUNT_ROUTES.map((route) => destinationForAccountRoute(route)),
@@ -45,6 +45,13 @@ assert.deepEqual(
   "corrupt or stale drafts retain safe privacy defaults",
 );
 
+// A and B must never share local draft, step, avatar or submission state.
+assert.equal(onboardingScreenScopeKey("actor-a", "onboarding"), onboardingScreenScopeKey("actor-a", "onboarding"));
+assert.notEqual(onboardingScreenScopeKey("actor-a", "onboarding"), onboardingScreenScopeKey("actor-b", "onboarding"));
+assert.notEqual(onboardingScreenScopeKey("actor-a", "onboarding"), onboardingScreenScopeKey("actor-a", "missing_profile"));
+assert.notEqual(onboardingScreenScopeKey("actor-a", "onboarding"), onboardingScreenScopeKey(null, "onboarding"));
+assert.notEqual(onboardingScreenScopeKey("actor-a", null), onboardingScreenScopeKey("actor-a", "onboarding"));
+
 const fence = new AccountRouteFence();
 const oldLoad = fence.begin("user-a");
 const newLoad = fence.begin("user-a");
@@ -72,6 +79,12 @@ assert.equal(
 
 const profileSource = readFileSync("src/lib/profiles.ts", "utf8");
 const setupSource = readFileSync("app/(onboarding)/profile-setup.tsx", "utf8");
+assert.match(setupSource, /<ProfileSetupSession key=\{onboardingScreenScopeKey\(session\?\.user\.id \?\? null, accountRoute\)\}/,
+  "setup must remount locally before the previous actor's effect reset");
+assert.ok(setupSource.includes('profile?.id === userId ? profile : null;'),
+  "current actor must own any prefilled profile, avatar and handle");
+assert.ok(!setupSource.includes('accountRoute === "onboarding" ? profile : null'),
+  "a previous authenticated actor's profile must never prefill new setup");
 assert.doesNotMatch(profileSource, /function isHandleAvailable/, "RLS-hidden SELECT cannot claim global handle availability");
 assert.doesNotMatch(setupSource, /isHandleAvailable|\.ilike\("handle"/, "setup does not infer availability from profile visibility");
 assert.doesNotMatch(setupSource, /Available\s*✓/, "setup never displays an unverified availability claim");
