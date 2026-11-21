@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-26 · Prevent previous-account Profile counters during pre-effect render — 21 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of #109 exact `ac43236da37bf5a2736cfbed6a5b4265e8801333`; parent #101 only clears counters inside `useFocusEffect`. A user change may render before that effect runs, briefly exposing the prior account's follower/following/friend totals or fetch failure. Bind counter visibility to the actor that started each request, with an actor-mismatch showing the existing loading indicator; do not invent a zero before server counts load. Source-only change to `app/(tabs)/profile.tsx` plus `tests/frontend-profile-actor-render-fence.test.mjs`; no visual redesign, auth/permission changes, schema/API/feature flags or hosted changes.
+
+**Verification:** New Node contract checks render gating, request-actor assignment and A→B state sequence. Exact commit CI, independent Reviewer and simulator/device behavioral QA (A→B before focus callback, delayed/failing B requests, sign-out, retry) remain required; source checks are **not** runtime QA. Parent #109 exact commit `ac43236da37bf5a2736cfbed6a5b4265e8801333` completed [4/4 CI](https://github.com/darshitmeghani1992/the-wall/actions/runs/44931763336); that does not certify this child. Enhanced Beta **NO-GO**: real SMTP six-digit OTP, genuine three-actor JWT hosted tests, private media C2/C3, Secret cron, account deletion 0031, independent Reviewer/QA, device and rollback evidence and Founder GO are missing. Staging only; no original production access, hosted writes, main merges, deployment or tester invitations.
+
+**Next:** Check own immutable HEAD CI; give exact diff to independent Reviewer and behavioral QA. Continue next unblocked queue item on another isolated branch. Domain/DNS and Apple enrollment stay held.
+
+
 ## BETA-P0-25 · Prevent old account friend totals during My Wall reload — 21 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of [#108](https://github.com/darshitmeghani1992/the-wall/pull/108) immutable source `677db50ab226ce47259cf3605f5d118d1b429544`. My Wall's friend counter was not reset at the start of the actor-dependent main loading effect. Because `setWall(personalWall)` happens before optional friend-count query settles, the next account's Wall could briefly display the previous actor's count. Set `friendCount=null` at the beginning of every main account/Wall load, before network requests; retain server count and `FRIENDS UNAVAILABLE` until current account's value arrives. No product design, schema, RPC, permission, flag or backend changes.
