@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## Approved engineering loop v2.0 — 21 Nov 2026, NOT RUNNING CONTINUOUSLY
+
+ARCHITECT foundation on isolated branch `codex/continuous-loop-v2-foundation-20261121` (ancestor PR #67 head `ebdf28c196a3f50e4b5218dd6038d12277d12953`), dry-run parser `scripts/engineering_loop_v2.py`, four unit cases and isolated PR contract workflow. Mac runtime probe: `claude --version` crashes due to macOS 11.7.11 vs binary built for macOS 13; no external coding-agent runtime verified. Existing hourly automation unchanged; **do not report event-driven continuous work as active**.
+
+**Next exact commands:** `python3 -m unittest discover -s scripts/tests -p 'test_engineering_loop_v2.py' -v` and `python3 scripts/engineering_loop_v2.py --workers 3` on isolated branch; inspect draft PR CI and independent review. **Next task:** DEVOPS provision compatible agent runtime and durable atomic leases/event-based dispatch, verify real first-to-second task transition before enabling parallel workers. Preserve issue #57 NO-GO, staging-only `ewintxgdxdvschiqodkq`, original production `wfsfafmgvxevpzrurofz` untouched, all holds and gates. See `docs/architecture/CONTINUOUS_ENGINEERING_LOOP_V2.md`.
+
+
 ## Integrated internal source — 21 Nov (PR #67)
 
 **Current draft-only internal candidate:** [PR #67](https://github.com/darshitmeghani1992/the-wall/pull/67) combines [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64) staging audit/queue/handoff documentation (ancestor head `2c919ee1728fe48a157ab282eb8bcb7ce73a0cf7`) and source/test blobs from sibling BACKEND [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65) at head `d3396bfd72ac58c926245ed9b5905d7c67673e48`. Confirmed integrated worker blobs **exactly equal** #65's: source `88b235eb5c818b110abcd798ec63af766c1414aa`, tests `8473f47ca63d9096ad245ec7ec7512246df9f4b5`. Branch `codex/internal-beta-verified-security-candidate-20261121`; **live GitHub PR head/CI must be resolved fresh** because this handoff changes the SHA. This does not supersede #30's historical lineage or waive verification of older draft security diffs.
