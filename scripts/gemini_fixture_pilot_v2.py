@@ -6,6 +6,7 @@ but NEVER executed. No GitHub write, network fallback, staging/production,
 credentials in output, or unattended scheduler. Requires explicit manual gate.
 """
 import ast
+import hashlib
 import json
 import os
 import sys
@@ -79,7 +80,29 @@ def ask_model(task, key, opener=urllib.request.urlopen):
         payload = json.loads(response.read(8192).decode("utf-8"))
     return extract(payload)
 
-def run(env=os.environ, opener=urllib.request.urlopen, state_path=None):
+def save_verified_artifact(directory, task_id, code):
+    """Save only AST-verified synthetic source under an allowlisted filename.
+
+    This is a disposable GitHub Actions artifact, never a repository write.
+    """
+    filenames = {"FIXTURE-ONE": "generated_add.py", "FIXTURE-TWO": "generated_subtract.py"}
+    if task_id not in filenames:
+        raise ValueError("unrecognized synthetic task")
+    expected_name, operation = (
+        ("add", ast.Add) if task_id == "FIXTURE-ONE" else ("subtract", ast.Sub)
+    )
+    verify_synthetic_code(code, expected_name, operation)
+    output_dir = Path(directory).resolve(strict=True)
+    if not output_dir.is_dir() or output_dir.is_symlink():
+        raise ValueError("invalid artifact directory")
+    output = output_dir / filenames[task_id]
+    if output.exists() or output.is_symlink():
+        raise ValueError("refusing to overwrite artifact")
+    normalized = code.rstrip() + "\\n"
+    output.write_text(normalized, encoding="utf-8")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+def run(env=os.environ, opener=urllib.request.urlopen, state_path=None, artifact_dir=None):
     assert_free_first_preparation(POLICY, env)
     if env.get("GEMINI_FIXTURE_PILOT_APPROVED") != "true":
         raise ValueError("explicit manual pilot approval missing")
@@ -92,9 +115,14 @@ def run(env=os.environ, opener=urllib.request.urlopen, state_path=None):
         raise ValueError("Gemini secret unavailable")
     if state_path is None:
         raise ValueError("scratch DB path required")
+    if artifact_dir is not None:
+        artifact = Path(artifact_dir)
+        if not artifact.is_dir() or artifact.is_symlink():
+            raise ValueError("safe existing artifact directory required")
     db = connect(Path(state_path))
     try:
         completed = []
+        source_digests = {}
         for index, (task_id, task_prompt) in enumerate(TASKS):
             token = claim(db, task_id=task_id,
                           branch="codex/cloud-worker-fixture-" + str(index),
@@ -105,6 +133,8 @@ def run(env=os.environ, opener=urllib.request.urlopen, state_path=None):
             code = ask_model(task_prompt, key, opener)
             verify_synthetic_code(code, "add" if index == 0 else "subtract",
                                   ast.Add if index == 0 else ast.Sub)
+            if artifact_dir is not None:
+                source_digests[task_id] = save_verified_artifact(artifact_dir, task_id, code)
             event_id = "synthetic-completed-" + str(index)
             if not complete(db, task_id, "fixture-pilot", token, event_id):
                 raise ValueError("fixture completion rejected")
@@ -114,13 +144,15 @@ def run(env=os.environ, opener=urllib.request.urlopen, state_path=None):
             if not mark_dispatched(db, event_id):
                 raise ValueError("handoff acknowledgement failed")
             completed.append(task_id)
-        return {"status": "pilot_pass", "model": MODEL, "requests": 2, "tasks": completed}
+        return {"status": "pilot_pass", "model": MODEL, "requests": 2,
+                "tasks": completed, "source_sha256": source_digests}
     finally:
         db.close()
 
 if __name__ == "__main__":
     try:
-        result = run(state_path=os.environ.get("GEMINI_PILOT_STATE"))
+        result = run(state_path=os.environ.get("GEMINI_PILOT_STATE"),
+                     artifact_dir=os.environ.get("GEMINI_PILOT_ARTIFACTS"))
         print(json.dumps(result))
     except urllib.error.HTTPError as exc:
         print("Gemini pilot failed (HTTP status %d)." % exc.code, file=sys.stderr)
