@@ -75,3 +75,18 @@ Inspected current staging function signatures and token-level control-flow marke
 The three legacy admin overloads without `p_expected_actor_id` still exist but show `authenticated_exec=false` and `anon_exec=false` in live catalog. No permission changes requested as part of this audit. The source-level Secret risk concerns a Mark that is soft-removed (`marks.status='removed'`) while its payload remains in `mark_secrets`; the update trigger catalog did not show removal-time purging. The intended post-removal contract requires PRODUCT/ARCHITECT resolution before any reviewed migration, and no hosted actors exist for a safe live test today.
 
 **Separate C3 defensive implementation:** [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65) adds IPv4-compatible, NAT64, 6to4 and Teredo IPv6 destination blocking plus mocked-resolver tests. Exact source `d3396bfd72ac58c926245ed9b5905d7c67673e48`, [CI #231](https://github.com/darshitmeghani1992/the-wall/actions/runs/44881521179) **4/4 SUCCESS**. This is a sibling of documentation [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64), not a merged integration. Egress ACL, live redirect/DNS rebound behavior and independent Reviewer/QA still unmet.
+
+## Account and identity routines · source trace
+
+**Verified from source at** `cb27cc65b91e4c1249953020ba5c592fab4296bb`. The staging comparison uses the previously recorded migration inventory. No hosted execution occurred during this pass. Each listed definition pins its search path and grants its public signature to authenticated callers.
+
+| Signature | Identity and caller trace | Existing local-suite coverage |
+|---|---|---|
+| `current_user_is_active_account()` | Migration 0026 derives the actor from `auth.uid()`; Shared Wall policies in 0026 and 0033 use the self check. | Test 73 exercises owner access with active, deactivated and suspended fixtures. |
+| `current_user_is_admin()` | Migration 0018 derives the actor from `auth.uid()` and calls the internal `public.is_admin` predicate. Report and moderation-audit policies use this wrapper. | Moderation coverage is in tests 85 and 98. |
+| `get_current_account_route()` | Migration 0025 returns unavailable for a missing identity and reads only `profiles.id = auth.uid()`; `src/lib/account.ts` sends no actor argument. | Test 58 exercises account route states. |
+| `list_my_blocked_users(uuid,timestamptz,uuid)` | Migration 0028 rejects a missing or mismatched actor before queries and scopes rows to the caller's outgoing blocks. `src/lib/blocks.ts` passes the expected actor. | Test 22 covers mismatched actors, scoping, paging and inactive accounts. |
+| `deactivate_account(uuid)` | Migration 0027 rejects missing and mismatched actors, locks that actor's profile and permits only active/deactivated transitions. `src/lib/account.ts` passes the expected actor. | Test 96 and its race harness exercise actor mismatch and concurrent state changes. |
+| `reactivate_account(uuid)` | Migration 0029 rejects missing or mismatched actors and locks their profile before permitting active/deactivated transitions. The repository's withheld 0031 replacement additionally checks the deletion deadline and cancels that actor's eligible deletion request. `src/lib/account.ts` passes the expected actor. | Test 97 covers the actor-bound signature. Tests 99 cover the 0031 deletion path in disposable PostgreSQL. |
+
+Independent review and genuine staging actor verification remain open. Continue with the Wall and member routines and trace both client RPCs and policy callers before assessing changes to grants.
