@@ -1,0 +1,25 @@
+name: Engineering loop contracts
+
+on:
+  pull_request:
+    paths:
+      - "scripts/engineering_loop_v2.py"
+      - "scripts/tests/test_engineering_loop_v2.py"
+      - ".github/workflows/engineering-loop-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatcher-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests (no network or credentials)
+        run: python -m unittest discover -s scripts/tests -p 'test_engineering_loop_v2.py' -v
+      - name: Canonical queue dry run
+        run: python scripts/engineering_loop_v2.py --workers 3
