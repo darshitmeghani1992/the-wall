@@ -46,6 +46,7 @@ export default function PersonalWallSettingsScreen() {
   const loadedActorId = useRef<string | null>(null);
   const dirtyRef = useRef(false);
   const allowBackRef = useRef(false);
+  const discardPromptOpen = useRef(false);
 
   const currentActorLoaded = actorId !== null && loadedActorId.current === actorId;
   const visibleSaved = currentActorLoaded ? saved : null;
@@ -87,6 +88,7 @@ export default function PersonalWallSettingsScreen() {
     mutationInFlight.current = false;
     setBusy(false);
     allowBackRef.current = false;
+    discardPromptOpen.current = false;
 
     if (!actorId || loadedActorId.current !== actorId) {
       loadedActorId.current = null;
@@ -100,6 +102,7 @@ export default function PersonalWallSettingsScreen() {
     return () => {
       loadFence.current.blur();
       actionFence.current.blur();
+      discardPromptOpen.current = false;
       endExclusiveMutation(mutationInFlight);
       setBusy(false);
     };
@@ -108,15 +111,30 @@ export default function PersonalWallSettingsScreen() {
   useEffect(() => navigation.addListener("beforeRemove", (event) => {
     if (allowBackRef.current || !dirtyRef.current) return;
     event.preventDefault();
+    // Do not dismiss an in-flight save or stack duplicate confirmation dialogs.
+    if (mutationInFlight.current || discardPromptOpen.current) return;
+    const token = actionFence.current.begin(currentActorId.current);
+    if (!token) return;
+    discardPromptOpen.current = true;
     Alert.alert(
       "Discard unsaved changes?",
       "Your Personal Wall settings haven't been saved.",
       [
-        { text: "Keep editing", style: "cancel" },
+        {
+          text: "Keep editing",
+          style: "cancel",
+          onPress: () => {
+            if (actionFence.current.isCurrent(token, currentActorId.current)) {
+              discardPromptOpen.current = false;
+            }
+          },
+        },
         {
           text: "Discard",
           style: "destructive",
           onPress: () => {
+            if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
+            discardPromptOpen.current = false;
             allowBackRef.current = true;
             navigation.dispatch(event.data.action);
           },

@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-35 · Personal settings discard prompt actor lease — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #118 `074824a77d2ae1c771a3c6fe758cd4b886fd441b`. Previously a delayed Discard callback could navigate after account change, and simultaneous back gestures could stack prompts during pending save. The before-remove dialog now captures an action-fence lease, aborts stale A→B callbacks, limits dialogs and blocks removal during saving; lifecycle resets prompt state. New `tests/frontend-personal-settings-discard-lease.test.mjs`. Must verify new exact-head CI, obtain independent Reviewer and separate real device/simulator QA. No hosted/staging writes, production access, merge/deploy/feature activation. Enhanced Beta remains NO-GO. 
+
+**Next:** CI/independent QA then next unblocked work; preserve verified SMTP/3 JWT actors, media, Secret, 0031 deletion, installed-device and Founder gates.
+
+
 ## BETA-P0-34 · Personal Wall settings account-render guard — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #117 `6be90c1de356ba4b128d3faa735245fc5900ef0e`. Prior-account visibility/contribution/Anonymous settings and errors could flash before focus reset; current actor now gates rendered draft and save/dirty, marks a failed actor load settled so retry works, and hides retry while signed out. New source/state regression; exact SHA CI and separate Reviewer/native QA pending. No hosted/production writes, schema/API/flags, merge or launch. STAGING `ewintxgdxdvschiqodkq` only; original production protected; Enhanced Beta remains NO-GO with media/Secret/analytics OFF.
