@@ -1,5 +1,11 @@
 # The-Wall Build Status
 
+## BETA-P0-30 · Enhanced Beta release packet and rollback preparation — 22 Nov 2026
+
+**ROLE: ARCHITECT documentation.** Independent source-only release packet `docs/handoffs/ENHANCED_BETA_RELEASE_PACKET_2026-11-22.md` prepared as a separately owned descendant of #113 exact `138391e3dccd0aad5d760f1001761b01376c0161`. Captures verified staging emptiness/absence of cron, exact feature flag names, server controls, interim private beta release copy explicitly **NOT PUBLISHED**, migration 0031/Secret safety ordering, immutable GO evidence and rollback/release artifact prerequisites. Does **not** declare source/CI/QA certification, merge or authorize hosted writes.
+
+**Next:** Capture new documentation PR SHA/tree/CI; independent Reviewer/QA must verify unchanged candidate before any GO; complete OTP, authenticated security, media, Secret, deletion, device and Founder gates. Enhanced Beta **NO-GO**.
+
 ## BETA-P0-29 · Hide previous-account blocked-user roster before focus reset — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated descendant of #112 immutable `9ffc0e947dcc085d2c71be8a7cba6396d39a2541` while preserving historical #30→#112 draft lineage. In `app/blocked-users.tsx` stale blocked user names, pagination or prior errors could briefly appear on a new account's pre-focus render, although already-ongoing HTTP reads were fenced by authenticated actor. A new `loadedActorId` render gate now hides blocked-list UI until a result or error belongs to the current actor. Current-actor failed/unavailable responses still reach existing retry, including API error states. Adds `tests/frontend-blocked-user-actor-display.test.mjs` covering wiring and A→B display behavior.
