@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { track } from "./analytics";
 import { executeMarkRemoval, type MarkRemovalReason } from "./actor-bound-service-contract";
 import { mapActorBoundMutationError } from "./expected-actor";
+import { requireExactlyOneMarkMutation } from "./mark-mutation-confirmation";
 import type { Mark } from "./types";
 import type { MediaWriterRpc } from "./mark-media-writer";
 import { readMarkHistoryPage, wallInsertGate, type MarkCursor } from "./mark-history-cursor";
@@ -181,7 +182,14 @@ export async function revealSecret(markId: string): Promise<SecretRevealResult> 
 
 /** Owner-only: pin/unpin a mark to the top of the wall. */
 export async function setPinned(markId: string, pinned: boolean): Promise<void> {
-  await supabase.from("marks").update({ pinned }).eq("id", markId);
+  // A denied write can silently affect zero rows under RLS. Never claim a pin
+  // succeeded until the server confirms exactly one updated Mark.
+  const { error, count } = await supabase
+    .from("marks")
+    .update({ pinned }, { count: "exact" })
+    .eq("id", markId);
+  if (error) throw error;
+  requireExactlyOneMarkMutation(count);
 }
 
 /** The sender edit/delete window — 10 minutes (Master Spec §32). Server-enforced. */
@@ -259,7 +267,7 @@ export async function editMarkText(markId: string, text: string): Promise<void> 
     .update({ text }, { count: "exact" })
     .eq("id", markId);
   if (error) throw error;
-  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
+  requireExactlyOneMarkMutation(count);
 }
 
 /** Sender: permanently delete their own Mark inside the server-enforced window. */
@@ -269,5 +277,5 @@ export async function deleteMark(markId: string): Promise<void> {
     .delete({ count: "exact" })
     .eq("id", markId);
   if (error) throw error;
-  if (count !== 1) throw new Error("MARK_ACTION_NOT_ALLOWED");
+  requireExactlyOneMarkMutation(count);
 }
