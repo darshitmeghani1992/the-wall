@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-23 · Mark recipient people-picker session/search correction (21 Nov 2026)
+
+**ROLE: ARCHITECT → FRONTEND.** New isolated descendant of #106 at `36623f29d02f2c7c0a18445f5e3d08ce6ecd5d35`. The people picker now empties prior actor/query results on focus changes and invalidates pending friend/search queries whenever input changes, without modifying friend APIs or permission gates. Clearing search restores the active actor's friend list. Test `tests/frontend-people-picker-stale-search.test.mjs` checks source bindings and actual fence invalidation. Exact-head GitHub CI required, then independent Reviewer and QA on changed-account/slow-network/native behavior; not certified by source-only tests.
+
+**Next:** verify own CI, Reviewer and QA; inspect issue #57 gates, then pick another unblocked isolated slice. Staging-only, no hosted writes, original production protected. Real six-digit OTP/three authorized JWT actors, media/Secret/deletion/device and Founder gates are still outstanding. Enhanced Beta NO-GO.
+
 ## BETA-P0-22 · Preserve Shared Wall join/leave mutation lock across account and Wall switches (21 Nov 2026)
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated descendant of draft [#105](https://github.com/darshitmeghani1992/the-wall/pull/105) at `570704bf87f1f19b6f542d16c4af70bcfabdc532`, retaining #103–#105 and historical ancestry. The Shared Wall detail screen's join/leave actions unconditionally cleared a shared exclusive mutation lock after asynchronous completion. When actor/Wall A navigates away while its request is pending and actor/Wall B acquires the reset lock, A's old `finally` could release B's lock. The same generic focus generation is used for Wall reads; merely gating `finally` on that read token also risks stranding a valid join after `void load()`. Added a separate mutation fence, focus/blurred with the screen and current actor, guarded both actions' cleanup by the current mutation lease; unchanged read fence and server-side membership RPC authority remain.
