@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## 21 Nov 2026 · BACKEND three-JWT HTTP fixture-shape hardening
+
+Branch `codex/beta-three-jwt-fixture-kind-20261121-run2` is based on #86 corrected commit `5e6c5de25489b4ddd365382788c5551523622ff1`. In `scripts/staging-three-jwt-readonly.mjs` an owner/member's positive result now must be a `shared`, `private` Wall with requested ID; tests reject Personal/public false fixtures even if the GET count looks right. Six read-only staging requests remain the contract; no actor sign-up or tokens supplied. The pre-existing JWT identity checks remain. `tests/staging-three-jwt-readonly.test.mjs` and the controlled preparation runbook updated. Check exact-head CI, obtain independent Reviewer/QA, and execute genuine hosted actor/OTP after Founder-approved setup. No beta GO, no irreversible action.
+
+
 ## 21 Nov 2026 · BACKEND suspended owner test handoff
 
 Branch `codex/beta-suspended-owner-returning-tests-20261121-run2` is an isolated child of PR #85 immutable docs+application candidate (SHA `3e13b30cde449ac8023edaf01df6b1b35a8a734a`). Added negative `SELECT` and `INSERT RETURNING` for an existing Shared Wall owner with `profiles.account_status='suspended'`, using the disposable transaction in `supabase/tests/73_shared_wall_owner_returning.sql`; no migration or hosted write. Preserve and independently review BETA-P0-01 lineage audit. GitHub CI must run on **this branch's new head**; no local Postgres executable exists in this environment. Real JWT actors/OTP and Reviewer/QA remain open. Next: check exact CI; independent Reviewer check SQL denial assertions; QA verify unchanged head, then perform hosted actors when approved; keep all Founder launch gates.

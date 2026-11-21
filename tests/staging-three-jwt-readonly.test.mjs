@@ -63,8 +63,13 @@ function fakeNetwork(options = {}) {
     }
     assert.ok(url.includes('/rest/v1/walls?'));
     assert.equal(new URL(url).searchParams.get('id'), 'eq.' + WALL_ID);
+    assert.equal(new URL(url).searchParams.get('select'), 'id,type,visibility');
     const isOutsider = token === base.TW_OUTSIDER_JWT;
-    const rows = isOutsider && !options.leak ? [] : [{ id: WALL_ID }];
+    const rows = isOutsider && !options.leak ? [] : [{
+      id: WALL_ID,
+      type: options.wrongType ? 'personal' : 'shared',
+      visibility: options.wrongVisibility ? 'public' : 'private',
+    }];
     return { status: 200, json: async () => rows };
   };
   return { handler, calls };
@@ -112,6 +117,15 @@ test('rejects mismatched server verified user ID and outsider visibility leak', 
     /Authenticated actor identity mismatch/);
   await assert.rejects(runStagingJwtAudit(base, fakeNetwork({ leak: true }).handler),
     /Private Shared Wall RLS visibility mismatch/);
+});
+
+test('rejects non-shared or non-private fixtures even when the actor visibility looks correct', async () => {
+  for (const options of [{ wrongType: true }, { wrongVisibility: true }]) {
+    const mock = fakeNetwork(options);
+    await assert.rejects(runStagingJwtAudit(base, mock.handler),
+      /Private Shared Wall RLS visibility mismatch/);
+    assert.equal(mock.calls.length, 2);
+  }
 });
 
 test('auth checks happen before any wall lookup for each actor', async () => {
