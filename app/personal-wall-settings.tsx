@@ -47,14 +47,19 @@ export default function PersonalWallSettingsScreen() {
   const dirtyRef = useRef(false);
   const allowBackRef = useRef(false);
 
-  const dirty = personalSettingsChanged(saved, draft);
-  dirtyRef.current = loadedActorId.current === actorId && dirty;
+  const currentActorLoaded = actorId !== null && loadedActorId.current === actorId;
+  const visibleSaved = currentActorLoaded ? saved : null;
+  const visibleError = currentActorLoaded ? error : null;
+  const dirty = currentActorLoaded && personalSettingsChanged(saved, draft);
+  dirtyRef.current = dirty;
 
   const load = useCallback(async () => {
     const token = loadFence.current.begin(actorId);
     if (!token) return;
     setLoading(true);
     setError(null);
+    setSaved(null);
+    loadedActorId.current = null;
     try {
       const next = await getPersonalWallSettings(token.userId);
       if (!loadFence.current.isCurrent(token, currentActorId.current)) return;
@@ -67,6 +72,8 @@ export default function PersonalWallSettingsScreen() {
       loadedActorId.current = token.userId;
     } catch (cause: any) {
       if (loadFence.current.isCurrent(token, currentActorId.current)) {
+        loadedActorId.current = token.userId;
+        setSaved(null);
         setError(cause?.message ?? "Couldn't load your Wall settings.");
       }
     } finally {
@@ -81,7 +88,7 @@ export default function PersonalWallSettingsScreen() {
     setBusy(false);
     allowBackRef.current = false;
 
-    if (loadedActorId.current !== actorId) {
+    if (!actorId || loadedActorId.current !== actorId) {
       loadedActorId.current = null;
       setSaved(null);
       setDraft(initialDraft);
@@ -119,7 +126,7 @@ export default function PersonalWallSettingsScreen() {
   }), [navigation]);
 
   async function save() {
-    if (!actorId || !saved || !dirty || !beginExclusiveMutation(mutationInFlight)) return;
+    if (!actorId || currentActorId.current !== actorId || !currentActorLoaded || !saved || !dirty || !beginExclusiveMutation(mutationInFlight)) return;
     const token = actionFence.current.begin(actorId);
     if (!token) {
       endExclusiveMutation(mutationInFlight);
@@ -174,24 +181,24 @@ export default function PersonalWallSettingsScreen() {
         Choose who can see your Wall and leave Marks on it.
       </Text>
 
-      {loading ? (
+      {loading || (Boolean(actorId) && !currentActorLoaded) ? (
         <ActivityIndicator
           accessibilityLabel="Loading Personal Wall settings"
           color={markColors.brandYellow}
           style={{ marginTop: spacing.unit * 9 }}
         />
-      ) : !saved ? (
+      ) : !visibleSaved ? (
         <View style={{ marginTop: spacing.unit * 6, gap: spacing.unit * 3 }}>
           <Text accessibilityRole="alert" variant="body" color={colors.error}>
-            {error ?? "These settings aren't available."}
+            {visibleError ?? "These settings aren't available."}
           </Text>
-          <Button label="Try again" variant="yellow" onPress={() => void load()} />
+          {actorId ? <Button label="Try again" variant="yellow" onPress={() => void load()} /> : null}
         </View>
       ) : (
         <>
-          {error ? (
+          {visibleError ? (
             <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: spacing.unit * 4 }}>
-              {error}
+              {visibleError}
             </Text>
           ) : null}
 
