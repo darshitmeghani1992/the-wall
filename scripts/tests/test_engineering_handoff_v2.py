@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from engineering_leases_v2 import connect, snapshot, renew
+from engineering_leases_v2 import connect, snapshot, renew, claim, complete, completed_ids, record_event
 from engineering_handoff_sim_v2 import dispatch_once, complete_and_dispatch
 
 def task(identifier, role="BACKEND", status="Partially source tested"):
@@ -46,6 +46,49 @@ class HandoffTests(unittest.TestCase):
                      event_id="completed-a",now=101,slots=1)
         self.assertEqual(len(complete_and_dispatch(self.db,self.tasks,**options)),1)
         self.assertEqual(complete_and_dispatch(self.db,self.tasks,**options),[])
+
+    def test_three_tasks_finish_once_in_sequence_without_reclaim(self):
+        first=dispatch_once(self.db,self.tasks,owner="runner-1",now=100,slots=1)[0]
+        second=complete_and_dispatch(self.db,self.tasks,task_id="BETA-A",
+            token=first["token"],owner="runner-1",event_id="completed-a",now=101,slots=1)[0]
+        third=complete_and_dispatch(self.db,self.tasks,task_id="BETA-B",
+            token=second["token"],owner="runner-1",event_id="completed-b",now=102,slots=1)[0]
+        self.assertEqual(third["task_id"],"BETA-C")
+        self.assertEqual([x["task_id"] for x in snapshot(self.db,now=102)],["BETA-C"])
+        self.assertEqual(completed_ids(self.db),{"BETA-A","BETA-B"})
+        self.assertEqual(dispatch_once(self.db,self.tasks,owner="runner-2",now=103,slots=1),[])
+        # New connection shares completed state; a just-finished task stays closed.
+        second_conn=connect(Path(self.tmp.name)/"state.sqlite")
+        try:
+            self.assertIsNone(claim(second_conn,task_id="BETA-A",branch="codex/cloud-worker-beta-a",
+                role="BACKEND",owner="runner-2",now=104,ttl=300,max_workers=3))
+        finally:
+            second_conn.close()
+
+    def test_reused_event_cannot_release_second_task_or_lose_next_handoff(self):
+        first=dispatch_once(self.db,self.tasks,owner="runner-1",now=100,slots=1)[0]
+        second=complete_and_dispatch(self.db,self.tasks,task_id="BETA-A",
+            token=first["token"],owner="runner-1",event_id="shared-event",now=101,slots=1)[0]
+        # The event ID belongs to first task: second lease must remain held.
+        rejected=complete_and_dispatch(self.db,self.tasks,task_id="BETA-B",
+            token=second["token"],owner="runner-1",event_id="shared-event",now=102,slots=1)
+        self.assertEqual(rejected,[])
+        self.assertEqual([x["task_id"] for x in snapshot(self.db,now=102)],["BETA-B"])
+        self.assertTrue(renew(self.db,"BETA-B","runner-1",second["token"],now=102))
+        third=complete_and_dispatch(self.db,self.tasks,task_id="BETA-B",
+            token=second["token"],owner="runner-1",event_id="new-event",now=103,slots=1)
+        self.assertEqual([x["task_id"] for x in third],["BETA-C"])
+
+    def test_event_collision_fails_atomically(self):
+        original=dispatch_once(self.db,self.tasks,owner="runner-1",now=100,slots=1)[0]
+        self.assertTrue(record_event(self.db,"already-delivered",now=100))
+        self.assertFalse(complete(self.db,"BETA-A","runner-1",original["token"],
+            "already-delivered",now=101))
+        self.assertEqual(completed_ids(self.db),set())
+        self.assertEqual([x["task_id"] for x in snapshot(self.db,now=101)],["BETA-A"])
+        self.assertTrue(complete(self.db,"BETA-A","runner-1",original["token"],
+            "proper-event",now=102))
+        self.assertEqual(completed_ids(self.db),{"BETA-A"})
 
 if __name__=="__main__":
     unittest.main()

@@ -33,6 +33,11 @@ def connect(path):
         CREATE TABLE IF NOT EXISTS delivered_events (
           event_id TEXT PRIMARY KEY, observed_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS completed_tasks (
+          task_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+          token INTEGER NOT NULL, event_id TEXT NOT NULL UNIQUE,
+          completed_at INTEGER NOT NULL
+        );
     """)
     return conn
 
@@ -46,6 +51,9 @@ def claim(conn, *, task_id, branch, role, owner, now=None, ttl=300, max_workers=
         raise ValueError("task branch must use isolated cloud worker prefix")
     conn.execute("BEGIN IMMEDIATE")
     try:
+        if conn.execute("SELECT 1 FROM completed_tasks WHERE task_id=?", (task_id,)).fetchone():
+            conn.execute("COMMIT")
+            return None
         existing = conn.execute("SELECT * FROM leases WHERE task_id=?", (task_id,)).fetchone()
         if existing and existing["state"] == "active" and existing["expires_at"] > now:
             conn.execute("COMMIT")
@@ -100,6 +108,52 @@ def release(conn, task_id, owner, token, *, now=None):
         AND token=? AND state='active' AND expires_at>?
     """, (now, task_id, owner, token, now))
     return cur.rowcount == 1
+
+def complete(conn, task_id, owner, token, event_id, *, now=None):
+    """Atomically close one live fenced lease and deduplicate its completion event.
+
+    Completion is local dispatcher bookkeeping, not product QA, merge or release.
+    On duplicate event, stale token, prior completion or exception, nothing changes.
+    """
+    if not isinstance(event_id, str) or not event_id.strip():
+        raise ValueError("event id required")
+    now = int(time.time()) if now is None else int(now)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        lease = conn.execute("""
+            SELECT 1 FROM leases WHERE task_id=? AND owner=? AND token=?
+            AND state='active' AND expires_at>?
+        """, (task_id, owner, token, now)).fetchone()
+        if not lease:
+            conn.execute("COMMIT")
+            return False
+        if conn.execute("SELECT 1 FROM delivered_events WHERE event_id=?", (event_id,)).fetchone():
+            conn.execute("COMMIT")
+            return False
+        if conn.execute("SELECT 1 FROM completed_tasks WHERE task_id=?", (task_id,)).fetchone():
+            conn.execute("COMMIT")
+            return False
+        conn.execute("INSERT INTO delivered_events(event_id,observed_at) VALUES(?,?)",
+                     (event_id, now))
+        conn.execute("""
+            INSERT INTO completed_tasks(task_id,owner,token,event_id,completed_at)
+            VALUES(?,?,?,?,?)
+        """, (task_id, owner, token, event_id, now))
+        updated = conn.execute("""
+            UPDATE leases SET state='released',expires_at=?
+            WHERE task_id=? AND owner=? AND token=? AND state='active' AND expires_at>?
+        """, (now, task_id, owner, token, now))
+        if updated.rowcount != 1:
+            raise RuntimeError("fenced lease changed during atomic completion")
+        conn.execute("COMMIT")
+        return True
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+def completed_ids(conn):
+    """Durable local bookkeeping prevents reassigning finished simulation tasks."""
+    return {row[0] for row in conn.execute("SELECT task_id FROM completed_tasks")}
 
 def record_event(conn, event_id, *, now=None):
     if not isinstance(event_id, str) or not event_id.strip():
