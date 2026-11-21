@@ -1,5 +1,13 @@
 # The-Wall Build Status
 
+## BETA-P0-28 · Admin moderation queue actor-bound render guard — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated descendant of #111 exact `2ab2890dcfef1e296e0edab167fec99cecfa4d96`, preserving #30→#111 draft ancestry and not modifying prior worker branches. The moderation screen fenced asynchronous report requests by actor, but retained already-rendered administrator report rows, action audit history and errors until the next focus effect. During admin A→admin B switching, a render before the focus cleanup could disclose A's sensitive report queue. A render-level `loadedActorId` guard now hides previous actor data immediately, preserves current-actor error/retry on failure, and does not modify server authorization or moderation actions. Added `tests/frontend-moderation-actor-display.test.mjs` source and state regression.
+
+**Evidence:** #111 parent has successful GitHub CI run 44936315746 at its unchanged head, but the new child requires its own CI, independent Reviewer approval and behavioral QA for A→B admin transitions before focus, delayed successes and errors, non-admin gate, audit/closed tabs and retry. Node contracts are not runtime or security certification. No Auth/SQL/Storage/schema/flags, hosted writes, production access, merges, deployments or invitations. Enhanced Beta remains **NO-GO** pending genuine six-digit OTP, three real staging JWT identities, protected media, Secret scheduler, deletion 0031/purge, installed device/rollback, independent QA/Reviewer, and Founder GO. Domain/DNS and Apple enrollment/signing remain held.
+
+**Next:** Check exact child commit/tree/CI, hand off to independent Reviewer and separate device QA, then continue another unblocked task under an isolated branch; never deploy from this draft.
+
 ## BETA-P0-27 · Fence follower/following lists by viewer, destination and list kind before focus effects — 21 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated source child of [#110](https://github.com/darshitmeghani1992/the-wall/pull/110) immutable `f94eb8c5af1bf4f0c6eeb2c6236e3eae6b7eafce`. `app/social/[kind].tsx` fenced asynchronous responses by viewer and requested target, but retained already rendered follower/following data and old error until `useFocusEffect` cleanup. A route-param/actor change could briefly display the previous list or mismatch Followers vs Following. Bind list visibility to the exact `viewer:target:kind` subject, keep existing loading/empty/error/retry UX and server-side access unchanged, and clear subject on focus cleanup. Add `tests/frontend-social-list-subject-fence.test.mjs` contract/race checks.

@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-28 · Moderator report visibility on administrator account switch — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #111 exact `2ab2890dcfef1e296e0edab167fec99cecfa4d96`. Fixed a pre-focus-render privacy exposure in `app/moderation.tsx`: old administrator report/audit rows or error could be visible to a newly signed-in administrator while current-actor fetch was still starting. Gate entire report UI to the actor that produced the current fetch result; retain non-admin deny and error/retry. New Node source/state contract; child CI plus independent Reviewer and simulator/device QA are required, not self-certified. No hosted/production writes or feature flag activation, mergers, deployments or invitations.
+
+**Next:** Capture exact SHA/tree, CI and independent verdicts; verify admin A→B before focus, failure/retry and non-admin route. Enhanced Beta **NO-GO** until OTP/three-JWT/media/Secret/deletion/device/rollback and Founder gates are resolved.
+
 ## BETA-P0-27 · Social follower/following route-subject display guard — 21 Nov 2026
 
 **ARCHITECT → FRONTEND:** New isolated child of #110 exact `f94eb8c5af1bf4f0c6eeb2c6236e3eae6b7eafce`. In `app/social/[kind].tsx`, loaded follower/following names could persist between a viewer, target or list-kind change before focus cleanup runs. A current render-subject gate now hides previous lists/errors immediately, preserves the existing loading and retry contract, and is covered by a new Node source/logic contract test. Requires exact-head CI, independent Reviewer and real behavioral device/simulator QA. No hosted writes, protected production, merges, releases, credential requests, or feature activation. **Enhanced Beta NO-GO.**

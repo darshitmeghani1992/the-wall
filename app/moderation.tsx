@@ -45,6 +45,8 @@ export default function ModerationScreen() {
   const [nextActionCursor, setNextActionCursor] = useState<ModerationActionCursor | null>(null);
   const [tab, setTab] = useState<ModerationQueueTab>("open");
   const [loading, setLoading] = useState(true);
+  // Renders can precede focus cleanup on an admin-to-admin account switch.
+  const [loadedActorId, setLoadedActorId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -62,6 +64,7 @@ export default function ModerationScreen() {
     setLoadingOlderActions(false);
     loadInFlight.current = true;
     setLoading(true);
+    setLoadedActorId(null);
     setError(null);
     setHistoryError(null);
     try {
@@ -76,12 +79,14 @@ export default function ModerationScreen() {
         setReports(result.reports);
         setActions(result.actionPage.items);
         setNextActionCursor(result.actionPage.nextCursor);
+        setLoadedActorId(token.userId);
         if (result.historyIncomplete) {
           setHistoryError("Some moderation history couldn't be loaded. The open queue is still available.");
         }
       }
     } catch (cause) {
       if (fence.current.isCurrent(token, currentActorId.current)) {
+        setLoadedActorId(token.userId);
         setError(cause instanceof Error ? cause.message : "Couldn't load the moderation queue.");
       }
     } finally {
@@ -124,6 +129,7 @@ export default function ModerationScreen() {
     actionInFlight.current = false;
     setReports([]);
     setActions([]);
+    setLoadedActorId(null);
     setNextActionCursor(null);
     setTab("open");
     setBusyId(null);
@@ -207,6 +213,8 @@ export default function ModerationScreen() {
   }
 
   const groupedReports = groupModerationReports(reports);
+  // Never expose a previous administrator's report data/error on a new session render.
+  const currentActorLoaded = actorId !== null && loadedActorId === actorId;
 
   return (
     <Screen dockInset={false}>
@@ -229,7 +237,7 @@ export default function ModerationScreen() {
           <Text accessibilityRole="alert" variant="headline">This area is available only to administrators.</Text>
           <Button label="Back to settings" variant="ghost" onPress={() => router.replace("/settings")} />
         </View>
-      ) : loading ? (
+      ) : loading || !currentActorLoaded ? (
         <ActivityIndicator accessibilityLabel="Loading moderation queue" color={markColors.brandYellow} style={{ marginTop: 36 }} />
       ) : error && reports.length === 0 && actions.length === 0 ? (
         <View style={{ marginTop: 24, gap: 12 }}>
