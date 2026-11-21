@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## BETA-P0-30 · Internal Enhanced Beta release/rollback packet — 22 Nov 2026
+
+**ARCHITECT:** New `docs/handoffs/ENHANCED_BETA_RELEASE_PACKET_2026-11-22.md` documents exact source ancestry through #113 `138391e3dccd0aad5d760f1001761b01376c0161`, pending build/identity/sender/device gates, withheld media/Secret/deletion, build-time client flags versus server-authoritative disable, future rollback, and draft (unpublished) tester release notes. No new deployment/feature switch, no production contact or tester invite. Treat it as a preparation checklist, **not** a GO. Independent review and QA remain separate.
+
+**Next:** Verify new PR CI and exact tree; continue unblocked work, then execute real staging three-JWT/device validation only after approved sender and actual test identities exist. Domain/DNS and Apple holds unchanged.
+
 ## BETA-P0-29 · Blocked identities actor-bound display guard — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #112 exact `9ffc0e947dcc085d2c71be8a7cba6396d39a2541`. Account-switch renders could disclose cached previous-account blocked users before `useFocusEffect` cleanup. `app/blocked-users.tsx` now gates roster and errors on currently loaded actor, while tagging current-actor success and error/expired page states so retries still work. Regression `tests/frontend-blocked-user-actor-display.test.mjs`. Requires exact-commit CI, independent Reviewer and actual simulator/device QA of account A→B, failure/retry and pagination. No hosted/production mutation, main merge or release. Enhanced Beta NO-GO; media/Secret/analytics OFF; Founder domain/Apple holds remain.
