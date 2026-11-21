@@ -21,29 +21,37 @@ export default function SocialListScreen() {
   const [people, setPeople] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedSubject, setLoadedSubject] = useState<string | null>(null);
   const loadFence = useRef(new SessionFocusFence());
   const currentUserId = useRef<string | null>(session?.user.id ?? null);
   const currentTargetId = useRef<string | null>(targetId ?? null);
   currentUserId.current = session?.user.id ?? null;
   currentTargetId.current = targetId ?? null;
+  const subject = `${session?.user.id ?? ""}:${targetId ?? ""}:${kind}`;
 
   const load = useCallback(async () => {
     const token = loadFence.current.begin(session?.user.id ?? null);
     const requestedTargetId = targetId;
+    const requestSubject = `${session?.user.id ?? ""}:${requestedTargetId ?? ""}:${kind}`;
     if (!token || !requestedTargetId || (kind !== "followers" && kind !== "following")) {
       setError("This list isn't available.");
+      setPeople([]);
+      setLoadedSubject(requestSubject);
       setLoading(false);
       return;
     }
     setLoading(true);
+    setLoadedSubject(null);
     setError(null);
     try {
       const next = followersMode ? await getFollowers(requestedTargetId) : await getFollowing(requestedTargetId);
       if (!loadFence.current.isCurrent(token, currentUserId.current) || currentTargetId.current !== requestedTargetId) return;
       setPeople(next);
+      setLoadedSubject(requestSubject);
     } catch (cause: any) {
       if (loadFence.current.isCurrent(token, currentUserId.current) && currentTargetId.current === requestedTargetId) {
         setError(cause?.message ?? "Couldn't load this list.");
+        setLoadedSubject(requestSubject);
       }
     } finally {
       if (loadFence.current.isCurrent(token, currentUserId.current) && currentTargetId.current === requestedTargetId) {
@@ -58,6 +66,7 @@ export default function SocialListScreen() {
     return () => {
       loadFence.current.blur();
       setPeople([]);
+      setLoadedSubject(null);
       setError(null);
     };
   }, [load, session?.user.id]));
@@ -69,7 +78,7 @@ export default function SocialListScreen() {
       </Pressable>
       <Text variant="display" style={{ marginTop: 8, marginBottom: 20 }}>{title}</Text>
 
-      {loading ? (
+      {loading || loadedSubject !== subject ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
       ) : error ? (
         <View>
