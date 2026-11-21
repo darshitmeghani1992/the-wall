@@ -86,6 +86,7 @@ export function MarkDetailModal({
   const subjectFence = useRef(new SessionFocusFence());
   const markFence = useRef(new TargetRouteFence());
   const actionInFlight = useRef(false);
+  const allowanceRequest = useRef(0);
   currentViewerId.current = viewerId ?? null;
   currentMarkId.current = mark?.id ?? null;
   const isSender = Boolean(mark && viewerId && mark.author_id === viewerId);
@@ -109,6 +110,8 @@ export function MarkDetailModal({
     const activeMarkFence = markFence.current;
     activeSubjectFence.focus(viewerId ?? null);
     activeMarkFence.focus(mark?.id ?? null);
+    // An old allowance response must not repaint a newly selected Mark/account.
+    allowanceRequest.current += 1;
     actionInFlight.current = false;
     setBusy(false);
     return () => {
@@ -132,22 +135,38 @@ export function MarkDetailModal({
     if (actionInFlight.current) return;
     setError(null);
     setPanel(next);
-    if (next === "remove" && remaining === null && viewerId) {
+    if (next === "remove" && viewerId) {
+      // Recheck on every entry; a cached quota can become outdated on another device.
+      setRemaining(null);
       void loadAllowance();
+    } else {
+      // Leaving the panel invalidates any pending allowance result or error.
+      allowanceRequest.current += 1;
+      setAllowanceLoading(false);
     }
   }
 
   async function loadAllowance() {
     if (!viewerId || actionInFlight.current) return;
+    const subjectToken = subjectFence.current.begin(viewerId);
+    const markToken = markFence.current.capture(markId);
+    if (!subjectToken || !markToken) return;
+    const requestToken = ++allowanceRequest.current;
+    const isCurrent = () => requestToken === allowanceRequest.current
+      && subjectFence.current.isCurrent(subjectToken, currentViewerId.current)
+      && markFence.current.isCurrent(markToken, currentMarkId.current);
     setAllowanceLoading(true);
     setError(null);
     try {
-      setRemaining(await remainingNormalRemovals(viewerId));
+      const count = await remainingNormalRemovals(subjectToken.userId);
+      if (isCurrent()) setRemaining(count);
     } catch {
-      setRemaining(null);
-      setError("We couldn't check your removal allowance. Try again before removing this Mark.");
+      if (isCurrent()) {
+        setRemaining(null);
+        setError("We couldn't check your removal allowance. Try again before removing this Mark.");
+      }
     } finally {
-      setAllowanceLoading(false);
+      if (isCurrent()) setAllowanceLoading(false);
     }
   }
 
