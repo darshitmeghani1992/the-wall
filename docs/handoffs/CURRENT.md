@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## Gemini completion event observer draft — 21 Nov 2026
+
+Separate `codex/gemini-completion-event-router-20261121` based on #78 exact `0986f9f3b9a42133f49d8405f6ac21f3aa8497a8` adds a read-only GitHub `workflow_run` observer and strict callback provenance tests. The callback workflow does not contain credentials or write permissions, **does not actually dispatch Gemini jobs**, and cannot trigger until independently approved workflow enters default branch. No live Gemini API usage verified. Exact next checks: new PR CI and independent Reviewer/QA, then a one-time approved manual Gemini pilot and observe a callback. Shared multi-host leases, autonomous draft PR worker and continuous event loop remain blocked and must be implemented separately. No changes to original production, staging writes, held domain/Apple, media/Secret OFF. Enhanced Beta NO-GO.
+
+
 ## Gemini real-code fixture pilot, prepared but **not launched** — 21 Nov 2026
 
 Branch `codex/gemini-fixture-agent-pilot-20261121` based on #76 immutable `c2c4e9c8906465df767c5c2d759de66776d07b7f` adds one manual-only read-only GitHub Actions job, `scripts/gemini_fixture_pilot_v2.py`, mock/AST security tests and exact-SHA PR CI contracts. Its intended runtime makes two bounded Gemini Flash-Lite calls to generate trivial Python functions, validates AST without executing them and immediately dispatches the second using the existing local fenced lease/outbox. **This has not been authenticated/run against Gemini** and is not a continuous cloud agent, shared cross-run coordinator or code-changing PR worker. **Next exact action:** check new draft PR contract/full CI and independent Reviewer/QA; independently authorize/default-branch integrate credential workflow; run one genuine free-tier two-task pilot; record live usage. No production, no paid fallback, no hosted writes or merges authorized by this branch; first Enhanced Beta NO-GO.

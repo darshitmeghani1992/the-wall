@@ -1,0 +1,35 @@
+name: Gemini completion observer (read-only)
+
+# GitHub only emits workflow_run to workflows on the default branch.
+# It is deliberately NOT an agent dispatcher.
+on:
+  workflow_run:
+    workflows:
+      - "Gemini two-task coding pilot (manual, no repo writes)"
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemini-completion-readonly
+  cancel-in-progress: false
+
+jobs:
+  filter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check event contract
+        run: python -m unittest discover -s scripts/tests -p 'test_engineering_cloud_event_router_v2.py' -v
+      - name: Validate callback provenance without dispatching
+        run: python scripts/engineering_cloud_event_router_v2.py
+
+# Security: no Gemini key; no write token; no automatic job dispatch;
+# no QA/Reviewer approval, release, git push or Supabase connection.
