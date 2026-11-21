@@ -20,6 +20,16 @@ forbiddenAddresses.addSubnet("fc00::", 7, "ipv6");
 forbiddenAddresses.addSubnet("fe80::", 10, "ipv6");
 forbiddenAddresses.addSubnet("ff00::", 8, "ipv6");
 forbiddenAddresses.addSubnet("2001:db8::", 32, "ipv6");
+// Transition prefixes can encode a private IPv4 endpoint inside a seemingly
+// globally routable IPv6 address. Fail closed rather than relying on egress
+// routing/translation; the hosted C3 worker still needs independent egress ACLs.
+for (const [network, prefix] of [
+  ["::", 96],          // deprecated IPv4-compatible IPv6 (::127.0.0.1)
+  ["64:ff9b::", 96],  // well-known NAT64 IPv4 embedding
+  ["64:ff9b:1::", 48],// local-use NAT64
+  ["2002::", 16],      // 6to4 (encapsulates a source IPv4 address)
+  ["2001::", 32],      // Teredo IPv4 tunnelling
+] as const) forbiddenAddresses.addSubnet(network, prefix, "ipv6");
 
 export function assertStorageObjectUrl(
   rawUrl: string,
