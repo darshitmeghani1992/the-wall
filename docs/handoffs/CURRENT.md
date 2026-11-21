@@ -1,5 +1,10 @@
 # CURRENT — Operational Handoff
 
+## P0-04 disposable Shared-Wall owner-spoof SQL regression — 21 Nov 2026
+
+BACKEND test-only branch `codex/shared-wall-returning-negative-20261121` is an independent child of #67 exact head `ebdf28c196a3f50e4b5218dd6038d12277d12953`. Extended existing `73_shared_wall_owner_returning.sql` with non-owner owner_id spoofing and inactive owner creation negative `INSERT ... RETURNING` cases (within the disposable CI DB/ROLLBACK). No application/schema/hosted changes, no merge or deploy. **Next:** verify fresh exact-head Postgres suite, request independent Reviewer/QA on unchanged tree, and independently prove actual JWT HTTP privilege separation in staging with authorized actors when SMTP/testers exist. Secrets/media OFF, 0031 withheld, original production protected, Enhanced Beta NO-GO.
+
+
 ## Integrated internal source — 21 Nov (PR #67)
 
 **Current draft-only internal candidate:** [PR #67](https://github.com/darshitmeghani1992/the-wall/pull/67) combines [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64) staging audit/queue/handoff documentation (ancestor head `2c919ee1728fe48a157ab282eb8bcb7ce73a0cf7`) and source/test blobs from sibling BACKEND [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65) at head `d3396bfd72ac58c926245ed9b5905d7c67673e48`. Confirmed integrated worker blobs **exactly equal** #65's: source `88b235eb5c818b110abcd798ec63af766c1414aa`, tests `8473f47ca63d9096ad245ec7ec7512246df9f4b5`. Branch `codex/internal-beta-verified-security-candidate-20261121`; **live GitHub PR head/CI must be resolved fresh** because this handoff changes the SHA. This does not supersede #30's historical lineage or waive verification of older draft security diffs.
