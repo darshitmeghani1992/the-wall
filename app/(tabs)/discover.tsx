@@ -118,7 +118,8 @@ export default function PeopleScreen() {
       setResults(nextResults);
       setSearchedQuery(normalized);
     } catch (cause: any) {
-      if (searchFence.current.isCurrent(token, currentUserId.current)) {
+      if (searchFence.current.isCurrent(token, currentUserId.current)
+        && normalizePeopleSearchQuery(currentQuery.current) === normalized) {
         setError(cause?.message ?? "Search didn't work. Try again.");
       }
     } finally {
@@ -137,7 +138,10 @@ export default function PeopleScreen() {
       if (normalizeSharedWallSearch(currentQuery.current) !== normalized) return;
       setWallResults(nextResults); setSearchedQuery(normalized);
     } catch (cause: any) {
-      if (searchFence.current.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Search didn't work. Try again.");
+      if (searchFence.current.isCurrent(token, currentUserId.current)
+        && normalizeSharedWallSearch(currentQuery.current) === normalized) {
+        setError(cause?.message ?? "Search didn't work. Try again.");
+      }
     } finally {
       if (searchFence.current.isCurrent(token, currentUserId.current)) setSearching(false);
     }
