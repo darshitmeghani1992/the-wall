@@ -20,7 +20,7 @@ import {
   type PreparedTextMarkSubmission,
 } from "@/lib/mark-writer-contract";
 import { createTextMark, protectedMediaWriterRpc, type MarkWithAuthor } from "@/lib/marks";
-import { composerScopeKey } from "@/lib/composer-scope";
+import { ComposerScopeLease, composerScopeKey } from "@/lib/composer-scope";
 import { getPersonalWall } from "@/lib/profiles";
 import { formatDuration, MAX_VIDEO_MS, useVoiceRecorder } from "@/lib/recording";
 import {
@@ -121,12 +121,16 @@ export default function Composer() {
   const { wallId, recipientId, handle, sharedWallId, wallName } = useLocalSearchParams<{
     wallId?: string; recipientId?: string; handle?: string; sharedWallId?: string; wallName?: string;
   }>();
-  return <ComposerSession key={composerScopeKey(session?.user.id ?? null, {
+  const scopeKey = composerScopeKey(session?.user.id ?? null, {
     wallId, recipientId, handle, sharedWallId, wallName,
-  })} />;
+  });
+  const lease = useRef(new ComposerScopeLease()).current;
+  const revision = lease.capture(scopeKey);
+  useEffect(() => () => lease.invalidate(), [lease]);
+  return <ComposerSession key={scopeKey} isCurrentScope={() => lease.isCurrent(revision)} />;
 }
 
-function ComposerSession() {
+function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) {
   const router = useRouter();
   const navigation = useNavigation();
   const { wallId: targetWallId, recipientId, handle, sharedWallId, wallName } = useLocalSearchParams<{
@@ -204,24 +208,27 @@ function ComposerSession() {
     await recorder.reset();
   }
   usePreventRemove((hasContent || recording || submissionLocked) && !discardConfirmedRef.current, ({ data }) => {
-    if (submissionLocked) return;
+    if (!isCurrentScope() || submissionLocked) return;
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
       { text: "Discard", style: "destructive", onPress: () => {
+        if (!isCurrentScope()) return;
         discardConfirmedRef.current = true;
-        void cleanupDrafts().finally(() => navigation.dispatch(data.action));
+        void cleanupDrafts().finally(() => {
+          if (isCurrentScope()) navigation.dispatch(data.action);
+        });
       } },
     ]);
   });
 
   useEffect(() => {
-    if (submissionLocked || !confirmedMarkId) return;
+    if (!isCurrentScope() || submissionLocked || !confirmedMarkId) return;
     const markId = confirmedMarkId;
     setConfirmedMarkId(null);
     discardConfirmedRef.current = true;
     if (router.canDismiss()) router.dismissAll();
     router.push(sharedMode ? `/shared/${sharedWallId}?justCreated=${markId}` : `/person/${recipientId}?justCreated=${markId}`);
-  }, [confirmedMarkId, recipientId, router, sharedMode, sharedWallId, submissionLocked]);
+  }, [confirmedMarkId, isCurrentScope, recipientId, router, sharedMode, sharedWallId, submissionLocked]);
 
   useEffect(() => {
     let active = true;
@@ -423,22 +430,26 @@ function ComposerSession() {
   }), [anonymous, color, currentUserId, profile, text, wallId]);
 
   function confirmDiscard() {
+    if (!isCurrentScope()) return;
     if (!hasContent && !recording) return router.back();
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
       { text: "Discard", style: "destructive", onPress: () => {
+        if (!isCurrentScope()) return;
         discardConfirmedRef.current = true;
-        void cleanupDrafts().finally(() => router.back());
+        void cleanupDrafts().finally(() => {
+          if (isCurrentScope()) router.back();
+        });
       } },
     ]);
   }
 
   async function submit() {
-    if (!canSubmit || !wallId || !currentUserId || submitInFlightRef.current || !lockRef.current.tryBegin()) return;
+    if (!isCurrentScope() || !canSubmit || !wallId || !currentUserId || submitInFlightRef.current || !lockRef.current.tryBegin()) return;
     submitInFlightRef.current = true;
     setSubmissionLocked(true);
     const token = lifecycleRef.current;
-    const isCurrent = () => token === lifecycleRef.current && session?.user.id === currentUserId && mediaAppActive;
+    const isCurrent = () => isCurrentScope() && token === lifecycleRef.current && session?.user.id === currentUserId && mediaAppActive;
     try {
       if (!media.length) {
         const submission = prepareTextMarkSubmission({ wallId, text, color, anonymous, secret }, textSubmissionRef.current);
@@ -491,7 +502,9 @@ function ComposerSession() {
       }
       setConfirmedMarkId(result.markId);
     } catch (cause) {
-      if (!(cause instanceof MediaWriterError) || cause.code !== "stale") Alert.alert("Couldn't post that", safeMediaMessage(cause));
+      if (isCurrentScope() && (!(cause instanceof MediaWriterError) || cause.code !== "stale")) {
+        Alert.alert("Couldn't post that", safeMediaMessage(cause));
+      }
     } finally {
       setPhase("idle");
       lockRef.current.finish();

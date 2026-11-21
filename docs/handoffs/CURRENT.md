@@ -1,5 +1,13 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-49 · Composer stale dialog/async navigation lease — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #132 immutable `81ae72b255d9289a08e4b8d4069e2ad41693c4fa`, branch `codex/beta-composer-stale-discard-scope-20261122-run15`. Previous composer can unmount on target/actor switch while a native Discard confirmation remains queued; old callback could dispatch navigation after cleanup and affect the new session. An explicit monotonic scope lease (including ABA and unmount invalidation) now guards pending callbacks, success redirects and submit feedback against a replaced actor or target. New pure lease matrix and source contract. Distinct device/simulator QA and Reviewer gate remain outstanding.
+
+**Safety:** Staging-only `ewintxgdxdvschiqodkq`; original production untouched. No hosted writes, migration 0031, main merge, deploy, invites or held domain/Apple work. Enhanced Beta NO-GO pending real SMTP OTP, three JWT actors, C2/C3 media, Secret cleanup, deletion and native/rollback/independent gates. Media/Secret/analytics OFF.
+
+**Next:** Verify exact head CI/SHA, route for independent review and device QA, continue next unblocked task.
+
 ## CURRENT BETA-P0-48 · Composer draft reset on account/destination change — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** New child of #131 exact `c415d1bd6c4151dca795533b91c331f18dce647e` on isolated `codex/beta-composer-actor-target-remount-20261122-run15`. Compose screen uses authenticated actor+Wall/recipient/Shared destination as the child React key. A switched actor/target no longer inherits previous draft, verified target, media upload state or submit locks during pre-effect render. Old draft's cleanup remains attached to its unmounted editor. Pure actor/destination matrix and source wiring test added; server authorization unchanged.
