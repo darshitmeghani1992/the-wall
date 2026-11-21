@@ -31,6 +31,23 @@ test("receipt reconciliation changes only exact returned unread rows", () => {
   assert.deepEqual(applyNotificationReadReceipts(rows, []), rows);
 });
 
+test("overlapping or duplicated Alert pages never render the same Alert twice", () => {
+  const oldest = { id: "oldest", read: false };
+  const boundary = { id: "boundary", read: true };
+  const one = { id: "one", read: false };
+  const two = { id: "two", read: false };
+  const original = [boundary, oldest];
+
+  const merged = appendUniqueNotifications(original, [
+    boundary, one, one, two, two, oldest,
+  ]);
+  assert.deepEqual(merged, [boundary, oldest, one, two]);
+  assert.equal(merged[0], boundary, "the existing row object is preserved");
+  assert.equal(merged[2], one, "the first copy in the incoming page is preserved");
+  assert.deepEqual(original, [boundary, oldest], "the previous page remains immutable");
+  assert.deepEqual(appendUniqueNotifications(merged, [one, two, one]), merged);
+});
+
 test("older Alert pages append in order without duplicate rows", () => {
   const current = [{ id: "newest", read: true }, { id: "boundary", read: true }];
   const older = [{ id: "boundary", read: true }, { id: "older", read: false }];
