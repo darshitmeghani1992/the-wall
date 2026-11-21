@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## Integrated internal source — 21 Nov (PR #67)
+
+**Current draft-only internal candidate:** [PR #67](https://github.com/darshitmeghani1992/the-wall/pull/67) combines [PR #64](https://github.com/darshitmeghani1992/the-wall/pull/64) staging audit/queue/handoff documentation (ancestor head `2c919ee1728fe48a157ab282eb8bcb7ce73a0cf7`) and source/test blobs from sibling BACKEND [PR #65](https://github.com/darshitmeghani1992/the-wall/pull/65) at head `d3396bfd72ac58c926245ed9b5905d7c67673e48`. Confirmed integrated worker blobs **exactly equal** #65's: source `88b235eb5c818b110abcd798ec63af766c1414aa`, tests `8473f47ca63d9096ad245ec7ec7512246df9f4b5`. Branch `codex/internal-beta-verified-security-candidate-20261121`; **live GitHub PR head/CI must be resolved fresh** because this handoff changes the SHA. This does not supersede #30's historical lineage or waive verification of older draft security diffs.
+
+**Exact next actions:** check 4/4 CI for immutable PR #67 head, independent Reviewer source/security inspection, independent QA. Product/security decision on removed-Secret reveal [issue #66](https://github.com/darshitmeghani1992/the-wall/issues/66); all three live JWT actor flows, SMTP six-digit OTP, installed-device media/Secret/deletion runtime, nonproduction egress ACL, hosted 0031 gate remain open. Media/Secret OFF, Apple/domain held, no tester invitations/production or `main` merge. **NO-GO**.
+
+
 ## Active continuation — 21 Nov 2026 13:08 IST (ARCHITECT/BACKEND, source-only)
 
 **Latest unmerged source head:** draft [PR #63](https://github.com/darshitmeghani1992/the-wall/pull/63), `codex/media-signed-token-shape-20261121` at `fdf1fbbcd342100b5a958eb7af95281650b973a2` (base PR #62 at `340b55431ca09d504351a52db4ef33c88904648b`; source diff only worker URL policy and regression tests). PR #63 [CI #229](https://github.com/darshitmeghani1992/the-wall/actions/runs/44881091871) **SUCCESS 4/4** on this exact SHA; previous [CI #228](https://github.com/darshitmeghani1992/the-wall/actions/runs/44881008244) failed and is superseded **for CI evidence only**, not as an independently reviewed source. PR #62 [CI #227](https://github.com/darshitmeghani1992/the-wall/actions/runs/44877580399) 4/4 green. Both PRs still draft and unmerged; PR #63 Reviewer and QA not submitted at inspection. **Do not self-certify**.
