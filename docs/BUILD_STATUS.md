@@ -1,5 +1,11 @@
 # The-Wall Build Status
 
+## BETA-P0-11 · Mark mutation source contracts — 21 Nov 2026
+
+ARCHITECT assigned FRONTEND to guard the approved edit/delete flow against removal of its synchronous duplicate-request lock or either stale-completion fence. Added two source contract assertions. Both passed locally, as did lint. Shared workspace dependencies are missing expo-av and tus-js-client, blocking local type-check. The full local contract run reported a failure in the existing EAS validation suite. Next eligible work is independent behavioral QA for slow and repeated taps, target/account switches and retry, after exact draft CI.
+
+Base #86 `5e6c5de25489b4ddd365382788c5551523622ff1` passed all four jobs in [CI #266](https://github.com/darshitmeghani1992/the-wall/actions/runs/44895296649). #85 passed all four jobs in [CI #264](https://github.com/darshitmeghani1992/the-wall/actions/runs/44895081431). Neither draft had submitted reviews at inspection. Independent Reviewer and QA remain pending. Real staging OTP and three-actor HTTP/device evidence remain blocked by verified SMTP and authorized fixtures. Core + Enhanced Beta remains NO-GO.
+
 ## BETA-P0-04 · Suspended-owner Shared Wall regressions — 21 Nov 2026
 
 **ROLE: BACKEND** test implementation under ARCHITECT's BETA-P0-04 security acceptance. New isolated branch `codex/beta-suspended-owner-returning-tests-20261121-run2` starts at [PR #85](https://github.com/darshitmeghani1992/the-wall/pull/85) `3e13b30cde449ac8023edaf01df6b1b35a8a734a`. Added two independent suspended-account SQL negative assertions to existing disposable test 73: the suspended owner cannot read an existing private Shared Wall or create another by `INSERT ... RETURNING`. Deactivated, outsider-spoof, and legitimate active-owner cases retained. **No schema/config/API/hosted data changes.** New exact-head CI, independent Reviewer, and QA still required; local PostgreSQL unavailable to this run. Real three-actor HTTP/OTP security evidence remains blocked by staging's zero Auth users and unverified SMTP. **Next:** check published draft CI, hand off tests, then continue independent authorized security work. Enhanced Beta NO-GO.
