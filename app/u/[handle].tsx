@@ -16,13 +16,17 @@ import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred
 import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
 import { TargetRouteFence } from "@/lib/relationship-ui";
 import { SessionFocusFence } from "@/lib/session-generation";
+import { handleLinkSubjectKey, sameHandleLinkSubject } from "@/lib/handle-link-scope";
 import { colors, markColors } from "@/theme";
 
 function Spinner() {
   return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}><ActivityIndicator color={markColors.brandYellow} /></View>;
 }
 
-type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
+type ClaimedAttempt = { reference: string; subjectKey: string; token: DeferredAttemptToken | null };
+type ResolvedView =
+  | { subjectKey: string; status: "target"; href: string }
+  | { subjectKey: string; status: "retryable" | "not_found" };
 
 export default function HandleLink() {
   const router = useRouter();
@@ -30,17 +34,18 @@ export default function HandleLink() {
   const clean = String(handle ?? "").replace(/^@/, "").toLowerCase();
   const reference = typeof rawReference === "string" ? rawReference : null;
   const { loading, session, accountRoute } = useAuth();
-  const [notFound, setNotFound] = useState(false);
-  const [retryable, setRetryable] = useState(false);
-  const [target, setTarget] = useState<string | null>(null);
+  const subjectKey = handleLinkSubjectKey(session?.user.id, clean, reference, accountRoute === "ready");
+  const [resolvedView, setResolvedView] = useState<ResolvedView | null>(null);
   const [attempt, setAttempt] = useState<ClaimedAttempt | null>(null);
   const claimedKey = useRef<string | null>(null);
   const sessionFence = useRef(new SessionFocusFence());
   const handleFence = useRef(new TargetRouteFence());
   const currentUserId = useRef<string | null>(session?.user.id ?? null);
   const currentHandle = useRef<string | null>(clean || null);
+  const currentSubjectKey = useRef(subjectKey);
   currentUserId.current = session?.user.id ?? null;
   currentHandle.current = clean || null;
+  currentSubjectKey.current = subjectKey;
 
   useFocusEffect(useCallback(() => {
     const subject = session?.user.id ?? null;
@@ -54,43 +59,42 @@ export default function HandleLink() {
 
   useEffect(() => {
     const subject = session?.user.id;
-    const key = reference && subject ? `${subject}:${clean}:${reference}` : null;
-    if (!reference || !subject || accountRoute !== "ready" || claimedKey.current === key) return;
+    const key = reference && subject ? subjectKey : null;
+    if (!reference || !subject || accountRoute !== "ready" || !key || claimedKey.current === key) return;
     claimedKey.current = key;
-    setTarget(null);
-    setNotFound(false);
-    setRetryable(false);
+    setResolvedView(null);
     const token = claimDeferredAttemptReference(
       reference as DeferredNavigationRef,
       { kind: "handle", handle: clean },
       subject,
     );
-    setAttempt({ reference, token });
-  }, [accountRoute, clean, reference, session?.user.id]);
+    setAttempt({ reference, subjectKey: key, token });
+  }, [accountRoute, clean, reference, session?.user.id, subjectKey]);
 
   const resolve = useCallback(async (capturedAttempt: ClaimedAttempt | null) => {
     const subject = session?.user.id;
+    const capturedSubjectKey = subjectKey;
     const subjectToken = sessionFence.current.begin(subject ?? null);
     const handleToken = handleFence.current.capture(clean);
-    if (!subject || !subjectToken || !handleToken || accountRoute !== "ready") return;
-    setRetryable(false);
-    setNotFound(false);
+    if (!subject || !capturedSubjectKey || !subjectToken || !handleToken || accountRoute !== "ready") return;
+    setResolvedView(null);
     const resolution = await resolveDeferredDestination(
       { kind: "personal_handle", handle: clean },
       subject,
       { profileByHandle: getProfileByHandle },
     );
     if (!sessionFence.current.isCurrent(subjectToken, currentUserId.current)
-      || !handleFence.current.isCurrent(handleToken, currentHandle.current)) return;
+      || !handleFence.current.isCurrent(handleToken, currentHandle.current)
+      || !sameHandleLinkSubject(capturedSubjectKey, currentSubjectKey.current)) return;
     if (resolution.status === "terminal_unavailable") {
       if (capturedAttempt?.token) {
         const unavailable = transferDeferredAttemptToUnavailable(capturedAttempt.token);
         if (unavailable) router.replace(unavailable.href as never);
-      } else setNotFound(true);
+      } else setResolvedView({ subjectKey: capturedSubjectKey, status: "not_found" });
       return;
     }
     if (resolution.status === "retryable_failure") {
-      setRetryable(true);
+      setResolvedView({ subjectKey: capturedSubjectKey, status: "retryable" });
       return;
     }
     if (capturedAttempt?.token) {
@@ -98,31 +102,37 @@ export default function HandleLink() {
       if (transferred) router.replace(transferred.href as never);
       return;
     }
-    setTarget(resolution.href);
-  }, [accountRoute, clean, router, session?.user.id]);
+    setResolvedView({ subjectKey: capturedSubjectKey, status: "target", href: resolution.href });
+  }, [accountRoute, clean, router, session?.user.id, subjectKey]);
 
   useEffect(() => {
-    if (reference && !attempt) return;
+    if (reference && !sameHandleLinkSubject(attempt?.subjectKey, subjectKey)) return;
     if (reference && !attempt?.token) return;
-    void resolve(attempt);
-  }, [attempt, reference, resolve]);
+    void resolve(reference ? attempt : null);
+  }, [attempt, reference, resolve, subjectKey]);
 
   async function retry() {
-    const captured = attempt;
+    if (!subjectKey || !sameHandleLinkSubject(subjectKey, currentSubjectKey.current)) return;
+    const captured = reference && sameHandleLinkSubject(attempt?.subjectKey, subjectKey) ? attempt : null;
+    if (reference && !captured) return;
     if (captured?.token && !await retryDeferredDestination(captured.token)) return;
+    if (!sameHandleLinkSubject(subjectKey, currentSubjectKey.current)) return;
     await resolve(captured);
   }
+
+  const activeAttempt = sameHandleLinkSubject(attempt?.subjectKey, subjectKey) ? attempt : null;
+  const visibleView = sameHandleLinkSubject(resolvedView?.subjectKey, subjectKey) ? resolvedView : null;
 
   if (loading) return <Spinner />;
   if (!session) return <Redirect href="/welcome" />;
   if (accountRoute !== "ready") return <Redirect href="/" />;
-  if (reference && attempt?.reference !== reference) return <Spinner />;
-  if (reference && attempt?.reference === reference && !attempt.token) return <Redirect href="/(tabs)/home" />;
-  if (target) return <Redirect href={target} />;
-  if (retryable) {
+  if (reference && !activeAttempt) return <Spinner />;
+  if (reference && activeAttempt && !activeAttempt.token) return <Redirect href="/(tabs)/home" />;
+  if (visibleView?.status === "target") return <Redirect href={visibleView.href} />;
+  if (visibleView?.status === "retryable") {
     return <Screen dockInset={false}><View style={{ flex: 1, justifyContent: "center", gap: 12 }}><Text accessibilityRole="alert" variant="headline">We couldn&apos;t open this Wall.</Text><Text variant="body" color={colors.outline}>Check your connection and try again.</Text><Button label="Retry" variant="yellow" onPress={() => void retry()} /><Button label="My Wall" variant="ghost" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
   }
-  if (notFound) {
+  if (visibleView?.status === "not_found") {
     return <Screen dockInset={false}><View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}><Text variant="headline">This isn&apos;t available anymore.</Text><Button label="My Wall" variant="primary" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
   }
   return <Spinner />;

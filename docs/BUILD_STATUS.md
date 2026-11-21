@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-43 · Handle deep-link resolution fenced to account + route + deferred reference — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #126 immutable parent `b1ce103aad7f379338ec9e391a30533a973da86b` (tree `018b4c0251a6f655dbe7bd0a7545fb2b36b9e900`), preserving stacked lineage #30–#126. The `/u/[handle]` route kept resolved target, retry and not-found state as unscoped component booleans/strings. If an authenticated viewer changed or an inbound handle/deferred reference changed before a new effect reset, the previous result could redirect a new session or present an outdated outcome. One explicit subject key (authenticated account, canonical handle, deferred reference, ready account state) now fences resolved display/redirect and claimed deferred attempts synchronously. Async completion and Retry are rejected after a route/account change even before focus-effect cleanup. Existing deferred coordinator, destination verification and safe fallback remain unchanged.
+
+**Checks:** New executable pure scope matrix and source-boundary regression `tests/frontend-handle-route-actor-scope.test.mjs`; exact head needs independent CI (typecheck/lint/contracts/Postgres/Edge/media and native/Expo where supported), Reviewer and device/simulator QA on A→B, handle X→Y, reference R1→R2, delayed resolution, offline retry and logout. Source tests cannot certify a real authenticated invite transition. No hosted writes, security/schema/Auth/flag changes, production contact, merge, deployment or tester invitation. Enhanced Beta **NO-GO** until SMTP OTP, 3 real JWT actors, private media C2/C3, Secret one-hour cleanup, deletion 0031, device/rollback, independent gates and Founder GO. Media/Secret/analytics OFF, domain/DNS/Apple held.
+
+**Next:** Check PR #127 exact SHA and CI; route unchanged tree to independent Reviewer and separate behavioral QA; continue another nonoverlapping beta task while external gates remain blocked.
+
+
 ## BETA-P0-42 · Synchronize moderation contract with actor-gated Settings — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND test correction.** New isolated child of #125 immutable `6ea34043e7ad8eab001c921b8812ec083b748ce0`. PR #124's exact-head CI `44952933951` caught a stale source assertion in `tests/frontend-moderation.test.mjs` expecting unsafe direct `profile?.is_admin` in Settings even though BETA-P0-40 correctly changed that screen to require `profile.id === authenticated actor`. This test-only correction now positively checks that the Settings administrator affordance derives from `actorProfile` and that `actorProfile` is fail-closed on identity mismatch, while rejecting a direct stale-profile conditional. No production code, permissions or runtime changed. Historical #124 CI failed and cannot be called green by inheritance. This child must earn its own 4/4 CI and independent review/QA.
