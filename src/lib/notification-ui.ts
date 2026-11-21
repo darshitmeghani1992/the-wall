@@ -29,5 +29,11 @@ export function appendUniqueNotifications<T extends { id: string }>(
   older: readonly T[],
 ): T[] {
   const knownIds = new Set(current.map((notification) => notification.id));
-  return [...current, ...older.filter((notification) => !knownIds.has(notification.id))];
+  const merged = current.slice();
+  for (const notification of older) {
+    if (knownIds.has(notification.id)) continue;
+    knownIds.add(notification.id);
+    merged.push(notification);
+  }
+  return merged;
 }
