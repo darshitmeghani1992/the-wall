@@ -140,6 +140,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const targetLabel = sharedMode ? wallName ?? "a Shared Wall" : `@${handle}`;
   const { session, sessionGeneration, mediaAppActive, profile } = useAuth();
   const currentUserId = session?.user.id;
+  const actorProfile = currentUserId && profile?.id === currentUserId ? profile : null;
   const [text, setText] = useState("");
   const [color, setColor] = useState<string>(stickySwatches[0]);
   const [anonymous, setAnonymous] = useState(false);
@@ -425,9 +426,9 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     id: "preview", wall_id: wallId ?? "", author_id: currentUserId ?? null, type: "text",
     text: text.trim() || "your Mark…", color, anonymous, secret: false, media_url: null, payload: null,
     rotation: 0, pinned: false, status: "active", created_at: new Date().toISOString(), author: anonymous ? null
-      : { id: currentUserId ?? "me", display_name: profile?.display_name ?? "You",
-        avatar_url: profile?.avatar_url ?? null, handle: profile?.handle ?? "you" },
-  }), [anonymous, color, currentUserId, profile, text, wallId]);
+      : { id: currentUserId ?? "me", display_name: actorProfile?.display_name ?? "You",
+        avatar_url: actorProfile?.avatar_url ?? null, handle: actorProfile?.handle ?? "you" },
+  }), [anonymous, color, currentUserId, actorProfile, text, wallId]);
 
   function confirmDiscard() {
     if (!isCurrentScope()) return;
@@ -599,7 +600,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     <View style={{ marginTop: 20 }}><Text variant="label" color={colors.outline}
       style={{ marginBottom: 10 }}>WHO'S THIS FROM?</Text><View style={{ flexDirection: "row", gap: 10 }}>
       <Choice active={!anonymous} disabled={busy} onPress={() => lockRef.current.runIntent(() => setAnonymous(false))}
-        title="Post as me" subtitle={`@${profile?.handle ?? "you"}`} />
+        title="Post as me" subtitle={`@${actorProfile?.handle ?? "you"}`} />
       <Choice active={anonymous} disabled={busy || !allowAnonymous}
         onPress={() => lockRef.current.runIntent(() => setAnonymous(true))} title="Anonymous"
         subtitle={allowAnonymous ? "Name hidden" : "Not allowed here"} />

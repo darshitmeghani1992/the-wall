@@ -1,5 +1,13 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-50 · Composer sender preview actor guard — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #133 immutable `fd6fee01505abe324354bc9818613f990af61240` on new branch `codex/beta-composer-author-preview-scope-20261122-run15`. Mark composer preview/author choice had read cached `profile` irrespective of current authenticated actor, potentially showing the previous account's handle, display name and avatar immediately after account switch. Both surfaces now derive a matching `actorProfile` and otherwise use existing neutral placeholders. No backend/API/flags or other UI design change; contract test added.
+
+**Gates:** Own commit exact-head CI, independent Reviewer and native QA of A→B/B→A before profile load, no-profile error, anonymous preview, avatar and delayed changes. No hosted writes, production, migration 0031, merge, deploy or invitations. Enhanced Beta NO-GO pending SMTP OTP, three JWT actors, protected media C2/C3, Secret hourly expiry, account deletion, device/rollback and independent approvals. Media/Secret/analytics OFF; domain/Apple held.
+
+**Next:** Check exact SHA CI, route for separate review/device QA and resume nonoverlapping scope.
+
 ## CURRENT BETA-P0-49 · Composer stale dialog/async navigation lease — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Child of #132 immutable `81ae72b255d9289a08e4b8d4069e2ad41693c4fa`, branch `codex/beta-composer-stale-discard-scope-20261122-run15`. Previous composer can unmount on target/actor switch while a native Discard confirmation remains queued; old callback could dispatch navigation after cleanup and affect the new session. An explicit monotonic scope lease (including ABA and unmount invalidation) now guards pending callbacks, success redirects and submit feedback against a replaced actor or target. New pure lease matrix and source contract. Distinct device/simulator QA and Reviewer gate remain outstanding.

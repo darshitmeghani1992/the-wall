@@ -65,3 +65,18 @@ test("stale Composer confirmations do not navigate after identity switch or slow
   assert.match(source, /if \(!isCurrentScope\(\) \|\| !canSubmit/);
   assert.match(source, /const isCurrent = \(\) => isCurrentScope\(\) && token === lifecycleRef\.current/);
 });
+
+test("composer author preview never renders a previous authenticated actor's profile", () => {
+  const source = readFileSync(new URL("../app/create.tsx", import.meta.url), "utf8");
+  assert.ok(source.includes("const actorProfile = currentUserId && profile?.id === currentUserId ? profile : null;"));
+  assert.ok(source.includes('display_name: actorProfile?.display_name ?? "You"'));
+  assert.ok(source.includes('avatar_url: actorProfile?.avatar_url ?? null, handle: actorProfile?.handle ?? "you"'));
+  assert.ok(source.includes('subtitle={`@${actorProfile?.handle ?? "you"}`}'));
+  assert.match(source, /\[anonymous, color, currentUserId, actorProfile, text, wallId\]/);
+  assert.ok(!source.includes("display_name: profile?.display_name"));
+  const choose = (actor, profile) => actor && profile?.id === actor ? profile : null;
+  const previous = { id: "actor-a", display_name: "Author A", handle: "author-a" };
+  assert.equal(choose("actor-a", previous), previous);
+  assert.equal(choose("actor-b", previous), null);
+  assert.equal(choose(null, previous), null);
+});
