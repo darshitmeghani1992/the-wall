@@ -43,7 +43,7 @@ test("old session network finally never releases new session's busy removal gate
 
 test("discard and remove confirmation from A cannot apply to actor B", () => {
   assert.match(screen, /const token = actionFence\.begin\(userId \?\? null\)/);
-  assert.match(screen, /if \(!actionFence\.isCurrent\(token, currentUserId\.current\)\) return/);
+  assert.match(screen, /if \(!actionFence\.isCurrent\(token, currentUserId\.current\)\s*\|\| subject !== currentSubjectRef\.current\) return/);
   assert.match(screen, /subject !== currentSubjectRef\.current\) return;\s+promptOpen\.current = false;\s+queueApprovedRemoval\(action\)/);
   const fence = new SessionFocusFence();
   fence.focus("A");
