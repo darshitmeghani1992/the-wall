@@ -11,12 +11,12 @@ assert.ok(start >= 0 && end > start, "Discover focus lifecycle exists");
 const focus = screen.slice(start, end);
 
 test("Discover clears both People and public Shared Wall searches on focus or actor change", () => {
-  assert.match(focus, /searchFence\\.current\\.focus\\(nextUserId\\)/);
-  assert.match(focus, /setResults\\(\\[\\]\\);\\s*[\\s\\S]*?setWallResults\\(\\[\\]\\);/);
-  assert.match(focus, /setSearchedQuery\\(null\\)/);
-  assert.match(focus, /setFriends\\(\\[\\]\\)/);
-  assert.match(focus, /setIncoming\\(\\[\\]\\)/);
-  assert.match(focus, /if \\(nextUserId\\) void loadNetwork\\(\\);\\s*else setLoading\\(false\\)/);
+  assert.match(focus, /searchFence\.current\.focus\(nextUserId\)/);
+  assert.match(focus, /setResults\(\[\]\);\s*[\s\S]*?setWallResults\(\[\]\);/);
+  assert.match(focus, /setSearchedQuery\(null\)/);
+  assert.match(focus, /setFriends\(\[\]\)/);
+  assert.match(focus, /setIncoming\(\[\]\)/);
+  assert.match(focus, /if \(nextUserId\) void loadNetwork\(\);\s*else setLoading\(false\)/);
 });
 
 test("old account's pending Shared Wall search cannot repaint after switch or sign-out", () => {
