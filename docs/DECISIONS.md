@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-23 · 2026-11-21 · Validate completion callbacks before automatic coding dispatch
+- **Decision:** Implement a GitHub `workflow_run` observer that verifies expected repository, exact source repository, approved manual pilot name, successful completed state, integer run ID and immutable full SHA. It performs no model invocation or write. Never infer source authorization solely from a workflow name or PR body.
+- **Reason:** Event-driven wakeups can avoid hourly idle intervals once default-branch integrated; accepting arbitrary workflow-run events into a credentialed dispatcher would be a security bypass.
+- **Limit:** A read-only observer is **not** a task scheduler, global lease engine, or active AI coder; it needs independent review and approved workflow integration. No assistant-created Reviewer/QA approval.
+- **Next:** independently review and test event filter; authorized integration to default branch, real bounded Gemini pilot, then shared durable outbox with identity/race handling before dispatch activation.
+
+
 ## D-22 · 2026-11-21 · Safe two-step Gemini code-generation pilot before real repository coding
 - **Decision:** Start with a manual, read-only, free-tier-only GitHub Actions job generating two fixed synthetic Python functions; use a single temporary runner's lease/outbox to prove immediate sequential dispatch. AST-inspect generated code without executing it, don't send repository content or secrets in the prompt, and never log model response bodies.
 - **Authority:** Founder requested Gemini activation ASAP but existing Founder/Reviewer/QA merge and infra gates remain; therefore the workflow stays draft and cannot be manually dispatched until independently reviewed and integrated into the default branch. No auth proof or model execution claimed yet.
