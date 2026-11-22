@@ -37,3 +37,13 @@ test("optimistic updates do not start from signed-out or replaced account", () =
   assert.match(hook, /toggleReaction\(userId, markId, emoji, prev\)/);
   assert.match(hook, /\[refresh, userId\]/);
 });
+
+test("reaction optimism rolls back when neither write nor offline refresh succeeds", () => {
+  assert.match(hook, /const mutationLeases = useRef\(new Map<string, symbol>\(\)\)/);
+  assert.match(hook, /mutationLeases\.current\.has\(markId\)/);
+  assert.match(hook, /mutationLeases\.current\.set\(markId, lease\)/);
+  assert.match(hook, /\.catch\(\(\) => \{[\s\S]*?mutationLeases\.current\.get\(markId\) !== lease[\s\S]*?setSummaries\(\(cur\) => \(\{ \.\.\.cur, \[markId\]: current \}\)\)/);
+  assert.match(hook, /void refresh\(markId\)\.catch\(\(\) => \{/);
+  assert.match(hook, /\.finally\(\(\) => \{[\s\S]*?mutationLeases\.current\.get\(markId\) === lease[\s\S]*?mutationLeases\.current\.delete\(markId\)/);
+  assert.match(hook, /mutationLeases\.current\.clear\(\)/);
+});
