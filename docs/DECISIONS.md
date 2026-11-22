@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-27 · 2026-11-22 · HTTP preflight never follows redirects carrying public API credentials
+- **Trigger:** The staging-only preflight issued Auth/REST requests with the `apikey` header but retained default fetch redirect-follow, unlike the independently prepared three-JWT harness. Unexpected 30x responses may lead to additional outbound requests outside approved staging.
+- **Decision:** Set `redirect: 'error'` for every credential-bearing staging preflight GET; 302 and thrown redirect failures are NO-GO. Keep exact approved origin validation, public-key checks, and private table negative gates; no new endpoint or hosted permission change.
+- **Verification/gates:** New draft #160 BACKEND source and regression tests; exact final SHA CI, independent security Reviewer, staging read-only and device QA remain required. Original production protected; media/Secret/analytics OFF.
+
+
 ## D-26 · 2026-11-22 · EAS/preflight accept only Supabase public API key formats accepted by runtime
 - **Trigger:** #158 closes a runtime Expo credential leak, but `validatePublicClientConfig` and EAS CLI still accepted opaque strings that runtime explicitly rejects. This produces an unusable/broken beta build while reporting EAS configuration success and risks sending unrecognized credentials in read-only HTTP probes.
 - **Decision:** Fail closed on noncanonical keys at the shared Node validation entrypoint: accept modern `sb_publishable_*` and legacy JWT-shaped public key only; require exact staging project and `role=anon` for legacy credentials before any HTTP. Preserve staging-only origin and existing secret-key bans; print no secret values. Align EAS and preflight contract fixture keys accordingly.

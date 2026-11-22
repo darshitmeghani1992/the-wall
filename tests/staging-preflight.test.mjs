@@ -25,7 +25,44 @@ test('all required healthy endpoints pass without accessing row bodies', async (
   const result = await verifyStagingBackend({ url: 'https://ewintxgdxdvschiqodkq.supabase.co', key: 'sb_publishable_mock_for_tests', fetchImpl: fakeFetch });
   assert.equal(result.ready, true);
   assert.equal(seen.length, requiredChecks.length);
-  assert(seen.every(([url, options]) => url.startsWith('https://ewintxgdxdvschiqodkq.supabase.co/') && options.method === 'GET'));
+  assert(seen.every(([url, options]) => url.startsWith('https://ewintxgdxdvschiqodkq.supabase.co/') && options.method === 'GET' && options.redirect === 'error'));
+});
+
+test('staging probes never follow redirects or carry public keys to another origin', async () => {
+  const origin = APPROVED_STAGING_ORIGIN;
+  const key = 'sb_publishable_mock_for_tests';
+  const seen = [];
+  const fetchImpl = async (url, options) => {
+    seen.push({ url, options });
+    assert.equal(new URL(url).origin, origin);
+    assert.equal(options.redirect, 'error', 'never forward the apikey header through a redirect');
+    assert.equal(options.headers.apikey, key);
+    assert.equal(options.headers.Authorization, `Bearer ${key}`);
+    // A malicious Location must not be fetched or interpreted as success.
+    return { status: 302, headers: { get: () => 'https://foreign.example/collect' }, json: async () => ({}) };
+  };
+  const result = await verifyStagingBackend({ url: origin, key, fetchImpl });
+  assert.equal(result.ready, false);
+  assert.equal(seen.length, requiredChecks.length);
+  assert(result.checks.every((check) => !check.ok && check.status === 302 && check.reason === 'unexpected_http_status'));
+  assert(seen.every(({ url }) => new URL(url).origin === origin));
+});
+
+test('redirect exceptions from native fetch are a failed read-only staging gate', async () => {
+  let count = 0;
+  const fetchImpl = async (_url, options) => {
+    count += 1;
+    assert.equal(options.redirect, 'error');
+    throw new TypeError('redirect mode is set to error');
+  };
+  const result = await verifyStagingBackend({
+    url: APPROVED_STAGING_ORIGIN,
+    key: 'sb_publishable_mock_for_tests',
+    fetchImpl,
+  });
+  assert.equal(result.ready, false);
+  assert.equal(count, requiredChecks.length);
+  assert(result.checks.every((check) => !check.ok && check.reason === 'network_unreachable'));
 });
 
 test('missing follows schema fails decisively, without exposing error body', async () => {

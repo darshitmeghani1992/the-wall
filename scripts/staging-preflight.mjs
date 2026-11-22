@@ -93,6 +93,9 @@ export async function verifyStagingBackend({ url, key, fetchImpl = fetch }) {
       // Limit=0 on every table request: do not fetch any row contents.
       const response = await fetchImpl(origin + check.path, {
         method: 'GET',
+        // A redirected probe could forward its public API key to an unapproved
+        // host. The HTTP audit must never follow even a temporary redirect.
+        redirect: 'error',
         headers: { apikey: key, Authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(10000),
       });
