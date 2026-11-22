@@ -73,7 +73,7 @@ insert into wall_members(wall_id,user_id,role,status) values
   '88888888-8888-8888-8888-888888888888','member','accepted');
 set local role authenticated;
 set local "test.uid"='22222222-2222-2222-2222-222222222222'; -- B, existing accepted member
-do $ declare posted jsonb; begin
+do $$ declare posted jsonb; begin
   if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
      or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '21 FAIL: peer B cannot access the pre-block Shared Wall';
@@ -86,20 +86,20 @@ do $ declare posted jsonb; begin
     raise exception '21 FAIL: peer B Mark creation failed %',posted;
   end if;
   perform set_config('test.shared_peer_mark',posted->>'mark_id',true);
-end $;
+end $$;
 set local "test.uid"='88888888-8888-8888-8888-888888888888'; -- G, newly accepted peer
-do $ begin
+do $$ begin
   if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
      or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '21 FAIL: peer G cannot access the pre-block Shared Wall';
   end if;
   insert into mark_reactions(mark_id,user_id,emoji)
     values(current_setting('test.shared_peer_mark')::uuid,auth.uid(),'❤️');
-end $;
+end $$;
 -- G blocks peer B. Neither is the owner O, so their shared memberships stay.
 insert into blocks(blocker_id,blocked_id)
   values(auth.uid(),'22222222-2222-2222-2222-222222222222');
-do $ declare denied boolean:=false; begin
+do $$ declare denied boolean:=false; begin
   if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
      or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '21 FAIL: peer G lost independent third-party Shared Wall access';
@@ -128,9 +128,9 @@ do $ declare denied boolean:=false; begin
   if not denied then
     raise exception '21 FAIL: blocked peer G reacted to B despite block';
   end if;
-end $;
+end $$;
 set local "test.uid"='22222222-2222-2222-2222-222222222222';
-do $ begin
+do $$ begin
   if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
      or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
     raise exception '21 FAIL: peer B lost independent third-party Shared Wall access';
@@ -140,9 +140,9 @@ do $ begin
         and user_id='88888888-8888-8888-8888-888888888888') then
     raise exception '21 FAIL: peer B can enumerate blocked co-member G';
   end if;
-end $;
+end $$;
 reset role;
-do $ begin
+do $$ begin
   if (select count(*) from wall_members
       where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
         and user_id in (
@@ -151,7 +151,7 @@ do $ begin
         and status='accepted')<>2 then
     raise exception '21 FAIL: accepted co-membership was destroyed by peer block';
   end if;
-end $;
+end $$;
 ROLLBACK;
 \echo '21 (blocked accepted Shared peers): PASS  (membership kept; direct interaction denied)'
 
