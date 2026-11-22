@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-58 · Find People onboarding account scope — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of PR #141 `fd3df87179d5bdb0e50e9d6a3eeae6c202efa71d` on `codex/beta-find-people-onboarding-actor-20261122-auto7`. Find People route remounts for current user/account-route and only uses matching user's handle for invitation sharing, preventing previous-account links while the Auth profile catches up. Async progress fence checks live actor before UI continuation; fallback generic share retained. Added source/route lease test; exact CI, independent Reviewer and native QA pending. Staging only, media/Secret OFF, beta **NO-GO**. No hosted mutation/merge/deploy/held domain or Apple change.
+
+**Next:** Confirm exact SHA CI, collect independent review+device scenarios, then continue unblocked tasks. OTP, three JWT actors, media, Secret, deletion and rollback remain launch gates.
+
+
 ## CURRENT BETA-P0-57 · Discover actor state and native Unfriend guard — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of PR #140 `f8ae7c2447d14c6b4cb68b0020b72265bd266e38` on `codex/beta-discover-actor-native-confirm-20261122-auto7`. Discover now remounts private relationship/search state synchronously when account changes; stale Unfriend native dialog callback checks the original focus token and current actor (updated in parent render). Existing authenticated mutation contract unchanged; source/lease regression test added. Exact CI, independent Reviewer and device QA pending; beta remains **NO-GO**. No production, hosted mutation, merge, deployment or held external action.

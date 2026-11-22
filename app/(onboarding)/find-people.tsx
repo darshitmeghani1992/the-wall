@@ -7,41 +7,65 @@ import { Button } from "@/components/Button";
 import { useAuth } from "@/lib/auth";
 import { inviteFriends } from "@/lib/share";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding";
-import { AccountRouteFence } from "@/lib/onboarding-contract";
+import { AccountRouteFence, onboardingScreenScopeKey, type AccountRoute } from "@/lib/onboarding-contract";
 import { colors } from "@/theme";
 
 /** Activation choice only; people search itself stays in the canonical Discover surface. */
 export default function FindPeople() {
-  const router = useRouter();
   const { session, profile, accountRoute } = useAuth();
-  const userId = session?.user.id ?? null;
-  const currentUserId = useRef(userId);
-  currentUserId.current = userId;
+  const actorId = session?.user.id ?? null;
+  const liveActorId = useRef<string | null>(actorId);
+  // An old sharing callback may survive unmount; use current render identity.
+  liveActorId.current = actorId;
+  const actorHandle = actorId && profile?.id === actorId ? profile.handle : null;
+  return (
+    <FindPeopleEditor
+      key={onboardingScreenScopeKey(actorId, accountRoute)}
+      userId={actorId}
+      actorHandle={actorHandle}
+      accountRoute={accountRoute}
+      liveActorId={liveActorId}
+    />
+  );
+}
+
+function FindPeopleEditor({
+  userId,
+  actorHandle,
+  accountRoute,
+  liveActorId,
+}: {
+  userId: string | null;
+  actorHandle: string | null;
+  accountRoute: AccountRoute | null;
+  liveActorId: { current: string | null };
+}) {
+  const router = useRouter();
   const lifecycleFence = useRef(new AccountRouteFence());
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const currentFence = lifecycleFence.current;
     if (accountRoute && accountRoute !== "walkthrough") router.replace("/");
-    return () => currentFence.invalidate(currentUserId.current);
-  }, [accountRoute, router]);
+    return () => currentFence.invalidate(liveActorId.current);
+  }, [accountRoute, liveActorId, router]);
 
   async function continueWith(destination: "discover" | null, share = false) {
-    if (busy || !userId || accountRoute !== "walkthrough") return;
+    if (busy || !userId || userId !== liveActorId.current || accountRoute !== "walkthrough") return;
     const token = lifecycleFence.current.begin(userId);
     setBusy(true);
     try {
-      if (share) await inviteFriends(profile?.handle);
-      if (!lifecycleFence.current.isCurrent(token, currentUserId.current)) return;
+      if (share) await inviteFriends(actorHandle);
+      if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       const draft = await loadOnboardingDraft(userId);
       await saveOnboardingDraft(userId, { ...draft, postWalkthroughDestination: destination });
-      if (lifecycleFence.current.isCurrent(token, currentUserId.current)) router.replace("/walkthrough");
+      if (lifecycleFence.current.isCurrent(token, liveActorId.current)) router.replace("/walkthrough");
     } catch (cause: any) {
-      if (lifecycleFence.current.isCurrent(token, currentUserId.current)) {
+      if (lifecycleFence.current.isCurrent(token, liveActorId.current)) {
         Alert.alert("Couldn't continue", cause?.message ?? "Please try again.");
       }
     } finally {
-      if (lifecycleFence.current.isCurrent(token, currentUserId.current)) setBusy(false);
+      if (lifecycleFence.current.isCurrent(token, liveActorId.current)) setBusy(false);
     }
   }
 
