@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-26 · 2026-11-22 · EAS/preflight accept only Supabase public API key formats accepted by runtime
+- **Trigger:** #158 closes a runtime Expo credential leak, but `validatePublicClientConfig` and EAS CLI still accepted opaque strings that runtime explicitly rejects. This produces an unusable/broken beta build while reporting EAS configuration success and risks sending unrecognized credentials in read-only HTTP probes.
+- **Decision:** Fail closed on noncanonical keys at the shared Node validation entrypoint: accept modern `sb_publishable_*` and legacy JWT-shaped public key only; require exact staging project and `role=anon` for legacy credentials before any HTTP. Preserve staging-only origin and existing secret-key bans; print no secret values. Align EAS and preflight contract fixture keys accordingly.
+- **Alternatives:** Keep accepting opaque keys (inconsistent and potentially unsafe); rely on Expo runtime to reject (too late after packaging).
+- **Gates:** Draft #159 (BACKEND) with unit/mocked no-network/no-log tests; exact CI and independent security review plus EAS/device QA needed. No hosted config, provider, auth, migrations, original production or deployment changed.
+
+
 ## D-25 · 2026-11-22 · Validate legacy public JWT role/project in local runtime before Supabase client creation
 - **Trigger:** #155–#157 guard EAS builds, read-only staging probes and the 3-JWT audit; #156's Expo runtime gate only checked staging URL and obvious modern `sb_secret_*`. Local Metro/alternative builds bypass EAS hooks and could bundle or forward a privileged or foreign legacy JWT.
 - **Decision:** Keep staged runtime config accessible only for exact approved staging host and keys of two known public formats: `sb_publishable_*`, or legacy JWT locally decoded (portable bounded base64url UTF-8) with `role=anon` and `ref=ewintxgdxdvschiqodkq`. Fail closed on unknown, malformed or privileged keys. This is a local consistency check **not signature verification**; backend must still validate every JWT and read-only probes must prove connectivity. Same `selectBetaClientConfig` API, no OAuth/hosted/policy/feature change.
