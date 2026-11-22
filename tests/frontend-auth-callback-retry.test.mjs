@@ -4,15 +4,18 @@ import test from "node:test";
 
 const source = readFileSync(new URL("../app/auth/callback.tsx", import.meta.url), "utf8");
 
-test("explicit OAuth denial fails closed before a pre-existing session can be reused", () => {
+test("explicit OAuth denial and malformed codes reject before existing-session fallback", () => {
   assert.match(source, /error: providerError/);
-  assert.match(source, /if \(providerError\) throw new Error/);
+  assert.match(source, /error_code: providerErrorCode/);
+  assert.match(source, /error_description: providerErrorDescription/);
+  assert.match(source, /const decision = decideAuthCallback\(/);
+  assert.match(source, /if \(decision\.kind === "reject"\)/);
   assert.ok(
-    source.indexOf("if (providerError) throw new Error") <
+    source.indexOf('if (decision.kind === "reject")') <
       source.indexOf("await supabase.auth.getSession()"),
     "provider denial must be considered before any existing-session fallback",
   );
-  assert.match(source, /\[code, providerError, router\]/);
+  assert.match(source, /\[code, providerError, providerErrorCode, providerErrorDescription, router\]/);
 });
 
 test("callback error provides an actionable, accessible path back to sign-in", () => {
