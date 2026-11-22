@@ -82,3 +82,11 @@ test('EAS guard rejects malformed JWT-like public keys without printing them', (
   assert.equal(result.status, 1);
   assert.equal((result.stdout + result.stderr).includes(malformed), false);
 });
+
+test('EAS guard refuses modern Supabase secret API keys before embedding', () => {
+  const secret = 'sb_secret_do-not-bundle-this';
+  const result = run('https://ewintxgdxdvschiqodkq.supabase.co', secret);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /EAS build blocked/);
+  assert.equal((result.stdout + result.stderr).includes(secret), false);
+});
