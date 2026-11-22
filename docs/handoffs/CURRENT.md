@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-61 · Account deletion confirmation actor isolation — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #144 exact `a3b777c7c5c1373ef483b42b228f20fa576f4eb2` on `codex/beta-delete-account-actor-confirmation-20261122-auto8`. Keyed deletion editor resets typed confirmation on actor switch; live actor/revision plus focus fence prevents late scheduling and stale native ownership dialog navigation, including A→B→A. New regression test; immutable CI and independent Reviewer/device QA mandatory. Deletion 0031/purge remain OFF and gated. No hosted writes, production access, merges, deployment, domain/Apple work, or tester invitations. **Enhanced Beta NO-GO.**
+
+**Next:** Verify final SHA CI, request separate Reviewer/QA, continue independent unblocked beta engineering. SMTP OTP/three JWT, private media, Secret expiry, deletion and device/rollback gates remain open.
+
+
 ## CURRENT BETA-P0-60 · Onboarding intermediate async guard — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated descendant of #143 `a4566db820f53438bf0fcb0b20c565d5bfa6ab58`, branch `codex/beta-onboarding-post-await-guards-20261122-auto7`. Added missing actor checks between async draft read and write in Find People, and between draft read/clear and Auth route refresh in Walkthrough. Preserves deferred destination navigation on successful `walkthrough→ready`. New source/race test; exact CI, Reviewer and independent native QA required. Enhanced Beta **NO-GO**; no hosted/prod changes, merges, deployments or held external actions.

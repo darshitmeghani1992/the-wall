@@ -35,3 +35,12 @@ export class SessionFocusFence {
       && token.userId === currentUserId;
   }
 }
+
+/** A render-current actor + monotonic revision prevents A -> B -> A callback reuse. */
+export type ActorScreenScope = Readonly<{ actorId: string | null; revision: number }>;
+
+export function sameActorScreenScope(expected: ActorScreenScope, current: ActorScreenScope): boolean {
+  return expected.actorId !== null
+    && expected.actorId === current.actorId
+    && expected.revision === current.revision;
+}

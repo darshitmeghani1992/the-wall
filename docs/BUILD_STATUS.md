@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-61 · Delete-account destructive confirmation actor/revision fence — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of draft PR #144 exact parent `a3b777c7c5c1373ef483b42b228f20fa576f4eb2`, branch `codex/beta-delete-account-actor-confirmation-20261122-auto8`. Typed `DELETE` and local busy state previously persisted across authenticated account switches before focus cleanup. The native “Review my Walls” ownership alert also allowed delayed navigation for an obsolete account. The deletion editor now remounts for each actor revision (A→B→A), with render-current identity/revision checks and the existing focus-generation fence protecting requests, native alert callbacks, late reconciliation and navigation. No changes to service authorization, copy, flags, schema or backend.
+
+**Tests/gates:** Added `tests/frontend-delete-account-actor-confirmation.test.mjs` with executable actor ABA lease regression and source wiring checks. Exact-head CI, independent Reviewer and distinct native QA still required (DELETE typed during A→B, old ownership dialog after A→B→A, pending request during sign-out, normal owner resolution). Account deletion stays **OFF** until migration 0031, purge worker, 30-day recovery and rollback evidence plus Founder/Reviewer/QA approvals. Staging `ewintxgdxdvschiqodkq` only; protect original production. No hosted writes, main merge, deployment, domain/Apple actions, tester invites or paid API credits. Enhanced Beta **NO-GO** pending SMTP OTP, three genuine JWT actors, media C2/C3, Secret expiry, deletion and device acceptance.
+
+**Next:** Verify PR #144 and this branch's exact CI, obtain independent review/device QA, then continue a separate unblocked task.
+
+
 ## BETA-P0-60 · Revalidate actor after onboarding draft awaits — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated child of PR #143 exact parent `a4566db820f53438bf0fcb0b20c565d5bfa6ab58`, branch `codex/beta-onboarding-post-await-guards-20261122-auto7`. A queued Find People or Walkthrough operation could load a draft for actor A, then actor B signs in before the code writes A's local draft or calls global `refreshAccountRoute()`. Render fences only after the later write were too late for these intermediate side effects. Added actor + revision checks **after each draft read and local clear, before the next side-effect**, preserving the tour's intentional post-refresh actor-only navigation so `walkthrough→ready` does not lose deferred Discover destination. Does not alter server-side identity checks, copy, API, flags or data model. Added `tests/frontend-onboarding-await-actor-guards.test.mjs` including executable pending-read actor-switch race.
