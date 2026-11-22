@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import { supabase } from "@/lib/supabase";
 import {
   getReactionSummaries,
@@ -25,6 +26,8 @@ const EMPTY: ReactionSummary = { counts: {}, mine: null };
  */
 export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null) {
   const [summaries, setSummaries] = useState<Record<string, ReactionSummary>>({});
+  const [foregroundRefresh, setForegroundRefresh] = useState(0);
+  const appState = useRef(AppState.currentState);
   const summariesRef = useRef(summaries);
   summariesRef.current = summaries;
   // Marks whose summary we've already requested — avoids redundant fetches as the
@@ -49,6 +52,21 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
     mutationLeases.current.clear();
     setSummaries({});
   }, [userId]);
+
+  // A failed offline summary load has no guaranteed re-render to retry it.
+  // On background → active, invalidate older reads and re-request visible
+  // Marks without waiting for a reaction tap or a prop identity change.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const wasActive = appState.current === "active";
+      appState.current = nextState;
+      if (nextState !== "active" || wasActive) return;
+      sessionEpoch.current += 1;
+      requested.current.clear();
+      setForegroundRefresh((generation) => generation + 1);
+    });
+    return () => subscription.remove();
+  }, []);
 
   const refresh = useCallback(
     async (markId: string) => {
@@ -103,7 +121,7 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
       active = false;
       if (!completed) request.abandon();
     };
-  }, [marks, userId]);
+  }, [marks, userId, foregroundRefresh]);
 
   // Live counts: any reaction change to a Mark we're tracking → refetch it.
   useEffect(() => {
