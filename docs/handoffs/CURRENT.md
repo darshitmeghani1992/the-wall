@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-53 · Shared Wall settings session/Wall scoped editor — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Stacked isolated child of #136 immutable source `7d63536bf0891ee6068772496309af5465123984`, branch `codex/beta-shared-settings-actor-scope-20261122-automation6`; source implementation commit `4b383045111fdba1e93b650639fd968657424ac5` and tree `97fea4334281aa25922b231467c69e6f675e851b`. Shared Wall Settings now keys the editor to the authenticated actor and destination Wall, preventing old privacy/name/anonymous choices or delete confirmations from appearing across A→B and Wall X→Y before focus resets. Reads and mutations use separate focus fences; obsolete save/delete work cannot clear a newer session's mutation lock, and delete requires live confirmation of the exact loaded Wall name. New contract test `tests/frontend-shared-settings-session-isolation.test.mjs`; GitHub CI for final doc head pending. Independent REVIEWER and device QA not run. **NO-GO**; staging only, no hosted writes, merges, release, 0031, domain or Apple actions.
+
+**Next:** Verify final SHA's full CI, independent Reviewer and device QA of identity+Wall transitions, slow saves/deletions, retry and confirmation. Then select next unrelated unblocked queue item from `docs/BUILD_STATUS.md`. OTP, three JWT actors, C2/C3 media, Secret scheduler, deletion and native/rollback remain gates.
+
 ## CURRENT BETA-P0-52 · Home profile/Wall account isolation — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated descendant of PR #135 exact source `917387f1a1b2cbc07aa0a14b82a547ef84a219a9`, branch `codex/beta-home-profile-actor-display-20261122-run16`. My Wall no longer shows old cached profile identity (handle, avatar, display name) in header, sharing, linked Mark or empty state when authenticated actor changes. Account-specific sharing waits for a matching profile; a mismatched old owner's personal Wall is hidden synchronously before cleanup effects. New `tests/frontend-home-actor-profile.test.mjs` tests source wiring and actor/Wall mismatch matrix. Exact SHA CI and independent Reviewer + actual device QA still required; no self-certification.
