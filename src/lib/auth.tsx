@@ -107,17 +107,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const currentRouteFence = routeFence.current;
-    supabase.auth.getSession().then(async ({ data }) => {
+    let initialToken: AccountRouteToken | null = null;
+    supabase.auth.getSession().then(async ({ data, error }) => {
+      // A rejected or error-bearing session read is not proof of sign-out.
+      // Never leave the initial splash spinning indefinitely on storage failure.
+      if (error) throw error;
       if (!active) return;
       const initialSubject = data.session?.user.id ?? null;
       if (authSubjectRef.current === undefined) authSubjectRef.current = initialSubject;
       else if (authSubjectRef.current !== initialSubject) return;
+      initialToken = currentRouteFence.begin(initialSubject);
       await reconcileDeferredDestinationIdentity(
         { status: "unknown" },
         deferredSubjectForUserId(initialSubject),
       );
-      if (!active || authSubjectRef.current !== initialSubject) return;
-      const initialToken = currentRouteFence.begin(initialSubject);
+      if (!active || !currentRouteFence.isCurrent(initialToken, authSubjectRef.current ?? null)) return;
       setSession(data.session);
       try {
         await loadAccountState(data.session, initialToken);
@@ -128,6 +132,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }
       }
+    }).catch(() => {
+      if (!active) return;
+      if (initialToken) {
+        // A newer auth event owns the identity if this bootstrap was superseded.
+        if (!currentRouteFence.isCurrent(initialToken, authSubjectRef.current ?? null)) return;
+      } else {
+        if (authSubjectRef.current !== undefined) return;
+        authSubjectRef.current = null;
+        currentRouteFence.begin(null);
+      }
+      // Fail closed to the existing welcome/re-auth flow. Also revoke the
+      // subject marker: a later same-user TOKEN_REFRESHED must redo identity
+      // reconciliation, not take the session-only fast path after failure.
+      authSubjectRef.current = null;
+      currentRouteFence.invalidate(null);
+      setSession(null);
+      setAccountRoute(null);
+      setProfile(null);
+      setLoading(false);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
@@ -157,10 +180,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const previousDeferredSubject: DeferredSubject = previousSubject === undefined
         ? { status: "unknown" }
         : deferredSubjectForUserId(previousSubject);
-      await reconcileDeferredDestinationIdentity(
-        previousDeferredSubject,
-        deferredSubjectForUserId(nextSubject),
-      );
+      try {
+        await reconcileDeferredDestinationIdentity(
+          previousDeferredSubject,
+          deferredSubjectForUserId(nextSubject),
+        );
+      } catch {
+        // If destination ownership cannot be reconciled, keep protected routes
+        // unavailable rather than hanging on the loading screen or leaking it.
+        if (currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) {
+          // Never let a later token refresh revive a failed identity handoff.
+          authSubjectRef.current = null;
+          currentRouteFence.invalidate(null);
+          setSession(null);
+          setAccountRoute(null);
+          setProfile(null);
+          setLoading(false);
+        }
+        return;
+      }
       if (!currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) return;
       if (effects.resetProtectedResume) {
         try { await resetProtectedMediaUploads(); } catch { /* Identity is already fenced locally. */ }
