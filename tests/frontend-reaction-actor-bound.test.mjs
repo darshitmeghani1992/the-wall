@@ -33,7 +33,7 @@ test("toggle routes both reaction operations through expected actor", () => {
 });
 
 test("optimistic updates do not start from signed-out or replaced account", () => {
-  assert.match(hook, /if \(!userId \|\| currentUserId\.current !== userId\) return/);
+  assert.match(hook, /if \(!userId \|\| currentUserId\.current !== userId \|\| mutationLeases\.current\.has\(markId\)\) return/);
   assert.match(hook, /toggleReaction\(userId, markId, emoji, prev\)/);
   assert.match(hook, /\[refresh, userId\]/);
 });
