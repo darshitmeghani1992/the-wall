@@ -1,3 +1,11 @@
+## CURRENT · BETA-P0-97 · Full definer search-path schema trust — 23 Nov 2026
+
+**ARCHITECT → BACKEND:** isolated child [draft #183](https://github.com/darshitmeghani1992/the-wall/pull/183) of #182 exact `573e3c7446c1de89b1dc3161c861a51a5d68d793`, parent [CI 45073523919](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073523919) 4/4 success. New test 78 plus SEC-001 registration commit `e4bb2e940d93bec8a5619700a25359f2cf65b892` validates ownership and all explicit trusted schemas for every `public` SECURITY DEFINER. [Source CI 45078401101](https://github.com/darshitmeghani1992/the-wall/actions/runs/45078401101) queued at checkpoint; check exact new source and subsequent docs-head CI, independent Reviewer/QA absent. Read-only staging (approved project only): 113 public definer routines, all owner postgres, four known trusted search-path variants, no anon/auth CREATE in referenced schemas; no real hostile JWT runtime proof. No migrations/grants/production/hosted writes/merges/deployments.
+
+**Enhanced Beta NO-GO:** real SMTP OTP, genuine 3 distinct authenticated actors incl HTTP negative and Shared Wall INSERT RETURNING, C2/C3 playback, Secret one-hour scheduler, account deletion 0031/purge, Reviewer approval and installed-device QA still missing. Media/Secret/analytics OFF. #177 Founder/Product gate open. Canonical queue/next exact action: `docs/BUILD_STATUS.md` BETA-P0-97. Do not treat checkmarks or catalog tests as behavioral certification.
+
+---
+
 ## CURRENT · BETA-P0-96 · Trusted definer-schema CREATE ACL guard — 23 Nov 2026
 
 **ARCHITECT → BACKEND:** child [draft #182](https://github.com/darshitmeghani1992/the-wall/pull/182), base #181 immutable `a4481193855da532cf73099297f344b1e28ff27e`, [parent 4/4 final CI SUCCESS 45073273618](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073273618). Source `55e257cab3ff9b025f22fee24c34eb306ed98185`, tree `eb36de50d2accff6e5bd56670cab4648393b7204`: disposable SQL 77 asserts no anon/auth/PUBLIC CREATE on public/auth/storage schemas; registered in SEC-001 runner. Staging SQL confirms observed 3-schema ACL. CI of new source and final documentation head to verify. Catalog-only, not a real authenticated exploit test, pg_temp proof, Reviewer signoff or device QA.
