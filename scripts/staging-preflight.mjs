@@ -28,6 +28,12 @@ export function validatePublicClientConfig(url, key) {
   // EXPO_PUBLIC_ values are embedded in the app bundle. Never accept a
   // modern Supabase secret API key even for a read-only staging probe.
   if (/^sb_secret_/i.test(key.trim())) throw new Error('Preview secret API key forbidden');
+  // Never package opaque credentials that the Expo runtime would reject.
+  // Accept modern publishable API keys or legacy JWTs only; the legacy
+  // role/project claims are checked separately before any HTTP request.
+  if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(key) && !key.startsWith('eyJ')) {
+    throw new Error('Preview publishable/anon key format invalid');
+  }
   if (typeof url !== 'string' || !url.trim()) throw new Error('Preview Supabase URL missing');
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error('Preview Supabase URL invalid'); }
@@ -48,7 +54,8 @@ export function validatePublicClientConfig(url, key) {
  * the live API preflight instead.
  */
 export function assertLegacyAnonKeyMatchesOrigin(origin, key) {
-  if (!key.startsWith('eyJ')) return;
+  if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) return;
+  if (!key.startsWith('eyJ')) throw new Error('Preview publishable/anon key format invalid');
   const parts = key.split('.');
   if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) {
     throw new Error('Malformed legacy public key');
