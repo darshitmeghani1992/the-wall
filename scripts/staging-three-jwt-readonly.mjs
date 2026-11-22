@@ -129,7 +129,16 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
   const anon = await fetchImpl(wallUrl.toString(), {
     method: 'GET',
     redirect: 'error',
-    headers: { apikey: apiKey, Authorization: 'Bearer ' + apiKey, Accept: 'application/json' },
+    // Modern publishable keys identify the app, not a signed-in user: they
+    // are not JWTs and must not be supplied as a Bearer token. Otherwise a
+    // gateway's "Invalid JWT" 401 could look like successful private-Wall
+    // RLS denial without the anonymous database role ever being exercised.
+    // Legacy anon keys are JWTs and retain their original Bearer behavior.
+    headers: {
+      apikey: apiKey,
+      ...(apiKey.startsWith('sb_publishable_') ? {} : { Authorization: 'Bearer ' + apiKey }),
+      Accept: 'application/json',
+    },
     signal: AbortSignal.timeout(12000),
   });
   if (anon.status === 200) {
