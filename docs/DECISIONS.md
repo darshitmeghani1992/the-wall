@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-29 · 2026-11-22 · Require a present, locked-OFF Secret rollout singleton before disabling expiry cleanup
+- **Trigger:** The #161 unschedule runbook checked whether any rollout row was enabled but did not require a row to exist or prevent a concurrent administrative update to enabled=true between validation and unschedule.
+- **Decision:** Preserve first-stage independent creation-disable commit, explicitly refuse a missing/invalid disabled singleton in both stages, and acquire a write-conflicting lock on the rollout table throughout final payload/job checks and cron shutdown. A missing row is NOT proof of disabled creation.
+- **Scope/Gates:** #162 draft only; a structural runbook/test update without execution. Requires disposable Postgres/pg_cron race QA, independent security Reviewer and Founder/operator approval before any scheduled cleanup operation. All other beta NO-GO gates and staging-only protection unchanged.
+
+
 ## D-28 · 2026-11-22 · Secret scheduler shutdown requires confirmed empty payload backlog
 - **Trigger:** Old operator unschedule file disabled new Secret creation then stopped the cleanup job even when one-time payloads remained, contrary to the one-hour deletion guarantee.
 - **Decision:** Keep the creation flag OFF independently and refuse shutdown unless an explicit transaction obtains concurrent write locks, confirms zero rows in `mark_secrets`, validates exactly one intended cron job, and confirms creation disabled. Keep cron running on any safety failure; never force-delete pending data merely to pass this gate.
