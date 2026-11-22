@@ -10,6 +10,7 @@ test("tour local index and finish state remount on actor or replay, not completi
   assert.match(source, /const actorId = session\?\.user\.id \?\? null/);
   assert.match(source, /liveActorId\.current = actorId/);
   assert.match(source, /const scopeKey = `\$\{actorId \?\? "signed-out"\}/);
+  assert.match(source, /actorRevisionRef\.current = \{ actorId, mode, revision: actorRevisionRef\.current\.revision \+ 1 \}/);
   assert.match(source, /<WalkthroughEditor key=\{scopeKey\} liveActorId=\{liveActorId\}/);
   assert.match(source, /const \[index, setIndex\] = useState\(0\)/);
   assert.match(source, /const inFlight = useRef\(false\)/);
@@ -24,7 +25,7 @@ test("tour local index and finish state remount on actor or replay, not completi
 test("delayed tour completion and navigation require live actor at each async checkpoint", () => {
   assert.match(source, /if \(inFlight\.current \|\| userId !== liveActorId\.current\) return/);
   assert.match(source, /if \(!lifecycleFence\.current\.isCurrent\(token, liveActorId\.current\)\) return/);
-  assert.match(source, /if \(liveActorId\.current === userId\)/);
+  assert.match(source, /if \(isActorRevisionCurrent\(\)\)/);
   const fence = new AccountRouteFence();
   const first = fence.begin("actor-A");
   assert.equal(fence.isCurrent(first, "actor-A"), true);

@@ -26,14 +26,30 @@ export default function Walkthrough() {
   const actorId = session?.user.id ?? null;
   const liveActorId = useRef<string | null>(actorId);
   liveActorId.current = actorId;
+  const mode = replay === "1" ? "replay" : "first-use";
+  // Monotonic across A -> B -> A and replay mode flips, even if an old
+  // completion is awaiting a server route refresh after its focus lease expires.
+  const actorRevisionRef = useRef({ actorId, mode, revision: 0 });
+  if (actorRevisionRef.current.actorId !== actorId || actorRevisionRef.current.mode !== mode) {
+    actorRevisionRef.current = { actorId, mode, revision: actorRevisionRef.current.revision + 1 };
+  }
+  const actorRevision = actorRevisionRef.current.revision;
   // The tour's index, mutation lease and replay mode belong to one account.
   // Keep this editor mounted when finishing onboarding advances the server route
   // to "ready"; its in-flight callback must still resolve the deferred destination.
   const scopeKey = `${actorId ?? "signed-out"}:${replay === "1" ? "replay" : "first-use"}`;
-  return <WalkthroughEditor key={scopeKey} liveActorId={liveActorId} />;
+  return <WalkthroughEditor key={scopeKey} liveActorId={liveActorId} actorRevisionRef={actorRevisionRef} actorRevision={actorRevision} />;
 }
 
-function WalkthroughEditor({ liveActorId }: { liveActorId: { current: string | null } }) {
+function WalkthroughEditor({
+  liveActorId,
+  actorRevisionRef,
+  actorRevision,
+}: {
+  liveActorId: { current: string | null };
+  actorRevisionRef: { current: { actorId: string | null; mode: string; revision: number } };
+  actorRevision: number;
+}) {
   const router = useRouter();
   const { replay } = useLocalSearchParams<{ replay?: string }>();
   const isReplay = replay === "1";
@@ -45,6 +61,8 @@ function WalkthroughEditor({ liveActorId }: { liveActorId: { current: string | n
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const moment = MOMENTS[index];
+  const isActorRevisionCurrent = () => liveActorId.current === userId
+    && actorRevisionRef.current.revision === actorRevision;
 
   useEffect(() => {
     const currentFence = lifecycleFence.current;
@@ -79,16 +97,16 @@ function WalkthroughEditor({ liveActorId }: { liveActorId: { current: string | n
       // Never refresh the new actor's route from a completed old-actor tour.
       if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       await refreshAccountRoute();
-      if (liveActorId.current === userId) {
+      if (isActorRevisionCurrent()) {
         const target = destinationAfterWalkthrough(draft.postWalkthroughDestination);
         router.replace(target as never);
       }
     } catch (cause: any) {
-      if (liveActorId.current === userId) {
+      if (isActorRevisionCurrent()) {
         Alert.alert("Couldn't finish the tour", cause?.message ?? "Please try again.");
       }
     } finally {
-      if (liveActorId.current === userId) {
+      if (isActorRevisionCurrent()) {
         inFlight.current = false;
         setBusy(false);
       }
