@@ -1,3 +1,11 @@
+## BETA-P0-88 · Clear stale zero-reaction totals after foreground retry — 22 Nov 2026
+
+**ROLE: ARCHITECT** sequencing → **ROLE: FRONTEND** implementation in isolated [draft #173](https://github.com/darshitmeghani1992/the-wall/pull/173), child of [#172](https://github.com/darshitmeghani1992/the-wall/pull/172) exact `ccbdf9f77e535e7d92cbab37f05faa7022428581` (tree `02313d8c8c12787be2fd848959a8c856a863cda8`; [CI 45039952426](https://github.com/darshitmeghani1992/the-wall/actions/runs/45039952426) all 4 completed success, but no independent review/device QA). **Confirmed bug:** a successful batch query omits Marks with no `mark_reactions` rows. Previous hook only merged present server IDs, leaving stale nonzero reaction totals and `mine` after a zero-row reply (especially on app foreground after offline recovery). FRONTEND added `src/lib/reaction-batch.ts` to fill requested-but-absent Marks with independent empty summaries and exclude unrequested IDs, used behind existing session/read-epoch/mutation-lease checks. Added direct Node tests for empty, partial and multiple-missing batch results. Source commit `dd4f302d66b29cb668d3064d49c0374a17f656b5`, tree `d7266c763650a36bf6bc6fd8f5888abb3b52a17d`. Tests are *prepared*, not claimed run locally.
+
+**Verification/gates:** Confirm exact final #173 head/tree and 4 CI jobs (types, lint, client contracts, DB security, Edge/media, Expo Doctor, iOS prebuild and iOS/Android exports). Real device React Native foreground/offline QA and independent Reviewer approval are outstanding; three-user staging/OTP runtime tests remain blocked by 0 Auth users. Fresh read-only staging: `ewintxgdxdvschiqodkq` ACTIVE_HEALTHY, 35/35 public tables RLS, 0 Auth users/Walls/Marks, no `pg_cron`; original production `wfsfafmgvxevpzrurofz` untouched. Media/Secret/analytics remain OFF; deletion unavailable. No hosted writes, migration, merge, deployment, tester invites or held domain/Apple work. **Enhanced Beta NO-GO.**
+
+**Next exact action:** inspect #173 final head and `fetch_commit_workflow_runs`; if failed, use CI logs and patch only this isolated branch. Otherwise route to independent Reviewer + QA, and select next unblocked work without altering reviewer-owned or concurrent branches.
+
 # The-Wall Build Status
 
 ## BETA-P0-87 · Retry stale/offline reaction summaries when app returns to foreground — 22 Nov 2026

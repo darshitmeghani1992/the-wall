@@ -10,6 +10,7 @@ import {
 } from "@/lib/reactions";
 import type { MarkWithAuthor } from "@/lib/marks";
 import { ReactionRequestTracker } from "@/lib/reaction-request-tracker";
+import { completeReactionBatch } from "@/lib/reaction-batch";
 
 const EMPTY: ReactionSummary = { counts: {}, mine: null };
 
@@ -103,7 +104,8 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
           setSummaries((cur) => {
             if (sessionEpoch.current !== sessionAtStart) return cur;
             const fresh: Record<string, ReactionSummary> = {};
-            for (const [id, summary] of Object.entries(map)) {
+            // Missing IDs in a successful response mean zero reactions, not stale UI.
+            for (const [id, summary] of Object.entries(completeReactionBatch(ids, map))) {
               if (
                 !mutationLeases.current.has(id) &&
                 (readEpochs.current.get(id) ?? 0) === readEpochsAtStart.get(id)
