@@ -78,8 +78,21 @@ BEGIN
   -- PostgreSQL fires same-event triggers alphabetically by name. Anonymous
   -- author attribution must precede the notification AFTER INSERT trigger;
   -- the latter must never learn the public actor from the side-table lookup.
-  IF NOT ('marks_record_anon' < 'zz_marks_notify') THEN
-    RAISE EXCEPTION '79 FAIL: anonymous Mark trigger sequence changed';
+  IF (SELECT t.tgname FROM pg_trigger t
+         JOIN pg_proc p ON p.oid=t.tgfoid
+        WHERE t.tgrelid='public.marks'::regclass
+          AND p.proname='marks_record_anonymous_author'
+          AND p.pronamespace='public'::regnamespace
+          AND t.tgenabled IN ('O','A')
+        LIMIT 1)
+     >= (SELECT t.tgname FROM pg_trigger t
+           JOIN pg_proc p ON p.oid=t.tgfoid
+          WHERE t.tgrelid='public.marks'::regclass
+            AND p.proname='notify_mark_left'
+            AND p.pronamespace='public'::regnamespace
+            AND t.tgenabled IN ('O','A')
+          LIMIT 1) THEN
+    RAISE EXCEPTION '79 FAIL: anonymous author attribution must precede Mark notification';
   END IF;
 END $sensitive_trigger_contract$;
 
