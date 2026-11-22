@@ -12,11 +12,17 @@ import { deleteSharedWall, getWall, getWallCapabilities, updateSharedWallSetting
 import { colors, markColors, radius } from "@/theme";
 
 export default function SharedWallSettingsScreen() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const wallId = String(id ?? "");
   const { session } = useAuth();
-  const userId = session?.user.id;
+  const userId = session?.user.id ?? null;
+  // Drop private drafts and the destructive confirmation synchronously when
+  // either the authenticated viewer or destination Wall changes.
+  return <SharedWallSettingsEditor key={JSON.stringify([userId, wallId])} userId={userId} wallId={wallId} />;
+}
+
+function SharedWallSettingsEditor({ userId, wallId }: { userId: string | null; wallId: string }) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [originalName, setOriginalName] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">("private");
@@ -28,13 +34,16 @@ export default function SharedWallSettingsScreen() {
   const [busy, setBusy] = useState<"save" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fence = useRef(new SessionFocusFence()).current;
+  // Read refreshes must not invalidate a save/delete mutation's ownership.
+  const mutationFence = useRef(new SessionFocusFence()).current;
   const mutationInFlight = useRef(false);
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
 
   const load = useCallback(async () => {
     const token = fence.begin(userId ?? null); if (!token || !wallId) return;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setOriginalName("");
+    setConfirmingDelete(false); setDeleteName("");
     try {
       const [wall, capabilities] = await Promise.all([getWall(wallId), getWallCapabilities(wallId)]);
       if (!fence.isCurrent(token, currentUserId.current)) return;
@@ -44,32 +53,50 @@ export default function SharedWallSettingsScreen() {
     finally { if (fence.isCurrent(token, currentUserId.current)) setLoading(false); }
   }, [fence, userId, wallId]);
 
-  useFocusEffect(useCallback(() => { fence.focus(userId ?? null); setBusy(null); if (userId && wallId) void load(); else setLoading(false); return () => { fence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); }; }, [fence, load, userId, wallId]));
+  useFocusEffect(useCallback(() => {
+    fence.focus(userId);
+    mutationFence.focus(userId);
+    setBusy(null); setConfirmingDelete(false); setDeleteName("");
+    if (userId && wallId) void load(); else setLoading(false);
+    return () => {
+      fence.blur(); mutationFence.blur();
+      endExclusiveMutation(mutationInFlight);
+      setBusy(null);
+    };
+  }, [fence, load, mutationFence, userId, wallId]));
 
   async function save() {
-    if (!userId || busy || !name.trim() || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
+    if (!userId || !originalName || loading || busy || !name.trim() || !beginExclusiveMutation(mutationInFlight)) return;
+    const token = mutationFence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusy("save"); setError(null);
     try {
       const result = await updateSharedWallSettings({ wallId, name, visibility, openJoin: visibility === "public" && openJoin, allowAnonymous });
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (result.status === "updated") { setName(result.name); setOriginalName(result.name); setVisibility(result.visibility); setOpenJoin(result.openJoin); setAllowAnonymous(result.allowAnonymous); Alert.alert("Saved", "Shared Wall settings are up to date."); }
       else setError(result.status === "invalid_input" ? "Check the Wall name and privacy settings." : "These settings are no longer available.");
-    } catch (cause: any) { if (fence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't save settings."); }
-    finally { endExclusiveMutation(mutationInFlight); if (fence.isCurrent(token, currentUserId.current)) setBusy(null); }
+    } catch (cause: any) { if (mutationFence.isCurrent(token, currentUserId.current)) setError(cause?.message ?? "Couldn't save settings."); }
+    finally {
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight); setBusy(null);
+      }
+    }
   }
 
   async function remove(expectedName: string) {
-    if (!userId || busy || !beginExclusiveMutation(mutationInFlight)) return;
-    const token = fence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
+    if (!userId || !confirmingDelete || !originalName || expectedName !== originalName || loading || busy || !beginExclusiveMutation(mutationInFlight)) return;
+    const token = mutationFence.begin(userId); if (!token) { endExclusiveMutation(mutationInFlight); return; }
     setBusy("delete"); setError(null);
     try {
       const result = await deleteSharedWall(wallId, expectedName);
-      if (!fence.isCurrent(token, currentUserId.current)) return;
+      if (!mutationFence.isCurrent(token, currentUserId.current)) return;
       if (result.status === "deleted") router.replace("/(tabs)/home");
       else { setBusy(null); setError(result.status === "confirmation_mismatch" ? "The name didn't match. The Wall was not deleted." : "This Wall is no longer available."); }
-    } catch (cause: any) { if (fence.isCurrent(token, currentUserId.current)) { setBusy(null); setError(cause?.message ?? "Couldn't delete this Wall."); } }
-    finally { endExclusiveMutation(mutationInFlight); if (fence.isCurrent(token, currentUserId.current)) setBusy(null); }
+    } catch (cause: any) { if (mutationFence.isCurrent(token, currentUserId.current)) { setBusy(null); setError(cause?.message ?? "Couldn't delete this Wall."); } }
+    finally {
+      if (mutationFence.isCurrent(token, currentUserId.current)) {
+        endExclusiveMutation(mutationInFlight); setBusy(null);
+      }
+    }
   }
 
   return <Screen>
@@ -84,7 +111,7 @@ export default function SharedWallSettingsScreen() {
       <Toggle label="Anonymous Marks" value={allowAnonymous} onValueChange={setAllowAnonymous} />
       <View style={{ marginTop: 26, gap: 12 }}><Button label="Save settings" variant="yellow" loading={busy === "save"} disabled={!name.trim()} onPress={() => void save()} /><Button label="Delete Shared Wall" variant="ghost" loading={busy === "delete"} onPress={() => { setConfirmingDelete(true); setDeleteName(""); }} /></View>
       {confirmingDelete ? <View accessibilityRole="alert" style={{ marginTop: 20, padding: 14, borderWidth: 1.5, borderColor: colors.error, borderRadius: radius.card }}><Text variant="headline" color={colors.error}>Delete permanently?</Text><Text variant="body" color={colors.onSurfaceVariant} style={{ marginTop: 6, marginBottom: 12 }}>Type “{originalName}” exactly. This deletes the Wall and its Marks.</Text><Input label="WALL NAME" value={deleteName} onChangeText={setDeleteName} autoCapitalize="none" /><View style={{ gap: 8, marginTop: 12 }}><Button label="Confirm delete" variant="primary" disabled={deleteName !== originalName} loading={busy === "delete"} onPress={() => void remove(deleteName)} /><Button label="Keep Wall" variant="ghost" onPress={() => { setConfirmingDelete(false); setDeleteName(""); }} /></View></View> : null}
-    </> : <Button label="Try again" variant="yellow" onPress={() => void load()} />}
+    </> : userId && wallId ? <Button label="Try again" variant="yellow" onPress={() => void load()} /> : null}
   </Screen>;
 }
 
