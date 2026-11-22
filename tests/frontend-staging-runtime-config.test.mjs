@@ -80,7 +80,8 @@ test("Expo runtime accepts a staging-matching legacy anon key without Node or br
   // Legacy keys are locally decoded, not verified: the hosted server must still
   // validate their signatures, and signed-device QA is required separately.
   const source = readFileSync(new URL("../src/lib/config.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /\\bBuffer\\b|\\batob\\s*\\(/);
+  assert.equal(source.includes("Buffer.from("), false);
+  assert.equal(source.includes("atob("), false);
 });
 
 test("Expo runtime rejects opaque, privileged, foreign and malformed keys without EAS", () => {
