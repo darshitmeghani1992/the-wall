@@ -7,6 +7,8 @@
  * This is an independent HTTP-boundary test preparation, NOT permission to
  * create identities, disable RLS, change staging, or certify behavioral QA.
  */
+import { assertLegacyAnonKeyMatchesOrigin } from './staging-preflight.mjs';
+
 const STAGING = 'https://ewintxgdxdvschiqodkq.supabase.co';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const TOKEN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -29,7 +31,15 @@ function isPublicApiKey(key) {
   if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) return true;
   // Legacy Supabase anon keys are JWTs. Never accept a service_role token
   // or a secret key in this RLS audit, even if the network calls look healthy.
-  return jwtClaims(key)?.role === 'anon';
+  if (jwtClaims(key)?.role !== 'anon') return false;
+  // A different project's public anon JWT must never be used for the staging
+  // HTTP audit. Apply the same ref/role validation as the EAS/preflight gate.
+  try {
+    assertLegacyAnonKeyMatchesOrigin(STAGING, key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isStagingUserJwt(jwt, userId) {
