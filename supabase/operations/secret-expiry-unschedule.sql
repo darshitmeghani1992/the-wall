@@ -1,10 +1,55 @@
--- Disable the server Secret creation gate BEFORE stopping the expiry job.
-update public.secret_mark_rollout set enabled=false,updated_at=now() where singleton;
--- STAGING / DEVOPS ROLLBACK RUNBOOK ONLY.
--- Stops future Secret Mark expiry jobs; it does NOT restore already expired
--- content or weaken the service-only execute privilege.
--- Unscheduling while Secret creation remains ON would violate the 1-hour
--- deletion promise. Disable Secret creation *before* unscheduling.
+-- STAGING / DEVOPS ROLLBACK RUNBOOK ONLY. Requires separate Founder,
+-- independent Reviewer/QA, and operational authorization. DO NOT run as a
+-- beta CI job or automatically apply to any hosted database.
+--
+-- A Secret's one-hour payload deletion promise survives a feature shutdown.
+-- Turning off NEW Secret creation does NOT authorize stopping the scheduled
+-- cleanup while any prior secret payloads still exist.
+--
+-- Stage 1: stop new Secrets immediately. Commit this independently so a
+-- later unschedule failure never re-enables Secret creation.
+BEGIN;
+UPDATE public.secret_mark_rollout
+   SET enabled = false, updated_at = now()
+ WHERE singleton;
+COMMIT;
+
+-- Stage 2: refuse to stop cleanup unless the backlog is empty. Locks keep a
+-- concurrent mark creation/Secret payload insertion from racing this check.
+-- If ANY existing secret payload remains (opened, expired or unexpired), this
+-- transaction aborts and the cron job keeps running. Wait for deletion proof
+-- and retry only under the same release controls; never force-clear content.
+BEGIN;
+LOCK TABLE public.marks IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE public.mark_secrets IN SHARE ROW EXCLUSIVE MODE;
+
+DO $unschedule_guard$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    RAISE EXCEPTION 'TW_SECRET_EXPIRY_CRON_MISSING';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.mark_secrets) THEN
+    RAISE EXCEPTION 'TW_SECRET_EXPIRY_PAYLOADS_REMAIN: cleanup must continue';
+  END IF;
+  IF (SELECT count(*) FROM cron.job
+      WHERE jobname = 'the-wall-expire-secret-marks-v1') <> 1 THEN
+    RAISE EXCEPTION 'TW_SECRET_EXPIRY_JOB_NOT_UNIQUE';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.secret_mark_rollout
+             WHERE singleton AND enabled) THEN
+    RAISE EXCEPTION 'TW_SECRET_CREATION_STILL_ENABLED';
+  END IF;
+END
+$unschedule_guard$;
+
 SELECT cron.unschedule(jobid)
-FROM cron.job
-WHERE jobname='the-wall-expire-secret-marks-v1';
+  FROM cron.job
+ WHERE jobname = 'the-wall-expire-secret-marks-v1';
+COMMIT;
+
+-- Post-operation proof (read-only, performed independently):
+-- SELECT enabled FROM public.secret_mark_rollout WHERE singleton;
+-- SELECT count(*) FROM public.mark_secrets; -- must be 0
+-- SELECT count(*) FROM cron.job
+--  WHERE jobname = 'the-wall-expire-secret-marks-v1'; -- must be 0
+-- If these cannot be verified, retain NO-GO and do not enable Secret Marks.
