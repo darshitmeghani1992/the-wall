@@ -48,6 +48,8 @@ export default function MyWall() {
   const router = useRouter();
   const { loading: authLoading, session, profile, accountRoute } = useAuth();
   const userId = session?.user.id;
+  // Cached profile state can belong to the previous session until Auth refreshes.
+  const actorProfile = userId && profile?.id === userId ? profile : null;
   const { justCreated, focusMark, __deferred_ref: rawReference } = useLocalSearchParams<{
     justCreated?: string;
     focusMark?: string;
@@ -287,7 +289,7 @@ export default function MyWall() {
     () => gridMarks.filter((mark) => activeFilter.match(mark.type)),
     [gridMarks, activeFilter],
   );
-  const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
+  const initial = (actorProfile?.display_name?.[0] ?? "?").toUpperCase();
 
   const Header = useCallback(
     () => (
@@ -306,15 +308,15 @@ export default function MyWall() {
               overflow: "hidden",
             }}
           >
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={{ width: "100%", height: "100%" }} />
+            {actorProfile?.avatar_url ? (
+              <Image source={{ uri: actorProfile.avatar_url }} style={{ width: "100%", height: "100%" }} />
             ) : (
               <Text variant="display" style={{ fontSize: 24 }}>{initial}</Text>
             )}
           </View>
           <View style={{ flex: 1 }}>
             <Text variant="display" style={{ fontSize: 22 }}>
-              {wall?.name ?? `${profile?.display_name ?? "My"}'s Wall`}
+              {wall?.name ?? `${actorProfile?.display_name ?? "My"}'s Wall`}
             </Text>
             <Text variant="label" color={colors.outline}>
               {marks.length} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
@@ -380,8 +382,8 @@ export default function MyWall() {
         ) : null}
 
         <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-          <Button label="Share my Wall 👀" variant="yellow" onPress={() => shareMyWall(profile?.handle)} />
-          <Button label="Invite friends" variant="primary" onPress={() => inviteFriends(profile?.handle)} />
+          <Button label="Share my Wall 👀" variant="yellow" disabled={!actorProfile?.handle} onPress={() => shareMyWall(actorProfile?.handle)} />
+          <Button label="Invite friends" variant="primary" disabled={!actorProfile?.handle} onPress={() => inviteFriends(actorProfile?.handle)} />
         </View>
 
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 18 }}>
@@ -413,7 +415,7 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, marks.length, nextCursor, profile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
+    [filter, friendCount, initial, marks.length, nextCursor, actorProfile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
@@ -421,6 +423,8 @@ export default function MyWall() {
   if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
   if (loadedSubject && loadedSubject !== `${userId}:${focusMarkId ?? ""}`) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
+  // The previous actor's personal Wall must not render before effects clear it.
+  if (wall && wall.owner_id !== userId) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
 
@@ -453,7 +457,7 @@ export default function MyWall() {
       {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
         <View style={{ marginBottom: 16 }}>
           <Text variant="label">LINKED MARK</Text>
-          <MarkView mark={focusedMark} highlight isWallOwner shareable wallHandle={profile?.handle} shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined} reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
+          <MarkView mark={focusedMark} highlight isWallOwner shareable wallHandle={actorProfile?.handle} shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined} reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
         </View>
       ) : null}
 
@@ -466,7 +470,7 @@ export default function MyWall() {
       ) : loading ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
       ) : marks.length === 0 ? (
-        <View style={{ marginTop: 8 }}><InviteCrew handle={profile?.handle} /></View>
+        <View style={{ marginTop: 8 }}><InviteCrew handle={actorProfile?.handle} /></View>
       ) : visible.length === 0 ? (
         <Text variant="body" color={colors.outline} style={{ marginTop: 24, textAlign: "center" }}>
           {activeFilter.key === "all"
@@ -485,7 +489,7 @@ export default function MyWall() {
               enterIndex={index}
               highlight={mark.id === highlightedMarkId}
               shareable
-              wallHandle={profile?.handle}
+              wallHandle={actorProfile?.handle}
               shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined}
               isWallOwner
               reactions={summaries[mark.id]}
@@ -507,7 +511,7 @@ export default function MyWall() {
         mark={selectedMark}
         viewerId={session?.user.id}
         wallOwnerId={wall?.owner_id}
-        wallHandle={profile?.handle}
+        wallHandle={actorProfile?.handle}
         shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined}
         shareable
         reactions={selectedMark ? summaries[selectedMark.id] : undefined}

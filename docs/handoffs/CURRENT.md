@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-52 · Home profile/Wall account isolation — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated descendant of PR #135 exact source `917387f1a1b2cbc07aa0a14b82a547ef84a219a9`, branch `codex/beta-home-profile-actor-display-20261122-run16`. My Wall no longer shows old cached profile identity (handle, avatar, display name) in header, sharing, linked Mark or empty state when authenticated actor changes. Account-specific sharing waits for a matching profile; a mismatched old owner's personal Wall is hidden synchronously before cleanup effects. New `tests/frontend-home-actor-profile.test.mjs` tests source wiring and actor/Wall mismatch matrix. Exact SHA CI and independent Reviewer + actual device QA still required; no self-certification.
+
+**Safety:** Staging `ewintxgdxdvschiqodkq` only; original production untouched; no hosted mutations, merge, migration, release or tester invite. Domain/DNS and Apple held; media/Secret/analytics OFF. Enhanced Beta **NO-GO** pending real OTP, 3 JWT actors, media, Secret, deletion and native/rollback gates. **Next:** capture CI for unchanged head and continue another unblocked task.
+
+
 ## CURRENT BETA-P0-51 · Onboarding account and route scoped editor — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** New stacked child of #134 SHA `45625552f065dc0f281004367b95789e08be0625` on `codex/beta-onboarding-actor-state-isolation-20261122-run15`. Previously, profile setup could show prior actor's draft/step/Avatar and cached profile handle/bio until effect cleanup on account transition. The profile setup editor now remounts on authenticated actor/account-route identity change, and `existingProfile` is only accepted if its ID matches the active authenticated subject. Per-actor draft persistence and server authority unchanged; source test added.
