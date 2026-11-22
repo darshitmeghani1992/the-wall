@@ -14,10 +14,16 @@ import { colors, markColors, radius } from "@/theme";
 type Visibility = "public" | "private";
 
 export default function CreateSharedWallScreen() {
-  const router = useRouter();
-  const navigation = useNavigation();
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
+  // Shared Wall drafts contain private names and visibility choices. A new
+  // authenticated actor must receive a fresh editor before focus effects run.
+  return <CreateSharedWallEditor key={userId ?? "signed-out"} userId={userId} />;
+}
+
+function CreateSharedWallEditor({ userId }: { userId: string | null }) {
+  const router = useRouter();
+  const navigation = useNavigation();
   const currentUserId = useRef(userId);
   currentUserId.current = userId;
   const fence = useRef(new SessionFocusFence()).current;
