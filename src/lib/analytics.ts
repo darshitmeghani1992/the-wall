@@ -3,7 +3,7 @@
  *
  * The Enhanced Beta authorization explicitly holds ALL optional third-party
  * analytics until the Founder approves a privacy review and independent QA.
- * A bundled EXPO_PUBLIC_POSTHOG_KEY, including an accidentally inherited EAS
+ * A bundled public analytics key, including an accidentally inherited EAS
  * environment value, must not enable collection or instantiate an SDK.
  *
  * This no-op boundary preserves existing callers without transmitting or
