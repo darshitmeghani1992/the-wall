@@ -1,5 +1,16 @@
 # The-Wall Build Status
 
+## BETA-P0-65 · Fail-closed OAuth rejection and recoverable callback UI — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated draft [PR #149](https://github.com/darshitmeghani1992/the-wall/pull/149) is a child of #148 exact `747ca1e50194a6373645abdca990912226211b97`. Before this change, a callback containing explicit provider `error` and no `code` could enter a pre-existing user session and redirect as if the new OAuth attempt succeeded. Also, callback failures rendered a terminal error with no recovery action. Added provider-error rejection **before** valid-session fallback, reset old error on parameter changes, and added an accessible "Try signing in again" button to the existing sign-in route. `tests/frontend-auth-callback-retry.test.mjs` asserts reject-before-fallback, retry wiring and unmount fencing. No auth credentials/provider configuration or backend schema altered.
+
+**Preflight:** Parent PR #148 exact `747ca1e50194a6373645abdca990912226211b97` had **4/4 CI success**, but no independent Reviewer approval or device QA. PR #149 source/test commit `5ea956cf27b960e6ff5b5c4241fb02f8b9d5edfc` queued [CI](https://github.com/darshitmeghani1992/the-wall/actions/runs/44981503993); check actual final exact-doc head before certification. Staging `ewintxgdxdvschiqodkq` direct read-only SQL: ACTIVE_HEALTHY, 35 public tables, 0 without RLS, private `mark-media`, 0 Auth users/profiles/Walls/Marks, no `pg_cron`, no account deletion RPC. Recorded 0001–0030 plus 0032–0034; migration 0031 still withheld. No hosted writes, migrations, deploys, main merges, credential use, domain/Apple actions or tester invitations.
+
+**Release:** Enhanced Beta **NO-GO**. Independent Reviewer + installed iOS/Android QA must cover OAuth failure with an existing session, no code, invalid/expired/reused code, retry navigation and account switch. Genuine six-digit SMTP delivery (#45), three authorized JWT actors and HTTP/SQL negative cases, protected media C2/C3, Secret cleanup scheduler, deletion migration/worker, release/rollback evidence remain gates. Media/Secret/analytics OFF; protect original production `wfsfafmgvxevpzrurofz`. No release or approval implied by CI alone.
+
+**Next:** Confirm PR #149 exact-head Type-check & lint / contract / DB / worker CI, obtain independent Reviewer/QA where available, then select a nonoverlapping unblocked queue task. Re-run read-only staging preflight before any later release assessment.
+
+
 ## BETA-P0-64 · Auth deep-link callback result/session gate — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Draft [#148](https://github.com/darshitmeghani1992/the-wall/pull/148) is an isolated child of #147 at `ebe59ab34fcac7b7bd64981ce0c00ed60e9432b2`. The callback previously discarded the `{error}` returned by `exchangeCodeForSession` and could navigate to the app after a failed exchange or on a missing code without a session. It now requires a successful code exchange or an existing valid session, reports failure instead of routing, and cancels stale async navigation when the callback route unmounts. New `tests/frontend-auth-callback-session-gate.test.mjs` provides source-level regression assertions.

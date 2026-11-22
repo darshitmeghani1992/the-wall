@@ -1,5 +1,8 @@
 # The-Wall — Enhanced Beta release packet (PREPARATION ONLY)
 
+> **Live checkpoint, 22 November 2026:** newest isolated [draft PR #149](https://github.com/darshitmeghani1992/the-wall/pull/149) includes the previously verified #148 auth callback result-check and a new provider-declined OAuth rejection + retry path. Latest source/test SHA `5ea956cf27b960e6ff5b5c4241fb02f8b9d5edfc` is **not** independently certified. The earlier #113 SHA and release evidence below are **historical snapshots**, not the current integration candidate. No current-device artifact, Reviewer approval or QA certification is claimed. Staging read-only preflight on 22 Nov: ACTIVE_HEALTHY; 35 public tables, all RLS enabled, private mark-media, 0 real Auth users, no cron scheduler and no account deletion RPC. Source migrations 0001–0030, 0032–0034 recorded; 0031 intentionally withheld. **Enhanced Beta NO-GO**. Original production protected, no deployments or host writes in this checkpoint.
+
+
 **Recorded:** 22 November 2026. **Release tracker:** [issue #57](https://github.com/darshitmeghani1992/the-wall/issues/57). **Verdict:** **NO-GO**. This document is an operational checklist and draft release copy, not an approval, release artifact or evidence of installed-device testing.
 
 ## Immutable starting point and scope
