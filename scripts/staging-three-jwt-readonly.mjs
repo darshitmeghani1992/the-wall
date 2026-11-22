@@ -103,12 +103,15 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
       throw new Error('Authenticated actor identity mismatch: ' + actor.role);
     }
     const wallUrl = new URL('/rest/v1/walls', STAGING);
-    wallUrl.searchParams.set('select', 'id,type,visibility');
+    wallUrl.searchParams.set('select', 'id,type,visibility,owner_id');
     wallUrl.searchParams.set('id', 'eq.' + wallId);
     const rows = await getJson(fetchImpl, wallUrl.toString(), apiKey, actor.jwt);
     if (!Array.isArray(rows) || rows.length !== actor.expect ||
         (actor.expect === 1 && (rows[0]?.id !== wallId ||
-          rows[0]?.type !== 'shared' || rows[0]?.visibility !== 'private'))) {
+          rows[0]?.type !== 'shared' || rows[0]?.visibility !== 'private' ||
+          // A permitted friend can see a private Wall too. The owner fixture
+          // must actually be the authoritative owner in the returned row.
+          rows[0]?.owner_id !== actors[0].id))) {
       throw new Error('Private Shared Wall RLS visibility mismatch: ' + actor.role);
     }
   }
