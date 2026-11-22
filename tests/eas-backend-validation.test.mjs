@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 const script = new URL('../scripts/validate-eas-backend.mjs', import.meta.url);
 
-function run(url, key = 'publishable-test-value') {
+function run(url, key = 'sb_publishable_mock_for_tests') {
   const env = { ...process.env };
   delete env.EXPO_PUBLIC_SUPABASE_URL;
   delete env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -89,4 +89,13 @@ test('EAS guard refuses modern Supabase secret API keys before embedding', () =>
   assert.equal(result.status, 1);
   assert.match(result.stderr, /EAS build blocked/);
   assert.equal((result.stdout + result.stderr).includes(secret), false);
+});
+
+test('EAS refuses opaque or noncanonical public-key formats before packaging', () => {
+  for (const key of ['publishable-test-value', 'opaque-unclassified-key', 'sb_publishable_with space']) {
+    const result = run('https://ewintxgdxdvschiqodkq.supabase.co', key);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /EAS build blocked/);
+    assert.equal((result.stdout + result.stderr).includes(key), false);
+  }
 });
