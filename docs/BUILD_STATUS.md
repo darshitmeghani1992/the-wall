@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-59 · Walkthrough step/replay actor and route scoping — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #142 immutable `7dd545934ab231810acd5fec0ade9f7c4a154e43`, new branch `codex/beta-walkthrough-actor-replay-scope-20261122-auto7`. First-use Walkthrough kept current step and in-flight completion state when a user changed accounts or switched replay route before cleanup. A new actor/replay keyed editor remounts the step and completion lease at render. The server account route is deliberately NOT part of the key: successful completion must finish its in-flight refresh before navigating to the selected post-tour destination. All asynchronous completion/navigation remains guarded against the parent's live authenticated actor, preventing an obsolete tour from pushing another account forward. Replay still never persists progress; canonical routes, microcopy, UI and Backend Auth are unchanged.
+
+**Tests/gates:** `tests/frontend-walkthrough-actor-scope.test.mjs` checks source and actor/replay identity transition plus the walkthrough-to-ready completion path, A→B→A fence and expected persistence behavior. Exact SHA CI, independent Reviewer and real-device QA still mandatory for multi-account tour step switch, delayed completion and replay. **NO-GO** pending authentic SMTP OTP and 3 JWT identities, C2/C3 media, Secret scheduler, deletion/rollback and Founder gates. Staging `ewintxgdxdvschiqodkq` only, protect original production; no hosted writes, schema, merges, deployment, domain/DNS or Apple, invites or additional credits. Media/Secret/analytics OFF.
+
+**Next:** Check final CI of #142 and this PR, then independent Reviewer and QA; continue separate unblocked implementation or evidence work without bypassing gates.
+
+
 ## BETA-P0-58 · Find People activation share and progress actor scoping — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of draft #141 immutable parent `fd3df87179d5bdb0e50e9d6a3eeae6c202efa71d`, branch `codex/beta-find-people-onboarding-actor-20261122-auto7`. `app/(onboarding)/find-people.tsx` could use cached previous-account profile handle in invitation copy while a new account's Auth profile was loading. Local busy/operation fence also belonged to the old route until effect cleanup, risking a stuck activation button or stale continuation on A→B. The activation body now remounts for authenticated actor + canonical account route; the invitation handle is admitted only if its profile ID matches the actor; pending continuation checks a shared render-current actor before any action and after async boundaries. Unavailable profile retains existing generic invitation rather than misrouting to the previous user's Wall. No new product UI text, API, schema or flags.
