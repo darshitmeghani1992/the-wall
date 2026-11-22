@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
@@ -21,7 +21,10 @@ export default function SignIn() {
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [sent, setSent] = useState(false);
+  // One immutable OTP challenge email; the editable input is not its authority.
+  const [sentEmail, setSentEmail] = useState<string | null>(null);
+  const sent = sentEmail !== null;
+  const operationInFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [oauthProviders, setOAuthProviders] = useState(noOAuthProviders);
@@ -40,42 +43,51 @@ export default function SignIn() {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  async function sendCode() {
-    if (!email.includes("@")) return Alert.alert("Enter a valid email");
+  async function sendCode(targetEmail: string) {
+    if (operationInFlight.current) return;
+    if (!targetEmail.includes("@")) return Alert.alert("Enter a valid email");
+    operationInFlight.current = true;
     setBusy(true);
     try {
-      await signInWithEmail(email.trim());
-      setSent(true);
+      await signInWithEmail(targetEmail);
+      setSentEmail(targetEmail);
+      setCode("");
       setResendCooldown(30);
     } catch (cause) {
       Alert.alert("Couldn't send the code", authErrorMessage(cause, "send"));
     } finally {
+      operationInFlight.current = false;
       setBusy(false);
     }
   }
 
   async function verify() {
+    if (!sentEmail || operationInFlight.current) return;
     if (!/^\d{6}$/.test(code.trim())) {
       Alert.alert("Enter the 6-digit code", "Use the complete code from your email.");
       return;
     }
+    operationInFlight.current = true;
     setBusy(true);
     try {
-      await verifyEmailOtp(email.trim(), code.trim());
+      await verifyEmailOtp(sentEmail, code.trim());
       router.replace("/"); // re-run the auth gate
     } catch (cause) {
       Alert.alert("That code didn't work", authErrorMessage(cause, "verify"));
     } finally {
+      operationInFlight.current = false;
       setBusy(false);
     }
   }
 
   async function resend() {
-    if (busy || resendCooldown > 0) return;
-    await sendCode();
+    if (operationInFlight.current || resendCooldown > 0 || !sentEmail) return;
+    await sendCode(sentEmail);
   }
 
   async function oauth(provider: "google" | "apple") {
+    if (operationInFlight.current) return;
+    operationInFlight.current = true;
     setBusy(true);
     try {
       await signInWithOAuth(provider);
@@ -83,6 +95,7 @@ export default function SignIn() {
     } catch (e: any) {
       Alert.alert("Sign-in failed", e?.message ?? "Try again.");
     } finally {
+      operationInFlight.current = false;
       setBusy(false);
     }
   }
@@ -98,7 +111,7 @@ export default function SignIn() {
         </Text>
         {sent ? (
           <Text variant="body" color={colors.onSurfaceVariant}>
-            We sent a 6-digit code to {email}.
+            We sent a 6-digit code to {sentEmail}.
           </Text>
         ) : null}
       </View>
@@ -112,9 +125,10 @@ export default function SignIn() {
             keyboardType="email-address"
             autoComplete="email"
             value={email}
+            editable={!busy}
             onChangeText={setEmail}
           />
-          <Button label="Email me a code" variant="primary" loading={busy} onPress={sendCode} />
+          <Button label="Email me a code" variant="primary" loading={busy} onPress={() => void sendCode(email.trim())} />
 
           {(oauthProviders.google || oauthProviders.apple) && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 6 }}>
@@ -151,7 +165,7 @@ export default function SignIn() {
             onPress={() => void resend()}
           />
           <Button label="Use a different email" variant="ghost" disabled={busy} onPress={() => {
-            setSent(false);
+            setSentEmail(null);
             setCode("");
             setResendCooldown(0);
           }} />

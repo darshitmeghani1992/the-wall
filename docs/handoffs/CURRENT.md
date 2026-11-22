@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-63 · OTP challenge bound to the sent email — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #146 exact `f05cd07d1518bff36b68ed0a3ec248f630fd87ec` on `codex/beta-otp-challenge-email-snapshot-20261122-auto8`. Stores an immutable `sentEmail` only after successful send; displays/verifies/resends the same challenge even if draft input changes; email edit disabled while busy, code cleared on resend, and synchronous ref prevents overlapping OTP/OAuth operations. New source regression; exact CI, independent Reviewer, real native/email delivery QA still required. SMTP/six-digit genuine tester setup remains Founder-gated; no actual OTP sent. STAGING ONLY, no original production, hosted writes, domain/DNS/Apple, migration, deploy, merge or invitations. **Enhanced Beta NO-GO.**
+
+**Next:** Verify #146/#147 final-head CI, independent device/email tests once Auth setup is approved; other media/Secret/deletion/rollback gates unchanged.
+
+
 ## CURRENT BETA-P0-62 · Walkthrough post-refresh continuation revision — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Child of #145 `99a3646e59ff023402861531d405f90532a5abbe` on `codex/beta-walkthrough-refresh-identity-lease-20261122-auto8`. Walkthrough final navigation after Auth route refresh now requires a monotonic current actor+replay revision, preventing old A→B→A and replay callbacks while preserving same-actor first-use→ready navigation and deferred Discover. Earlier awaited draft/write boundaries retain the focus fence. New executable ABA/source test and prior contract updates; exact CI, independent Reviewer and native QA pending. Staging only; no production/hosted writes or protected activations. **Enhanced Beta NO-GO.**
