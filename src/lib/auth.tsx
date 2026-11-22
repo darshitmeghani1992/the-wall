@@ -210,24 +210,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // Native OAuth: open the provider in a browser tab, then set the session from
-  // the deep-link the provider redirects back to.
+  // the deep-link the provider redirects back to. Never resolve successfully
+  // until a real session was exchanged: the caller routes to Home on success.
   async function signInWithOAuth(provider: "google" | "apple") {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo, skipBrowserRedirect: true },
     });
     if (error) throw error;
-    if (!data?.url) return;
+    if (!data?.url) throw new Error("This sign-in option is not available right now.");
 
     const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (res.type !== "success" || !res.url) return;
+    if (res.type === "cancel" || res.type === "dismiss") {
+      throw new Error("Sign-in was cancelled.");
+    }
+    if (res.type !== "success" || !res.url) {
+      throw new Error("Sign-in could not be completed. Please try again.");
+    }
 
     const url = new URL(res.url);
-    const code = url.searchParams.get("code");
-    if (code) {
-      const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-      if (exErr) throw exErr;
+    // Browser success means only that a URL arrived, not that the provider
+    // authenticated anyone. Require the app's exact native callback address.
+    const expected = new URL(redirectTo);
+    if (url.protocol !== expected.protocol ||
+        url.host !== expected.host || url.pathname !== expected.pathname) {
+      throw new Error("Unexpected sign-in redirect. Please try again.");
     }
+    if (url.searchParams.has("error")) {
+      throw new Error("Sign-in was declined. Please try again.");
+    }
+    const code = url.searchParams.get("code");
+    if (!code) throw new Error("Sign-in code missing. Please try again.");
+
+    const { data: exchange, error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+    if (exErr) throw exErr;
+    if (!exchange?.session) throw new Error("Sign-in did not create a session. Please try again.");
   }
 
   const refreshProfile = useCallback(async () => {
