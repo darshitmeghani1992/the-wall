@@ -127,3 +127,13 @@ Staging **read-only** `pg_proc` query in approved `ewintxgdxdvschiqodkq` enumera
 
 ---
 
+
+## 23 Nov 2026 — BACKEND staging trigger linkage and grant inspection (read-only)
+
+**Scope:** Approved staging `ewintxgdxdvschiqodkq` only. Read-only `pg_proc`/`pg_namespace`/`pg_trigger` joins, with `pg_get_triggerdef` on sensitive tables; no hosted mutation, production access, schema repair, dynamic invocation or any injected identity. This is a distinct structural check, not functional authorization certification.
+
+**Verified catalog totals:** **34** public `SECURITY DEFINER` functions returning `trigger`; **0** effectively callable by `anon`, **26** with `authenticated` EXECUTE grants and **8** without; **0** lacked a linked non-internal `pg_trigger`; **0** are owned by a role other than `postgres`. There are 113 public definer functions overall (as previously inventoried); the 26 trigger-returning entries with `authenticated` EXECUTE must **not** be counted as 26 normal RPC endpoints. A trigger-returning routine cannot be invoked like an ordinary authenticated RPC, but the broad grants still need Reviewer least-privilege consideration rather than blind revocation.
+
+**Sensitive trigger linkage observed:** `blocks` has pair guard and cleanup triggers; `marks` has expiry, tombstone, contribution, defaults, Secret extraction, anonymous author redaction/mapping and Mark Alert triggers; `wall_members` has pair guard, deferred invariant, invite Alert and transition guard triggers. Their trigger ordering and exact privileged side effects require source-level/manual review, and whether a blocked member may leave remains Product/Founder issue #177. No trigger-body equivalence hashes or authenticated inserted-row RETURNING responses were established in this pass.
+
+**Remaining QA/Reviewer gates:** Three real staging JWT actors and negative HTTP/table/SQL checks, anonymous/Secret author redaction, Shared Wall INSERT RETURNING, cross-role trigger concurrency, private-media worker C2/C3 and expiry scheduler. Structural linkage says nothing about those results. Review the 34 trigger bodies against migration text and event ordering before approving the integrated candidate; do not treat the new catalog tests #182/#183 as behavior proof. **Enhanced Beta NO-GO.**
