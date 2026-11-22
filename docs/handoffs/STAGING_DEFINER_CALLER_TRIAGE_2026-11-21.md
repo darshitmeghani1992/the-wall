@@ -108,3 +108,22 @@ Independent review and genuine staging actor verification remain open. Continue 
 **Preliminary determination:** no obvious missing caller or owner gate identified in these four hosted routine bodies, but **no security approval**. Need independent Reviewer trace of actual helper function semantics (`can_view_wall`, `is_blocked`, `is_active_account`, lock helpers) and genuine owner/member/outsider/removed/blocked actor HTTP+SQL behavior. No authenticated users currently exist in staging, so these tests are **blocked**, not passed. Continue with other nine Wall/member routines, ten media/Mark and relevant trigger grants. Never blanket revoke permissions, deploy migration or enable Secret/media on this source inspection alone.
 
 **Verified read-only baseline same run:** 35/35 public tables RLS, 0 Auth users/Walls/Marks, private `mark-media`, no `pg_cron`. Anonymous Mark authored identity was separately cross-checked: `marks_null_anon` BEFORE INSERT nulls public `marks.author_id` for anonymous Marks and `marks_record_anon` AFTER INSERT writes the protected author mapping; runtime actor redaction still requires QA. Original production `wfsfafmgvxevpzrurofz` was not queried; no hosted mutation, migrations, merges, deployment, invitations or held Apple/domain action. **Enhanced Beta NO-GO.**
+
+## 23 Nov 2026 — seven additional Shared Wall RPC caller traces (ARCHITECT → BACKEND)
+
+Staging **read-only** `pg_proc` query in approved `ewintxgdxdvschiqodkq` enumerated seven existing `SECURITY DEFINER` signatures. For each, effective `anon EXECUTE=false`, `authenticated EXECUTE=true`, and `proconfig search_path=pg_catalog, public`. Compared control-flow source against existing migration `0026_shared_wall_lifecycle.sql` from draft #179's exact parent ancestry; live catalog body starts contain actor `auth.uid()`, but whole hosted-body checksum equivalence, genuine HTTP semantics and independent review are **not** asserted. These are part of the previously counted **33** directly authenticated-callable routines; not 7 new routines.
+
+| RPC | Source control flow / remaining hostile JWT checks |
+|---|---|
+| `respond_shared_wall_invite(uuid,boolean)` | Caller is the pending invitee; actor + owner must be active and unblocked; owner/member locks precede accept/decline and acceptance Alert. Verify non-invitee, blocked/suspended, accept/decline replay and concurrent revoke |
+| `remove_shared_wall_member(uuid,uuid)` | Caller must be active Wall owner, cannot remove self; locks owner/target/member and blocks removal of blocked target. Pending revokes; accepted generates tombstone. **Current block-first denial is issue #177**, not a certified desired behavior |
+| `leave_shared_wall(uuid)` | Caller must be accepted non-owner; owner gets `owner_action_required`, inactive/blocked owner-member pair denied. **Current blocked-owner leave denial is issue #177** |
+| `transfer_shared_wall_ownership(uuid,uuid)` | Active owner only; target active accepted non-owner, no block/tombstone; locks pair/member; transient authorization record and deferred invariant; sends ownership-transfer Alert. Verify spoofed target/owner, race, blocked pair, and untrusted receiver |
+| `list_removed_shared_wall_members(uuid)` | Dynamic `auth.uid()` must be active **current** owner; reads only that Wall's removal ledger. Test #75 exercises role-simulated non-owner & transfer-boundary results; still needs genuine hosted JWT |
+| `update_shared_wall_settings(uuid,text,text,boolean,boolean)` | Owner-active and Wall-row lock; validates name/visibility/open-join/anonymous. Verify unauthorized owner, malformed combinations and settings/owner race |
+| `delete_shared_wall(uuid,text)` | Active current owner, Wall-row lock, exact name confirmation; verify unauthorized, stale confirmation, queued media/alerts and race/rollback |
+
+**Confidence:** catalog metadata **Verified**; migration source trace **Verified** as checked-in text; observed hosted actor-body opening only **Verified**; hosted caller equivalence and runtime safety **not proven**. No independent Reviewer/QA, no user/hosted mutation, no PR merge. Remaining direct SECURITY DEFINERs, trigger effects, JWT negative tests and operational cleanup still pending. A permission grant alone does not certify access control. [Draft #179](https://github.com/darshitmeghani1992/the-wall/pull/179) is a source-test child, not a security migration. Keep media/Secret/analytics off, deletion held and Enhanced Beta **NO-GO**.
+
+---
+
