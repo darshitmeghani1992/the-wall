@@ -1,5 +1,16 @@
 # The-Wall Build Status
 
+## BETA-P0-67 · Native OAuth cannot silently succeed on browser cancel or missing session — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated draft [PR #151](https://github.com/darshitmeghani1992/the-wall/pull/151), child of audited #150 exact `dc5476e8d96fae4bc7da3d24ba565dd314fd601b`. `src/lib/auth.tsx` previously returned normally on missing provider URL, dismissed/canceled browser, non-success browser result, or missing code. Its caller in `app/(onboarding)/sign-in.tsx` then navigated to root, misleadingly implying new login succeeded. The native OAuth function now throws until it receives the exact redirect scheme/host/path, provider has not declined, code exists, and Supabase returns an actual session without error. Added source regression `tests/frontend-oauth-browser-session-gate.test.mjs`; tested source wiring only, no provider-enabled installed-device behavior.
+
+**Verification:** Code/test source commit `53d893ff270713491961d402f643941785a94f87`, [initial CI](https://github.com/darshitmeghani1992/the-wall/actions/runs/44981786428) queued; check the **final documentation head** and full CI separately. Independent Reviewer and device QA with enabled test provider are pending. Staging Google/Apple intentionally disabled; no provider config or signup changed. Parent #149 exact `00f3afc918e43f46b0af316ac9cb8469ca0a7632` 4/4 CI green; #150 audit descendant was 3/4 green at last inspection, database job still executing. CI is not Reviewer/QA.
+
+**Enhanced Beta NO-GO:** Genuine six-digit SMTP OTP delivery to authorized testers, 3 actual staging JWT actors and authenticated HTTP/SQL negative cases, private media C2/C3, Secret one-hour cron, account deletion 0031/worker, independent device and rollback evidence absent. Approved staging `ewintxgdxdvschiqodkq` only; original production protected. No hosted write, migration, merge, release, credentials, domain/Apple action or invitation; media/Secret/analytics OFF.
+
+**Next:** Check #151 exact final SHA all CI jobs and independent review/device QA, then next nonoverlapping unblocked P0 task. Preserve old stacked PRs and canonical queue; never self-certify.
+
+
 ## BETA-P0-66 · Historic PR ancestry and actual file-level integration audit — 22 Nov 2026
 
 **ROLE: ARCHITECT (integration/sequencing).** [Draft PR #150](https://github.com/darshitmeghani1992/the-wall/pull/150) adds `docs/handoffs/BETA_LINEAGE_FILE_LEVEL_AUDIT_2026-11-22.md`, separately from frontend PR #149 exact `00f3afc918e43f46b0af316ac9cb8469ca0a7632`. GitHub compare verified `main..#30` +184/0 (300-file capped list), `#30..#56` +22/0 (58 changed files), `#56..#59` +9/0 (6 files), `#59..#149` +154/0 (118 files), and `main..#149` +369/0 (300-file capped list); verified explicit PR metadata chain #30→#34–#36→#38→#40–#44→#46–#56→#58→#59, with 37/39/45 not PRs. #147→#148→#149 is confirmed exact-base ancestry and #59→#149 is strict descendant. The file-level audit identifies cross-era overlap in `app/(onboarding)/sign-in.tsx`, Mark composer, deletion, auth callback, CI/toolchain, Walls and continuity docs. This **does not** certify unseen historical paths or any runtime behavior, and does not mark older PRs as superseded. No branch merger, deployment, hosted write or production action.
