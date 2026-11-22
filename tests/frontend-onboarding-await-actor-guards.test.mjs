@@ -14,8 +14,8 @@ test("Walkthrough checks current actor after draft read and after local clear, b
   assert.match(tour, /const draft = await loadOnboardingDraft\(userId\);[\s\S]*?if \(!lifecycleFence\.current\.isCurrent\(token, liveActorId\.current\)\) return;\s*try \{ await clearOnboardingDraft/);
   assert.match(tour, /if \(!lifecycleFence\.current\.isCurrent\(token, liveActorId\.current\)\) return;\s*await refreshAccountRoute\(\)/);
   // After Auth refresh changes the server route to ready, the final check
-  // must remain identity-only so the deferred destination is not lost.
-  assert.match(tour, /await refreshAccountRoute\(\);\s*if \(liveActorId\.current === userId\)/);
+  // must remain actor/revision-only (not account-route) so the deferred destination is not lost.
+  assert.match(tour, /await refreshAccountRoute\(\);\s*if \(isActorRevisionCurrent\(\)\)/);
 });
 
 test("an actor switch while a local draft read is pending suppresses the following mutation", async () => {

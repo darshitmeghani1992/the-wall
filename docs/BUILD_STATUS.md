@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-62 · Walkthrough post-route-refresh actor/ABA continuation lease — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #145 exact `99a3646e59ff023402861531d405f90532a5abbe`, branch `codex/beta-walkthrough-refresh-identity-lease-20261122-auto8`. During normal walkthrough completion, `refreshAccountRoute()` changes the server route to `ready`, intentionally invalidating the route focus fence. The former actor-ID-only check after that await could wrongly navigate or display an error if an account switched A→B→A, or the route switched to replay, before the old completion resumed. A monotonic actor/replay revision in the *parent render* is now captured by the editor; post-refresh navigation/error/finally are allowed only for the unchanged revision. Earlier awaited stages retain `AccountRouteFence` authorization. The deferred Discover destination and normal walkthrough→ready navigation remain allowed; no Auth, backend, API, product copy, flags or schema changes.
+
+**Regression:** Added `tests/frontend-walkthrough-refresh-identity-lease.test.mjs` and updated prior walkthrough source contracts to require revision guard. Exact SHA GitHub CI, independent Reviewer and native QA must test delayed route refresh, A→B→A, replay during completion, and ordinary first-use completion/Discover redirection. Feature media/Secret/analytics OFF; Enhanced Beta **NO-GO** pending SMTP OTP, 3 real JWT actors, private media, Secret one-hour cleanup, deletion, device and rollback. Only approved staging `ewintxgdxdvschiqodkq`; production protected. No hosted writes, merges, migrations, release, domain/Apple actions, tester invitations or new API charges.
+
+**Next:** Verify final CI #145/#146, request independent Reviewer+QA, continue a separate nonoverlapping beta slice.
+
+
 ## BETA-P0-61 · Delete-account destructive confirmation actor/revision fence — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of draft PR #144 exact parent `a3b777c7c5c1373ef483b42b228f20fa576f4eb2`, branch `codex/beta-delete-account-actor-confirmation-20261122-auto8`. Typed `DELETE` and local busy state previously persisted across authenticated account switches before focus cleanup. The native “Review my Walls” ownership alert also allowed delayed navigation for an obsolete account. The deletion editor now remounts for each actor revision (A→B→A), with render-current identity/revision checks and the existing focus-generation fence protecting requests, native alert callbacks, late reconciliation and navigation. No changes to service authorization, copy, flags, schema or backend.

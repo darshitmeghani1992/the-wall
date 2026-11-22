@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-62 · Walkthrough post-refresh continuation revision — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #145 `99a3646e59ff023402861531d405f90532a5abbe` on `codex/beta-walkthrough-refresh-identity-lease-20261122-auto8`. Walkthrough final navigation after Auth route refresh now requires a monotonic current actor+replay revision, preventing old A→B→A and replay callbacks while preserving same-actor first-use→ready navigation and deferred Discover. Earlier awaited draft/write boundaries retain the focus fence. New executable ABA/source test and prior contract updates; exact CI, independent Reviewer and native QA pending. Staging only; no production/hosted writes or protected activations. **Enhanced Beta NO-GO.**
+
+**Next:** Check #145/#146 immutable CI, independently review/device-test actor ABA and normal walkthrough, then next unblocked task. SMTP OTP, actual JWT actors, media/Secret/deletion and rollback gates unchanged.
+
+
 ## CURRENT BETA-P0-61 · Account deletion confirmation actor isolation — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #144 exact `a3b777c7c5c1373ef483b42b228f20fa576f4eb2` on `codex/beta-delete-account-actor-confirmation-20261122-auto8`. Keyed deletion editor resets typed confirmation on actor switch; live actor/revision plus focus fence prevents late scheduling and stale native ownership dialog navigation, including A→B→A. New regression test; immutable CI and independent Reviewer/device QA mandatory. Deletion 0031/purge remain OFF and gated. No hosted writes, production access, merges, deployment, domain/Apple work, or tester invitations. **Enhanced Beta NO-GO.**
