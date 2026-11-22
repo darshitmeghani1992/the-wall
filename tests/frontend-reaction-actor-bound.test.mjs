@@ -44,6 +44,23 @@ test("reaction optimism rolls back when neither write nor offline refresh succee
   assert.match(hook, /mutationLeases\.current\.set\(markId, lease\)/);
   assert.match(hook, /\.catch\(\(\) => \{[\s\S]*?mutationLeases\.current\.get\(markId\) !== lease[\s\S]*?setSummaries\(\(cur\) => \(\{ \.\.\.cur, \[markId\]: current \}\)\)/);
   assert.match(hook, /void refresh\(markId\)\.catch\(\(\) => \{/);
-  assert.match(hook, /\.finally\(\(\) => \{[\s\S]*?mutationLeases\.current\.get\(markId\) === lease[\s\S]*?mutationLeases\.current\.delete\(markId\)/);
+  assert.match(hook, /\.finally\(\(\) => \{[\s\S]*?mutationLeases\.current\.get\(markId\) !== lease[\s\S]*?mutationLeases\.current\.delete\(markId\)[\s\S]*?void refresh\(markId\)/);
   assert.match(hook, /mutationLeases\.current\.clear\(\)/);
+});
+
+test("late read requests cannot overwrite optimism or replayed sessions", () => {
+  assert.match(hook, /const readEpochs = useRef\(new Map<string, number>\(\)\)/);
+  assert.match(hook, /const sessionEpoch = useRef\(0\)/);
+  assert.match(hook, /sessionEpoch\.current \+= 1/);
+  assert.match(hook, /readEpochs\.current\.clear\(\)/);
+  assert.match(hook, /readEpochs\.current\.set\(markId, \(readEpochs\.current\.get\(markId\) \?\? 0\) \+ 1\)/);
+  assert.match(hook, /sessionEpoch\.current !== sessionAtStart/);
+  assert.match(hook, /\(readEpochs\.current\.get\(markId\) \?\? 0\) !== readEpochAtStart/);
+  assert.match(hook, /mutationLeases\.current\.has\(markId\)/);
+  assert.match(hook, /readEpochsAtStart = new Map\(/);
+  assert.match(hook, /\(readEpochs\.current\.get\(id\) \?\? 0\) === readEpochsAtStart\.get\(id\)/);
+  assert.match(hook, /Object\.keys\(fresh\)\.length \? \{ \.\.\.cur, \.\.\.fresh \} : cur/);
+  // A settled write explicitly refetches after releasing its lease, so a batch
+  // response skipped during the tap cannot permanently hide the final result.
+  assert.match(hook, /mutationLeases\.current\.delete\(markId\);[\s\S]*?void refresh\(markId\)\.catch/);
 });
