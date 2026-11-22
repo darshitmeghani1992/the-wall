@@ -63,12 +63,15 @@ function fakeNetwork(options = {}) {
     }
     assert.ok(url.includes('/rest/v1/walls?'));
     assert.equal(new URL(url).searchParams.get('id'), 'eq.' + WALL_ID);
-    assert.equal(new URL(url).searchParams.get('select'), 'id,type,visibility');
+    assert.equal(new URL(url).searchParams.get('select'), 'id,type,visibility,owner_id');
     const isOutsider = token === base.TW_OUTSIDER_JWT;
     const rows = isOutsider && !options.leak ? [] : [{
       id: WALL_ID,
       type: options.wrongType ? 'personal' : 'shared',
       visibility: options.wrongVisibility ? 'public' : 'private',
+      owner_id: options.ownerIsMember ? MEMBER_ID :
+        options.wrongOwner ? OUTSIDER_ID :
+        options.missingOwner ? undefined : OWNER_ID,
     }];
     return { status: 200, json: async () => rows };
   };
@@ -121,6 +124,17 @@ test('rejects mismatched server verified user ID and outsider visibility leak', 
 
 test('rejects non-shared or non-private fixtures even when the actor visibility looks correct', async () => {
   for (const options of [{ wrongType: true }, { wrongVisibility: true }]) {
+    const mock = fakeNetwork(options);
+    await assert.rejects(runStagingJwtAudit(base, mock.handler),
+      /Private Shared Wall RLS visibility mismatch/);
+    assert.equal(mock.calls.length, 2);
+  }
+});
+
+test('fails closed if the purported owner is a permitted non-owner or owner_id is absent', async () => {
+  // Both owner and member may have valid JWTs and private-Wall read access.
+  // Visibility alone cannot prove which authenticated actor owns the Wall.
+  for (const options of [{ ownerIsMember: true }, { wrongOwner: true }, { missingOwner: true }]) {
     const mock = fakeNetwork(options);
     await assert.rejects(runStagingJwtAudit(base, mock.handler),
       /Private Shared Wall RLS visibility mismatch/);
