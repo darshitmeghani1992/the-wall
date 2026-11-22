@@ -1,3 +1,9 @@
+## 22 Nov 2026 — active PR #157 staging three-JWT public-key project gate
+
+**ARCHITECT → BACKEND.** New isolated child `codex/beta-staging-jwt-anon-ref-gate-20261122-auto10` of #156 exact `9f65c8f0942f08e85592063179283707c768c96c`. Parent [#156 CI 44994769159](https://github.com/darshitmeghani1992/the-wall/actions/runs/44994769159) **4/4 green** (not independent QA or a deployed artifact). Draft [#157](https://github.com/darshitmeghani1992/the-wall/pull/157) prevents legacy anon JWTs from a missing/wrong project `ref` from entering three-actor staging HTTP audit. Reuses existing EAS check and adds zero-network regression. Code/test SHA `3d649585edcaa02ffe8ab6e7f4e9c743d59b56d2`; first [CI](https://github.com/darshitmeghani1992/the-wall/actions/runs/44994894348) queued. No actual authenticated HTTP probes because staging has 0 test accounts, no private Wall fixture. Exact final tree/CI and independent Reviewer/QA pending.
+
+Approved staging read-only remains ACTIVE_HEALTHY; public RLS 35/35, Auth 0, pg_cron 0, deletion RPC absent. No production access, hosted writes/migrations, merge, deployment, invites, Apple/domain actions; media/Secret/analytics OFF. **Enhanced Beta NO-GO** pending SMTP/real JWT three actors, security and Shared Wall INSERT RETURNING, media C2/C3, Secret scheduler, deletion 0031, independent QA/Review, installed-device and rollback. Next: verify #157 final CI; if blocked, independent unblocked engineering task from BUILD_STATUS.
+
 
 ## 22 Nov 2026 — active draft #156 runtime staging-only Expo client fence
 
