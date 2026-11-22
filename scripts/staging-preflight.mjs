@@ -2,6 +2,16 @@
  * Read-only, non-PII staging smoke probe. Not a substitute for hosted RLS QA.
  * Must not log API keys, response payloads, auth sessions or user records.
  */
+// This private-beta release train has exactly one authorized backend.
+// Do not allow a preview build or smoke check to target legacy production.
+export const APPROVED_STAGING_ORIGIN = 'https://ewintxgdxdvschiqodkq.supabase.co';
+
+export function assertApprovedStagingOrigin(origin) {
+  if (origin !== APPROVED_STAGING_ORIGIN) {
+    throw new Error('Beta blocked: Supabase origin is not the approved staging project');
+  }
+}
+
 export const requiredChecks = Object.freeze([
   { name: 'auth_health', path: '/auth/v1/health', acceptedStatuses: [200] },
   { name: 'profiles_api', path: '/rest/v1/profiles?select=id&limit=0', acceptedStatuses: [200] },
@@ -63,6 +73,7 @@ export function classifyResult(check, status, errorCode = '') {
 
 export async function verifyStagingBackend({ url, key, fetchImpl = fetch }) {
   const origin = validatePublicClientConfig(url, key);
+  assertApprovedStagingOrigin(origin);
   const result = [];
   for (const check of requiredChecks) {
     try {
