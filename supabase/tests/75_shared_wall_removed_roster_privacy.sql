@@ -99,5 +99,66 @@ BEGIN
   END IF;
 END $$;
 RESET ROLE;
+
+-- A successful transfer changes the identity authorized to read historical
+-- removal records immediately. The former owner becomes an accepted member,
+-- but membership alone must never grant access to removal history.
+SET LOCAL ROLE authenticated;
+SET LOCAL "test.uid"='44444444-4444-4444-4444-444444444444'; -- O, current owner
+DO $roster_transfer$
+BEGIN
+  IF NOT public.transfer_shared_wall_ownership(
+      '75000000-0000-4000-8000-000000000001',
+      '22222222-2222-2222-2222-222222222222') THEN
+    RAISE EXCEPTION '75 FAIL: legitimate owner transfer was denied';
+  END IF;
+END $roster_transfer$;
+RESET ROLE;
+-- Evaluate deferred owner/member constraints at the transfer boundary,
+-- rather than letting an invalid final state disappear on ROLLBACK.
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "test.uid"='22222222-2222-2222-2222-222222222222'; -- B, new owner
+DO $new_roster_owner$
+BEGIN
+  IF NOT EXISTS (
+      SELECT 1 FROM public.walls w
+      WHERE w.id='75000000-0000-4000-8000-000000000001'
+        AND w.owner_id=auth.uid()
+  ) THEN
+    RAISE EXCEPTION '75 FAIL: ownership did not transfer to accepted member';
+  END IF;
+  IF (SELECT count(*) FROM public.list_removed_shared_wall_members(
+      '75000000-0000-4000-8000-000000000001')) <> 1
+     OR NOT EXISTS (
+       SELECT 1 FROM public.list_removed_shared_wall_members(
+         '75000000-0000-4000-8000-000000000001') r
+       WHERE r.user_id='88888888-8888-8888-8888-888888888888'
+         AND r.removed_at IS NOT NULL
+     ) THEN
+    RAISE EXCEPTION '75 FAIL: new owner cannot see existing removal history';
+  END IF;
+END $new_roster_owner$;
+SET LOCAL "test.uid"='44444444-4444-4444-4444-444444444444'; -- O, former owner
+DO $former_roster_owner$
+BEGIN
+  IF NOT EXISTS (
+      SELECT 1 FROM public.wall_members wm
+      WHERE wm.wall_id='75000000-0000-4000-8000-000000000001'
+        AND wm.user_id=auth.uid() AND wm.status='accepted'
+  ) OR NOT public.current_user_can_view_wall(
+      '75000000-0000-4000-8000-000000000001') THEN
+    RAISE EXCEPTION '75 FAIL: former owner lost legitimate member access';
+  END IF;
+  IF EXISTS (
+      SELECT 1 FROM public.list_removed_shared_wall_members(
+        '75000000-0000-4000-8000-000000000001')
+  ) THEN
+    RAISE EXCEPTION '75 FAIL: former owner retained sensitive roster access';
+  END IF;
+END $former_roster_owner$;
+RESET ROLE;
 ROLLBACK;
-\echo '75 (removed Shared Wall roster privacy): PASS (disposable SQL, not hosted JWT)'
+\echo '75 (removed roster + ownership transfer privacy): PASS (disposable SQL, not hosted JWT)'
