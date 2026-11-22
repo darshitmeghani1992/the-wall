@@ -139,7 +139,10 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
     } catch {
       throw new Error('Malformed anonymous staging HTTP JSON response');
     }
-    if (!Array.isArray(rows) || rows.length !== 0) {
+    if (!Array.isArray(rows)) {
+      throw new Error('Malformed anonymous staging HTTP JSON response');
+    }
+    if (rows.length !== 0) {
       throw new Error('Private Shared Wall visible without authentication');
     }
   } else if (anon.status !== 401 && anon.status !== 403) {
