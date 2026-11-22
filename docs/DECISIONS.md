@@ -1,3 +1,9 @@
+## D-42 · 23 Nov 2026 · Alert route references must be canonical UUIDs
+
+- **Risk (ARCHITECT → FRONTEND):** Alert route interpolation previously accepted any non-empty actor, Wall or focused Mark value. Real notification table IDs are UUID typed, but stale/corrupted externally rehydrated metadata could produce unintended nested paths or query components.
+- **Implementation constraint:** Reject malformed actor destinations to Discover, malformed Wall/owner destinations to Alerts, and omit malformed focused-Mark identifiers while keeping an otherwise valid Wall path. Preserve valid UUID routes, explicit fallback and server-side RLS as authorization source; don't infer an exploit from this defensive change.
+- **Status:** [Draft #181](https://github.com/darshitmeghani1992/the-wall/pull/181) source/test `ca46dbbdb3b07ca0b6f9552d799ff405867a1703`; exact CI, separate Reviewer and installed-device QA are required. No API/schema/UX scope change, no hosted mutation, no merge. **Enhanced Beta NO-GO**.
+
 ## D-41 · 2026-11-22 · Failed Auth session restoration must not hang or expose unreconciled destination state
 
 - **Risk:** A rejected initial `auth.getSession` or deferred destination reconciliation skipped existing loading-finalization code, leaving indefinite splash. A later Auth event error could do likewise.
