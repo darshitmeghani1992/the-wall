@@ -14,6 +14,7 @@ test("bootstrap rejects a returned Auth error and fails closed without an endles
   assert.match(bootstrap, /if \(!active\) return/);
   assert.match(bootstrap, /if \(authSubjectRef\.current !== undefined\) return/);
   assert.match(bootstrap, /setSession\(null\);[\s\S]*?setAccountRoute\(null\);[\s\S]*?setProfile\(null\);[\s\S]*?setLoading\(false\)/);
+  assert.match(bootstrap, /authSubjectRef\.current = null;\s*currentRouteFence\.invalidate\(null\);\s*setSession\(null\)/);
   assert.doesNotMatch(bootstrap, /console\.(log|error)/);
 });
 
@@ -38,5 +39,6 @@ test("auth event destination-reconciliation failure also fails closed if it stil
   assert.match(authEvents, /try \{\s*await reconcileDeferredDestinationIdentity\(/);
   assert.match(authEvents, /\} catch \{[\s\S]*?currentRouteFence\.isCurrent\(eventToken, authSubjectRef\.current \?\? null\)/);
   assert.match(authEvents, /setSession\(null\);[\s\S]*?setAccountRoute\(null\);[\s\S]*?setProfile\(null\);[\s\S]*?setLoading\(false\)/);
+  assert.match(authEvents, /authSubjectRef\.current = null;\s*currentRouteFence\.invalidate\(null\);\s*setSession\(null\)/);
   assert.match(authEvents, /if \(!currentRouteFence\.isCurrent\(eventToken, authSubjectRef\.current \?\? null\)\) return/);
 });
