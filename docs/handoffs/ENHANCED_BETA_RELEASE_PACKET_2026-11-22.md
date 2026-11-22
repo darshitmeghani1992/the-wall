@@ -1,3 +1,9 @@
+## 23 Nov 2026 — DEFNER least-privilege regression (draft #180; no beta GO)
+
+After #179 final [CI 45067236742 passed 4/4](https://github.com/darshitmeghani1992/the-wall/actions/runs/45067236742), child [draft #180](https://github.com/darshitmeghani1992/the-wall/pull/180) introduces test-only disposable PostgreSQL guard for anonymous SECURITY DEFINER EXECUTE and missing function-local search paths; source `d0e6910c5a384f1c9acda8bfc4db783605944034`, tree `1e22185c1abe8d5a81ef0456257a7b11eab35dd9`. Check exact source and documentation-head CI; this is not runtime JWT/three-user proof or independent Reviewer/QA. Rollback is leaving this draft unmerged; no hosted change occurred. Staging 0 Auth users, no cron; media/Secret/analytics OFF, deletion 0031 held. Enhanced Beta **NO-GO**.
+
+---
+
 ## 23 Nov 2026 — exact source regression and rollback evidence (draft #179)
 
 The disposable owner-transfer privacy regression for removal roster history was corrected after a CI DB fixture-ordering failure: first source `3ca59c75ec2947d78cb3864ad55e1aa278db91d3` [failed DB 45066822867](https://github.com/darshitmeghani1992/the-wall/actions/runs/45066822867); follow-up flushes fixture deferred constraints before transfer, with assertions intact. Corrected source `d5ae118061f43e6d176a03df58447bd92811f315` / tree `f6808569c7c7ef2cbb71ac859fba0fd413307bc1` [passed all 4 CI jobs 45066983465](https://github.com/darshitmeghani1992/the-wall/actions/runs/45066983465). Subsequent docs-head CI still requires exact verification. Reversion is simply not integrating draft #179; no hosted modifications were made. Read-only staging remains 0 Auth users, 35/35 RLS public tables, no Secret scheduler. Real JWT/HTTP/OTP, private media C2/C3, deletion 0031, independent Reviewer and device QA remain absent. Secret/media/analytics OFF, held domain/Apple unchanged; **Enhanced Beta NO-GO**.
