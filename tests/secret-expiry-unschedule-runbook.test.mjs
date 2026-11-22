@@ -35,3 +35,26 @@ test('only the exact expiry job can be stopped after cron and rollout sanity che
   assert.match(sql, /SELECT cron\.unschedule\(jobid\)[\s\S]*?WHERE jobname = 'the-wall-expire-secret-marks-v1'/);
   assert.match(sql, /STAGING \/ DEVOPS ROLLBACK RUNBOOK ONLY/);
 });
+
+test('a missing rollout singleton cannot silently authorize cron shutdown', () => {
+  const disableGuard = sql.indexOf('DO $disable_guard$');
+  const disableCommit = sql.indexOf('COMMIT;', disableGuard);
+  const transaction2 = sql.indexOf('BEGIN;', disableCommit);
+  const unscheduleGuard = sql.indexOf('DO $unschedule_guard$', transaction2);
+  const unschedule = sql.indexOf('SELECT cron.unschedule(jobid)');
+  assert.ok(disableGuard >= 0 && disableGuard < disableCommit && disableCommit < transaction2);
+  assert.ok(unscheduleGuard > transaction2 && unschedule > unscheduleGuard);
+  const missingGuards = sql.match(/RAISE EXCEPTION 'TW_SECRET_ROLLOUT_ROW_MISSING'/g) ?? [];
+  assert.equal(missingGuards.length, 2, 'both stages must refuse an absent or malformed singleton');
+  assert.match(sql, /\(SELECT count\(\*\) FROM public\.secret_mark_rollout\s+WHERE singleton AND NOT enabled\) <> 1/);
+});
+
+test('the Secret rollout switch cannot flip during final backlog and cron checks', () => {
+  const stage2 = sql.indexOf('BEGIN;', sql.indexOf('COMMIT;') + 1);
+  const rolloutLock = sql.indexOf('LOCK TABLE public.secret_mark_rollout IN SHARE ROW EXCLUSIVE MODE', stage2);
+  const marksLock = sql.indexOf('LOCK TABLE public.marks IN SHARE ROW EXCLUSIVE MODE', stage2);
+  const secretsLock = sql.indexOf('LOCK TABLE public.mark_secrets IN SHARE ROW EXCLUSIVE MODE', stage2);
+  const guard = sql.indexOf('DO $unschedule_guard$', stage2);
+  assert.ok(stage2 >= 0 && rolloutLock > stage2 && marksLock > rolloutLock);
+  assert.ok(secretsLock > marksLock && guard > secretsLock);
+});
