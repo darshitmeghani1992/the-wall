@@ -17,6 +17,13 @@ INSERT INTO public.wall_members(wall_id,user_id,role,status) VALUES
  ('75000000-0000-4000-8000-000000000001',
   '88888888-8888-8888-8888-888888888888','member','accepted');
 
+-- Flush fixture INSERT events while O still owns the Wall and G is still
+-- accepted. Otherwise deferred triggers replay the historical B/G INSERT
+-- after B becomes owner and G is removed, misclassifying correct final state.
+-- Restore deferral so the real owner-transfer invariant is checked below.
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+
 SET LOCAL ROLE authenticated;
 SET LOCAL "test.uid"='44444444-4444-4444-4444-444444444444'; -- actual owner O
 DO $$
