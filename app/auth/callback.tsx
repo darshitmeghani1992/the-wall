@@ -11,19 +11,36 @@ import { colors, markColors } from "@/theme";
  */
 export default function AuthCallback() {
   const router = useRouter();
-  const { code } = useLocalSearchParams<{ code?: string }>();
+  const { code } = useLocalSearchParams<{ code?: string | string[] }>();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
+    // An old redirect cannot navigate after the callback route is replaced.
+    let active = true;
+    const completeSignIn = async () => {
       try {
-        if (code) await supabase.auth.exchangeCodeForSession(String(code));
-      } catch (e: any) {
-        setError(e?.message ?? "Sign-in link expired. Please try again.");
-        return;
+        if (typeof code === "string" && code.length > 0) {
+          // Supabase AuthErrors often arrive in the result rather than throwing.
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        } else {
+          // A valid existing session can arrive here without an OAuth code.
+          // Never treat a missing/invalid code as a successful login.
+          const { data, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) throw sessionError;
+          if (!data.session) throw new Error("Sign-in link missing or expired. Please try again.");
+        }
+        if (active) router.replace("/");
+      } catch (e: unknown) {
+        if (active) {
+          setError(e instanceof Error ? e.message : "Sign-in link expired. Please try again.");
+        }
       }
-      router.replace("/");
-    })();
+    };
+    void completeSignIn();
+    return () => {
+      active = false;
+    };
   }, [code, router]);
 
   return (
