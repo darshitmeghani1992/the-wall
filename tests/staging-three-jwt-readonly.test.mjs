@@ -163,7 +163,7 @@ test('accepts legacy anon JWT-shaped public key only with anon role', async () =
   const mock = fakeNetwork({ apiKey: key });
   const result = await runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, mock.handler);
   assert.equal(result.status, 'PASS');
-  assert.equal(mock.calls.length, 6);
+  assert.equal(mock.calls.length, 7);
 });
 
 test('refuses mismatched, expired and privileged actor claims before HTTP', async () => {
