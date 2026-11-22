@@ -1,5 +1,10 @@
 # The-Wall Decision Log
 
+## D-39 · 2026-11-22 · Reaction offline retry on app foreground
+- **Trigger:** Failed initial reaction-summary requests abandon claim leases but may never retry when their `marks` and `userId` dependencies stay unchanged as the user returns from offline/background.
+- **Decision (ARCHITECT → FRONTEND):** Use built-in React Native AppState (no new dependency); on inactive/background→active, invalidate older reaction read epochs, clear tracker claims and trigger a fresh visible-Mark batch without clearing pending mutation leases. Preserve fail-closed actor/session epoch guards. No claim to detect connectivity changes while app remains active.
+- **Status:** [Draft #172](https://github.com/darshitmeghani1992/the-wall/pull/172), source+contract tests; full unchanged-head CI/independent Reviewer/device QA required. Staging-only, no hosted writes/merges/deployments. **Enhanced Beta NO-GO**.
+
 ## D-38 · 2026-11-22 · Prevent stale reaction reads from overriding later user intent
 - **Trigger:** Initial batch reads and realtime refreshes can resolve out of order after an optimistic reaction tap; a user-ID-only guard cannot detect account A→B→A session replay.
 - **Decision (ARCHITECT → FRONTEND):** Use a per-Mark read epoch incremented on each reaction mutation, plus a session epoch across account changes, for both initial batch and single-Mark result application. Ignore reads from older epochs or during an active reaction lease. Refresh server truth after releasing the exact settled lease; failed writes still roll back immediately when offline. This is a reversible client correctness fix within the approved reaction UX, not an authorization replacement or new product behavior.
