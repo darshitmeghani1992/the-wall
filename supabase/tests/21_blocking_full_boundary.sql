@@ -62,6 +62,99 @@ end $$;
 ROLLBACK;
 \echo '21 (cleanup + non-restoration)     : PASS  (accepted Shared membership preserved)'
 
+-- Two peers may retain accepted membership on a third person's Shared Wall
+-- after blocking one another, but must lose direct identity/reaction access.
+-- B and G are members of O's private wall; unlike the previous B-owned test,
+-- neither blocked peer owns this wall. This exercises the Master Spec §51 edge.
+BEGIN;
+reset role;
+insert into wall_members(wall_id,user_id,role,status) values
+ ('dddddddd-dddd-dddd-dddd-dddddddddddd',
+  '88888888-8888-8888-8888-888888888888','member','accepted');
+set local role authenticated;
+set local "test.uid"='22222222-2222-2222-2222-222222222222'; -- B, existing accepted member
+do $$ declare posted jsonb; begin
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
+     or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
+    raise exception '21 FAIL: peer B cannot access the pre-block Shared Wall';
+  end if;
+  posted:=create_mark(
+    '21000000-0000-4000-8000-000000000021',
+    'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    'text','Shared peer Mark',null,false,false,0,'{}'::uuid[]);
+  if posted->>'status'<>'created' then
+    raise exception '21 FAIL: peer B Mark creation failed %',posted;
+  end if;
+  perform set_config('test.shared_peer_mark',posted->>'mark_id',true);
+end $$;
+set local "test.uid"='88888888-8888-8888-8888-888888888888'; -- G, newly accepted peer
+do $$ begin
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
+     or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
+    raise exception '21 FAIL: peer G cannot access the pre-block Shared Wall';
+  end if;
+  insert into mark_reactions(mark_id,user_id,emoji)
+    values(current_setting('test.shared_peer_mark')::uuid,auth.uid(),'❤️');
+end $$;
+-- G blocks peer B. Neither is the owner O, so their shared memberships stay.
+insert into blocks(blocker_id,blocked_id)
+  values(auth.uid(),'22222222-2222-2222-2222-222222222222');
+do $$ declare denied boolean:=false; begin
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
+     or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
+    raise exception '21 FAIL: peer G lost independent third-party Shared Wall access';
+  end if;
+  if exists(select 1 from wall_members
+      where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+        and user_id='22222222-2222-2222-2222-222222222222') then
+    raise exception '21 FAIL: peer G can enumerate blocked co-member B';
+  end if;
+  if exists(select 1 from profiles
+      where id='22222222-2222-2222-2222-222222222222') then
+    raise exception '21 FAIL: peer G can read blocked peer B profile';
+  end if;
+  if exists(select 1 from mark_reactions
+      where mark_id=current_setting('test.shared_peer_mark')::uuid
+        and user_id=auth.uid()) then
+    raise exception '21 FAIL: old blocked-pair reaction was not purged';
+  end if;
+  if current_user_can_react(current_setting('test.shared_peer_mark')::uuid) then
+    raise exception '21 FAIL: blocked peer G is still reaction-eligible';
+  end if;
+  begin
+    insert into mark_reactions(mark_id,user_id,emoji)
+      values(current_setting('test.shared_peer_mark')::uuid,auth.uid(),'🔥');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then
+    raise exception '21 FAIL: blocked peer G reacted to B despite block';
+  end if;
+end $$;
+set local "test.uid"='22222222-2222-2222-2222-222222222222';
+do $$ begin
+  if not current_user_can_view_wall('dddddddd-dddd-dddd-dddd-dddddddddddd')
+     or not current_user_can_contribute('dddddddd-dddd-dddd-dddd-dddddddddddd') then
+    raise exception '21 FAIL: peer B lost independent third-party Shared Wall access';
+  end if;
+  if exists(select 1 from wall_members
+      where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+        and user_id='88888888-8888-8888-8888-888888888888') then
+    raise exception '21 FAIL: peer B can enumerate blocked co-member G';
+  end if;
+end $$;
+reset role;
+do $$ begin
+  if (select count(*) from wall_members
+      where wall_id='dddddddd-dddd-dddd-dddd-dddddddddddd'
+        and user_id in (
+         '22222222-2222-2222-2222-222222222222',
+         '88888888-8888-8888-8888-888888888888')
+        and status='accepted')<>2 then
+    raise exception '21 FAIL: accepted co-membership was destroyed by peer block';
+  end if;
+end $$;
+ROLLBACK;
+\echo '21 (blocked accepted Shared peers): PASS  (membership kept; direct interaction denied)'
+
 -- Public visibility never bypasses a block; profiles/search are bilateral too.
 BEGIN;
 set local role authenticated; set local "test.uid"='33333333-3333-3333-3333-333333333333'; -- blocked by O
