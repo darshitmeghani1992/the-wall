@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-24 · 2026-11-22 · Add runtime staging origin guard for client outside EAS
+- **Trigger:** EAS pre-install and read-only staging preflight now enforce the approved project, but `src/lib/config.ts` previously exported arbitrary EXPO_PUBLIC URL directly to `createClient`. A local Expo or non-EAS start could accidentally use the original production origin.
+- **Decision:** For the held staging-only beta, select Supabase runtime client settings only for `https://ewintxgdxdvschiqodkq.supabase.co`, allowing a trailing slash; otherwise export undefined so the existing inert localhost fallback is used. Refuse modern `sb_secret_*` in the client runtime. Keep the stronger legacy JWT role/ref validation before EAS builds and HTTP preflight, and do not misrepresent the client-side filter as complete legacy-key validation.
+- **Alternatives:** Rely only on EAS lifecycle hook (rejected, local Metro can bypass); auto-rewrite arbitrary origins (rejected, may hide misconfigured environments); touch original production (prohibited).
+- **Reversibility/gates:** Reversible staging-only client code and regression tests, draft #156, no hosted writes. Requires independent security Reviewer and runtime QA prior to release. Future production enablement needs an explicit separate authorized release decision, not removal of the guard as a side effect.
+
+
 ## D-23 · 2026-11-22 · Fail closed on privileged Supabase keys in all preview clients and probes
 - **Trigger:** Release train is staging-only. EAS and preflight accepted a nonempty key without rejecting modern `sb_secret_*` or, on the read-only preflight path, privileged/mismatched legacy role-bearing JWTs. Unsafe keys must not be bundled, logged, or sent over the network even for read-only checks.
 - **Decision:** Enforce public-key-only client settings: block `sb_secret_*` at common config validation and check legacy JWT role `anon` and exact approved staging project reference before any preflight HTTP. Preserve approved staging-only hostname from PR #153. Source-only changes staged in draft PR #155. Never print key values or URLs on EAS failure.
