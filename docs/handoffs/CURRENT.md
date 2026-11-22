@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-56 · Shared Wall delayed Leave Alert scoping — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** New isolated child of PR #139 immutable `251f2de4684469ab4ef2c76b0c80ff160d0d68a8`, branch `codex/beta-shared-leave-dialog-scope-20261122-automation6`, source commit `ed7dd5303535c81f1db8f0261781722ebc0c702f` / tree `39ab98e919306eab78c4f80b39277d32ae4de76e`. Native Leave confirmation now carries a focus token plus exact Wall guard to reject a stale destructive callback after A→B, route X→Y or blur; backend membership authority unchanged. New source/lease regression test; final CI, independent Reviewer and behavioral device QA pending. **NO-GO.** No hosted mutation, branch merge, deployment, original production access or held external setup.
+
+**Next:** Verify current SHA CI and independent native QA, then continue unblocked tasks from `docs/BUILD_STATUS.md`. Real OTP/3 JWT actors, private media, Secret hourly expiry, 0031 deletion and rollback/Founder GO remain unresolved.
+
 ## CURRENT BETA-P0-55 · Shared Wall create draft actor isolation — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of #138 exact `d36dcab24f1744eeb38b1e1a69330074bc0cc047`, new branch `codex/beta-shared-create-actor-draft-20261122-automation6`, source `2e4c242f02e8caa48c4bd5ba9c01708b5b63ec72` / tree `c60d1723a68dcaa9f10db8c65eadc7f40ebd1ede`. Create Shared Wall title/visibility/Anonymous/Open Join drafts now live inside a session-keyed editor, instead of leaking A's local form state during B's new sign-in. Existing create mutation fence retained, no backend or protected infrastructure changes. New contract test `tests/frontend-shared-create-actor-draft.test.mjs`, exact final CI pending, independent REVIEWER/behavioral QA not yet done. Enhanced Beta **NO-GO**; staging-only, no deploy/merge.
