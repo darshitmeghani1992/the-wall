@@ -53,7 +53,7 @@ function fakeNetwork(options = {}) {
     assert.equal(init.redirect, 'error');
     assert.equal(init.headers.apikey, options.apiKey || base.TW_STAGING_ANON_KEY);
     assert.equal(new URL(url).origin, HOST);
-    const token = init.headers.Authorization.replace(/^Bearer /, '');
+    const token = init.headers.Authorization?.replace(/^Bearer /, '') ?? init.headers.apikey;
     if (options.http401) return { status: 401 };
     if (url.includes('/auth/v1/user')) {
       return {
@@ -66,6 +66,18 @@ function fakeNetwork(options = {}) {
     assert.equal(new URL(url).searchParams.get('select'), 'id,type,visibility');
     const isOutsider = token === base.TW_OUTSIDER_JWT;
     const isAnonymous = token === (options.apiKey || base.TW_STAGING_ANON_KEY);
+    if (isAnonymous) {
+      // The read-only anon probe must reach RLS through a valid app key.
+      // A modern publishable key is not a JWT: sending it as Bearer can
+      // yield an unrelated 401, falsely satisfying the negative check.
+      if (init.headers.apikey.startsWith('sb_publishable_')) {
+        assert.equal(init.headers.Authorization, undefined);
+      } else {
+        assert.equal(init.headers.Authorization, 'Bearer ' + init.headers.apikey);
+      }
+    } else {
+      assert.equal(init.headers.Authorization, 'Bearer ' + token);
+    }
     if (isAnonymous && options.anonStatus) return { status: options.anonStatus };
     if (isAnonymous && options.anonMalformed) return { status: 200, json: async () => ({}) };
     const rows = ((isOutsider && !options.leak) ||
@@ -85,6 +97,11 @@ test('seven read-only staging GETs: owner/member allowed, outsider and anonymous
   assert.deepEqual(result, { status: 'PASS', httpRequests: 7, actorCount: 3, readOnly: true });
   assert.equal(mock.calls.length, 7);
   assert.ok(mock.calls.every(([, init]) => init.method === 'GET'));
+  // Authenticated actor requests retain the real user-JWT Authorization;
+  // only the separate anonymous check omits a modern public-key Bearer.
+  assert.equal(mock.calls[0][1].headers.Authorization, 'Bearer ' + base.TW_OWNER_JWT);
+  assert.equal(mock.calls[1][1].headers.Authorization, 'Bearer ' + base.TW_OWNER_JWT);
+  assert.equal(mock.calls[6][1].headers.Authorization, undefined);
 });
 
 test('fails before network on production, wrong protocol or alternate host', async () => {
@@ -164,6 +181,7 @@ test('accepts legacy anon JWT-shaped public key only with anon role', async () =
   const result = await runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, mock.handler);
   assert.equal(result.status, 'PASS');
   assert.equal(mock.calls.length, 7);
+  assert.equal(mock.calls.at(-1)[1].headers.Authorization, 'Bearer ' + key);
 });
 
 test('refuses mismatched, expired and privileged actor claims before HTTP', async () => {
@@ -210,7 +228,8 @@ test('fails if the public anonymous key can read the same private Shared Wall', 
     /Private Shared Wall visible without authentication/);
   assert.equal(mock.calls.length, 7);
   const [, request] = mock.calls.at(-1);
-  assert.equal(request.headers.Authorization, 'Bearer ' + base.TW_STAGING_ANON_KEY);
+  assert.equal(request.headers.Authorization, undefined);
+  assert.equal(request.headers.apikey, base.TW_STAGING_ANON_KEY);
   assert.equal(request.redirect, 'error');
 });
 
