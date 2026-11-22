@@ -33,11 +33,17 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
   // One optimistic reaction write per Mark at a time. Lease identity prevents
   // a stale actor/request finally from releasing a newer actor's in-flight write.
   const mutationLeases = useRef(new Map<string, symbol>());
+  // A read begun before a tap must never overwrite that tap after it resolves.
+  // Track a per-Mark epoch as well as the account session (including A → B → A).
+  const readEpochs = useRef(new Map<string, number>());
+  const sessionEpoch = useRef(0);
   const requestedUserId = useRef(userId ?? null);
   const currentUserId = useRef(userId ?? null);
   currentUserId.current = userId ?? null;
 
   useEffect(() => {
+    sessionEpoch.current += 1;
+    readEpochs.current.clear();
     requestedUserId.current = userId ?? null;
     requested.current.clear();
     mutationLeases.current.clear();
@@ -46,9 +52,18 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
 
   const refresh = useCallback(
     async (markId: string) => {
+      const sessionAtStart = sessionEpoch.current;
+      const readEpochAtStart = readEpochs.current.get(markId) ?? 0;
       const summary = await getReactionSummary(markId, userId);
-      if (currentUserId.current !== (userId ?? null)) return;
-      setSummaries((cur) => ({ ...cur, [markId]: summary }));
+      setSummaries((cur) => {
+        if (
+          currentUserId.current !== (userId ?? null) ||
+          sessionEpoch.current !== sessionAtStart ||
+          (readEpochs.current.get(markId) ?? 0) !== readEpochAtStart ||
+          mutationLeases.current.has(markId)
+        ) return cur;
+        return { ...cur, [markId]: summary };
+      });
     },
     [userId],
   );
@@ -61,11 +76,23 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
 
     let active = true;
     let completed = false;
+    const sessionAtStart = sessionEpoch.current;
+    const readEpochsAtStart = new Map(ids.map((id) => [id, readEpochs.current.get(id) ?? 0]));
     getReactionSummaries(ids, userId)
       .then((map) => {
         if (active && currentUserId.current === (userId ?? null)) {
           completed = true;
-          setSummaries((cur) => ({ ...cur, ...map }));
+          setSummaries((cur) => {
+            if (sessionEpoch.current !== sessionAtStart) return cur;
+            const fresh: Record<string, ReactionSummary> = {};
+            for (const [id, summary] of Object.entries(map)) {
+              if (
+                !mutationLeases.current.has(id) &&
+                (readEpochs.current.get(id) ?? 0) === readEpochsAtStart.get(id)
+              ) fresh[id] = summary;
+            }
+            return Object.keys(fresh).length ? { ...cur, ...fresh } : cur;
+          });
         }
       })
       .catch(() => {
@@ -103,6 +130,7 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
       if (!userId || currentUserId.current !== userId || mutationLeases.current.has(markId)) return;
       const lease = Symbol(markId);
       mutationLeases.current.set(markId, lease);
+      readEpochs.current.set(markId, (readEpochs.current.get(markId) ?? 0) + 1);
       const current = summariesRef.current[markId] ?? EMPTY;
       const prev = current.mine; // the user's single active reaction, or null
       const wasOn = prev === emoji;
@@ -126,13 +154,17 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
         .catch(() => {
           if (currentUserId.current !== userId || mutationLeases.current.get(markId) !== lease) return;
           setSummaries((cur) => ({ ...cur, [markId]: current }));
-          void refresh(markId).catch(() => {
-            // Offline refetch failure must not leave an unhandled rejection.
-            // The last confirmed pre-tap state remains visible; retry on tap/focus.
-          });
         })
         .finally(() => {
-          if (mutationLeases.current.get(markId) === lease) mutationLeases.current.delete(markId);
+          if (mutationLeases.current.get(markId) !== lease) return;
+          mutationLeases.current.delete(markId);
+          // Reconcile *after* releasing the lease: otherwise a response may be
+          // discarded while the optimistic write is still in flight. This also
+          // recovers a skipped initial load on both success and failure.
+          void refresh(markId).catch(() => {
+            // Offline refetch failure must not leave an unhandled rejection.
+            // A rejected write has already restored the pre-tap summary.
+          });
         });
     },
     [refresh, userId],
