@@ -1,3 +1,9 @@
+## 23 Nov 2026 — Alert navigation fail-closed regression (draft #181, PREP only)
+
+Isolated [draft #181](https://github.com/darshitmeghani1992/the-wall/pull/181) adds canonical UUID checks and ten contract assertions so malformed Alert references cannot construct injected destination paths or focused-Mark query strings. Source `ca46dbbdb3b07ca0b6f9552d799ff405867a1703`; [initial CI 45073187558](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073187558) check result plus fresh final documentation-head CI still needed. DB typed UUID fields mean this is preventative client defense, not a confirmed live exploit or hosted authorization evidence. Rollback: do not integrate the draft or revert its two source/test commits on a reviewed candidate. No hosted state changed. Independent Reviewer/behavioral device QA and all Enhanced Beta launch blockers remain. **NO-GO**.
+
+---
+
 ## 23 Nov 2026 — DEFNER least-privilege regression (draft #180; no beta GO)
 
 After #179 final [CI 45067236742 passed 4/4](https://github.com/darshitmeghani1992/the-wall/actions/runs/45067236742), child [draft #180](https://github.com/darshitmeghani1992/the-wall/pull/180) introduces test-only disposable PostgreSQL guard for anonymous SECURITY DEFINER EXECUTE and missing function-local search paths; source `d0e6910c5a384f1c9acda8bfc4db783605944034`, tree `1e22185c1abe8d5a81ef0456257a7b11eab35dd9`. Check exact source and documentation-head CI; this is not runtime JWT/three-user proof or independent Reviewer/QA. Rollback is leaving this draft unmerged; no hosted change occurred. Staging 0 Auth users, no cron; media/Secret/analytics OFF, deletion 0031 held. Enhanced Beta **NO-GO**.

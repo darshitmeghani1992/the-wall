@@ -1,3 +1,11 @@
+## CURRENT · BETA-P0-95 · Alert destination UUID safety — 23 Nov 2026
+
+**ARCHITECT → FRONTEND:** isolated [draft #181](https://github.com/darshitmeghani1992/the-wall/pull/181) from #180 final exact `89a72b5d5918f7d05a5f303f2e48658681c6a972` (CI 45067509529 4/4). Source/test `ca46dbbdb3b07ca0b6f9552d799ff405867a1703`: canonical UUID guards for Alert actor/Wall/owner/focused Mark route parameters; malformed IDs no longer compose arbitrary nested paths or query strings, fall back to Discover/Alerts or omit bad Mark focus. Ten new pure route assertions. [Source CI 45073187558](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073187558) triggered; inspect final result and **repeat exact documentation-head CI**. No independent Reviewer or installed-device QA, so no merge/deploy readiness.
+
+Fresh staging SELECT-only (`ewintxgdxdvschiqodkq`): 0 Auth users, 0 Walls, 0 Marks, public RLS 35/35, private mark-media, pg_cron absent. 3-JWT HTTP/SQL, six-digit SMTP, C2/C3 playback, Secret expiry, deletion 0031/worker, Reviewer/QA still open; #177 Founder/Product gate open. Original production untouched. No hosted writes/merges/deployments/Apple/domain/tester invites. Media/Secret/analytics OFF. **Enhanced Beta NO-GO.** Resume at `docs/BUILD_STATUS.md` BETA-P0-95.
+
+---
+
 ## CURRENT · BETA-P0-94 · Global SECURITY DEFINER anonymous-surface regression — 23 Nov 2026
 
 **ARCHITECT → BACKEND:** new isolated [draft #180](https://github.com/darshitmeghani1992/the-wall/pull/180) child of #179 exact `f76a7d6b04beef3df6b87c6683d1e6971bfd1129` ([parent exact-head CI 45067236742 4/4 passed](https://github.com/darshitmeghani1992/the-wall/actions/runs/45067236742)). Adds `76_definer_anonymous_catalog_guard.sql` and runner registration. Fails disposable PostgreSQL if future public SECURITY DEFINER gains anon EXECUTE or lacks explicit `search_path`, checking non-vacuous 20+ authenticated direct functions. Source `d0e6910c5a384f1c9acda8bfc4db783605944034`, tree `1e22185c1abe8d5a81ef0456257a7b11eab35dd9`; inspect source and final documentation-head 4-job CI, independently review. Not runtime authorization proof; no Reviewer or device QA.

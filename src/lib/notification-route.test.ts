@@ -62,4 +62,50 @@ assert.equal(
   "/(tabs)/alerts",
 );
 
-console.log("notification route contract: 11 destination boundaries passed");
+// Never turn malformed/stale notification references into a nested route,
+// alternate query parameter, or an unverified destination. Valid Wall routes
+// can still open without a malformed focused-Mark parameter.
+assert.equal(
+  notificationRoute(row({ kind: "friend_accept", actor_id: "../settings?private=1" })),
+  "/(tabs)/discover",
+);
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_invite", wall_id: "bad/../other" })),
+  "/(tabs)/alerts",
+);
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_invite_accepted", wall_id: "not-uuid" })),
+  "/(tabs)/alerts",
+);
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_mark", wall_id: "bad?id=1" })),
+  "/(tabs)/alerts",
+);
+assert.equal(
+  notificationRoute(row({ kind: "shared_wall_mark", wall_type: "shared", mark_id: "1&secret=yes" })),
+  `/shared/${WALL}`,
+);
+assert.equal(
+  notificationRoute(row({ wall_type: "shared", wall_id: "../person/abc" })),
+  "/(tabs)/alerts",
+);
+assert.equal(
+  notificationRoute(row({ wall_owner_id: "owner?focusMark=wrong" })),
+  "/(tabs)/alerts",
+);
+assert.equal(
+  notificationRoute(row({ mark_id: "abc&secret=true" })),
+  "/(tabs)/home",
+);
+assert.equal(
+  notificationRoute(row({ kind: "friend_accepted", actor_id: OTHER_OWNER.toUpperCase() })),
+  `/person/${OTHER_OWNER.toUpperCase()}`,
+  "case-insensitive UUID references remain usable",
+);
+assert.equal(
+  notificationRoute(row({ wall_type: "personal", user_id: "bad", wall_owner_id: OTHER_OWNER })),
+  `/person/${OTHER_OWNER}?focusMark=${MARK}`,
+  "a valid wall owner can still route to its profile when recipient metadata is missing",
+);
+
+console.log("notification route contract: 21 destination boundaries passed");
