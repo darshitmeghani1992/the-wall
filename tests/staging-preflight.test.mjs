@@ -26,6 +26,10 @@ test('all required healthy endpoints pass without accessing row bodies', async (
   assert.equal(result.ready, true);
   assert.equal(seen.length, requiredChecks.length);
   assert(seen.every(([url, options]) => url.startsWith('https://ewintxgdxdvschiqodkq.supabase.co/') && options.method === 'GET' && options.redirect === 'error'));
+  assert(seen.every(([, options]) =>
+    options.headers.apikey === 'sb_publishable_mock_for_tests' &&
+    options.headers.Authorization === undefined),
+  'all modern publishable probes must exercise anonymous RLS without an invalid JWT bearer');
 });
 
 test('staging probes never follow redirects or carry public keys to another origin', async () => {
@@ -37,7 +41,7 @@ test('staging probes never follow redirects or carry public keys to another orig
     assert.equal(new URL(url).origin, origin);
     assert.equal(options.redirect, 'error', 'never forward the apikey header through a redirect');
     assert.equal(options.headers.apikey, key);
-    assert.equal(options.headers.Authorization, `Bearer ${key}`);
+    assert.equal(options.headers.Authorization, undefined, 'modern publishable key is not a JWT');
     // A malicious Location must not be fetched or interpreted as success.
     return { status: 302, headers: { get: () => 'https://foreign.example/collect' }, json: async () => ({}) };
   };
@@ -173,4 +177,28 @@ test('staging preflight rejects unknown opaque API keys before any HTTP request'
     );
   }
   assert.equal(networkCalls, 0);
+});
+
+
+test('legacy staging anon JWT remains a Bearer on read-only preflight requests', async () => {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ role: 'anon', ref: 'ewintxgdxdvschiqodkq' })).toString('base64url');
+  const legacy = `${header}.${payload}.mock-signature`;
+  const seen = [];
+  const result = await verifyStagingBackend({
+    url: APPROVED_STAGING_ORIGIN,
+    key: legacy,
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return { status: url.includes('mark_secrets?') || url.includes('mark_media?') ||
+          url.includes('secret_mark_rollout?') ? 403 : 200 };
+    },
+  });
+  assert.equal(result.ready, true);
+  assert.equal(seen.length, requiredChecks.length);
+  assert(seen.every(({ url, options }) =>
+    new URL(url).origin === APPROVED_STAGING_ORIGIN &&
+    options.method === 'GET' && options.redirect === 'error' &&
+    options.headers.apikey === legacy &&
+    options.headers.Authorization === 'Bearer ' + legacy));
 });

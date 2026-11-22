@@ -96,7 +96,13 @@ export async function verifyStagingBackend({ url, key, fetchImpl = fetch }) {
         // A redirected probe could forward its public API key to an unapproved
         // host. The HTTP audit must never follow even a temporary redirect.
         redirect: 'error',
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        // Publishable API keys are app keys, not JWTs; sending them as
+        // Bearer may trigger "Invalid JWT" instead of exercising anon RLS.
+        // Legacy anon keys remain JWT bearer credentials for compatibility.
+        headers: {
+          apikey: key,
+          ...(key.startsWith('sb_publishable_') ? {} : { Authorization: `Bearer ${key}` }),
+        },
         signal: AbortSignal.timeout(10000),
       });
       let errorCode = '';

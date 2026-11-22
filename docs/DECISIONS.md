@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-31 · 2026-11-22 · Separate modern publishable API key from a user JWT on anonymous staging checks
+- **Trigger:** Read-only preflight and the seventh private Shared Wall HTTP negative check used `Authorization: Bearer sb_publishable_...` on unauthenticated requests. Supabase's modern publishable keys are not JWTs; an invalid-JWT 401 might be incorrectly counted as private RLS denial, rather than checking the `anon` database role. See https://supabase.com/docs/guides/getting-started/api-keys and https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys.
+- **Decision (BACKEND, architect sequenced):** For modern publishable-key anonymous read-only calls, use `apikey` only. Preserve `Authorization: Bearer <legacy anon JWT>` for verified legacy public keys, and use the actual verified actor JWT as Bearer on authenticated calls. Keep exact staging origin and redirect rejection, table/response checks, approval gates and no-secret logging unchanged.
+- **Gates:** Draft #164 source+mock tests only. A green CI badge never certifies true hosted anonymous RLS or three-user access control; independently review, run authorized real HTTP and SQL checks, and hold media/Secret/deletion/Apple/domain/production gates. **Enhanced Beta NO-GO.**
+
+
 ## D-30 · 2026-11-22 · Treat public-anonymous private-Wall access as a distinct HTTP denial gate
 - **Trigger:** The opt-in staging three-JWT audit proved (when genuinely executed) authenticated owner/member access and outsider isolation but omitted a separate anonymous public-key read of the same private Shared Wall.
 - **Decision:** Require one additional GET using only a staging public anon/publishable key, exact private Wall filter and no redirect; accept a 401/403 or RLS-filtered empty 200 array, fail on any row, malformed 200 response or unexpected HTTP status. The prior three authenticated identities must first pass real Auth HTTP identity checks.
