@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-23 · 2026-11-22 · Fail closed on privileged Supabase keys in all preview clients and probes
+- **Trigger:** Release train is staging-only. EAS and preflight accepted a nonempty key without rejecting modern `sb_secret_*` or, on the read-only preflight path, privileged/mismatched legacy role-bearing JWTs. Unsafe keys must not be bundled, logged, or sent over the network even for read-only checks.
+- **Decision:** Enforce public-key-only client settings: block `sb_secret_*` at common config validation and check legacy JWT role `anon` and exact approved staging project reference before any preflight HTTP. Preserve approved staging-only hostname from PR #153. Source-only changes staged in draft PR #155. Never print key values or URLs on EAS failure.
+- **Alternative rejected:** Rely exclusively on server enforcement or read-only intent to tolerate service-role/secret credentials; doing so could disclose a high-privilege key in a distributed Expo binary or CI request headers.
+- **Reversibility / gate:** Easily reversible test+tooling code, but weakening it would need explicit authorized environment and security review. No live credentials read or changed, no new provider/Auth/hosted policy. Independent Reviewer and QA, CI and release authorization remain required.
+
+
 ## D-22 · 2026-11-21 · Stage real-JWT privacy smoke without creating accounts or leaking tokens
 - **Purpose:** BETA-P0-04 distinguishes synthetic SQL role tests from actual authenticated HTTP JWT boundary checks. Pre-existing authorized staging accounts are required; current staging has none.
 - **Decision:** Build a **read-only**, opt-in Node test utility that verifies three distinct actor IDs via Auth `/user` and checks private Shared-Wall visibility for owner, permitted member and unrelated outsider using six GETs. Hard-code only the approved staging host; reject original production, missing opt-in, repeated actors, 401s, unexpected visibility; never log tokens or response bodies. Mock it in ordinary CI with zero credentials.

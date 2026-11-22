@@ -25,6 +25,9 @@ export const requiredChecks = Object.freeze([
 
 export function validatePublicClientConfig(url, key) {
   if (typeof key !== 'string' || !key.trim()) throw new Error('Preview publishable/anon key missing');
+  // EXPO_PUBLIC_ values are embedded in the app bundle. Never accept a
+  // modern Supabase secret API key even for a read-only staging probe.
+  if (/^sb_secret_/i.test(key.trim())) throw new Error('Preview secret API key forbidden');
   if (typeof url !== 'string' || !url.trim()) throw new Error('Preview Supabase URL missing');
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error('Preview Supabase URL invalid'); }
@@ -74,6 +77,9 @@ export function classifyResult(check, status, errorCode = '') {
 export async function verifyStagingBackend({ url, key, fetchImpl = fetch }) {
   const origin = validatePublicClientConfig(url, key);
   assertApprovedStagingOrigin(origin);
+  // Refuse privileged/mismatched legacy JWTs before network I/O. A read-only
+  // probe is not permission to send service_role credentials over HTTP.
+  assertLegacyAnonKeyMatchesOrigin(origin, key);
   const result = [];
   for (const check of requiredChecks) {
     try {
