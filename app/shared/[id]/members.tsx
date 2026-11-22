@@ -14,11 +14,17 @@ import type { Wall } from "@/lib/types";
 import { colors, markColors } from "@/theme";
 
 export default function SharedWallMembersScreen() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const wallId = String(id ?? "");
   const { session } = useAuth();
-  const userId = session?.user.id;
+  const userId = session?.user.id ?? null;
+  // A new actor or destination must not inherit previously loaded membership
+  // identities or an old invitation-search draft before focus effects run.
+  return <SharedWallMembersEditor key={JSON.stringify([userId, wallId])} userId={userId} wallId={wallId} />;
+}
+
+function SharedWallMembersEditor({ userId, wallId }: { userId: string | null; wallId: string }) {
+  const router = useRouter();
   const [wall, setWall] = useState<Wall | null>(null);
   const [members, setMembers] = useState<WallMemberWithProfile[]>([]);
   const [removed, setRemoved] = useState<RemovedWallMember[]>([]);
@@ -109,10 +115,18 @@ export default function SharedWallMembersScreen() {
   }
 
   function confirmRemove(member: WallMemberWithProfile) {
+    if (!userId || !isOwner || busyId || mutationInFlight.current) return;
+    // React Native's native alert can remain open after this screen unmounts.
+    // Invalidate its destructive callback on blur, sign-out or account switch.
+    const confirmationToken = mutationFence.begin(userId);
+    if (!confirmationToken) return;
     const name = member.profile?.display_name ?? "this person";
     Alert.alert(member.status === "pending" ? `Revoke ${name}'s invitation?` : `Remove ${name}?`, member.status === "accepted" ? "They won't be able to rejoin through Open Join. You can invite them back later." : "They will no longer be able to accept this invitation.", [
       { text: "Cancel", style: "cancel" },
-      { text: member.status === "pending" ? "Revoke" : "Remove", style: "destructive", onPress: () => void remove(member.user_id) },
+      { text: member.status === "pending" ? "Revoke" : "Remove", style: "destructive", onPress: () => {
+        if (!mutationFence.isCurrent(confirmationToken, currentUserId.current)) return;
+        void remove(member.user_id);
+      } },
     ]);
   }
 
@@ -140,10 +154,16 @@ export default function SharedWallMembersScreen() {
   }
 
   function confirmTransfer(member: WallMemberWithProfile) {
+    if (!userId || !isOwner || busyId || mutationInFlight.current) return;
+    const confirmationToken = mutationFence.begin(userId);
+    if (!confirmationToken) return;
     const name = member.profile?.display_name ?? "this member";
     Alert.alert(`Make ${name} the owner?`, "You will become a member. Only the new owner can transfer or delete this Wall.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Transfer ownership", style: "destructive", onPress: () => void transfer(member.user_id) },
+      { text: "Transfer ownership", style: "destructive", onPress: () => {
+        if (!mutationFence.isCurrent(confirmationToken, currentUserId.current)) return;
+        void transfer(member.user_id);
+      } },
     ]);
   }
 
@@ -181,7 +201,7 @@ export default function SharedWallMembersScreen() {
           {isOwner && members.some((member) => member.status === "pending") ? <Section label={`PENDING · ${members.filter((member) => member.status === "pending").length}`}>{members.filter((member) => member.status === "pending").map((member) => <PersonRow key={member.user_id} profile={member.profile ?? unavailableProfile(member.user_id)} detail="Invited" action="Revoke" disabled={busyId === member.user_id} onAction={() => confirmRemove(member)} />)}</Section> : null}
           {isOwner && removed.length ? <Section label={`REMOVED · ${removed.length}`}>{removed.map((member) => <PersonRow key={member.user_id} profile={member.profile ?? unavailableProfile(member.user_id)} detail="Owner approval required" action={member.profile ? "Invite back" : undefined} disabled={busyId === member.user_id} onAction={member.profile ? () => void invite(member.user_id) : undefined} />)}</Section> : null}
         </>
-      ) : <Pressable accessibilityRole="button" onPress={() => void load()} style={{ minHeight: 48, justifyContent: "center" }}><Text variant="label">TRY AGAIN</Text></Pressable>}
+      ) : userId && wallId ? <Pressable accessibilityRole="button" onPress={() => void load()} style={{ minHeight: 48, justifyContent: "center" }}><Text variant="label">TRY AGAIN</Text></Pressable> : null}
     </Screen>
   );
 }
