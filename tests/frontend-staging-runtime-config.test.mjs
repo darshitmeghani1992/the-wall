@@ -61,3 +61,45 @@ test("Supabase client consumes only the fenced config exports", () => {
   assert.match(client, /createClient\(supabaseUrl \?\? "http:\/\/localhost"/);
   assert.doesNotMatch(client, /process\.env\.EXPO_PUBLIC_SUPABASE_URL/);
 });
+
+function mockLegacyKey(claims, signature = "unsigned-test-only") {
+  return [
+    Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+    Buffer.from(JSON.stringify(claims)).toString("base64url"),
+    signature,
+  ].join(".");
+}
+
+test("Expo runtime accepts a staging-matching legacy anon key without Node or browser base64 globals", () => {
+  const key = mockLegacyKey({
+    role: "anon",
+    ref: "ewintxgdxdvschiqodkq",
+    note: "Unicode-safe ☀",
+  });
+  assert.deepEqual(selectBetaClientConfig(staging, key), { url: staging, key });
+  // Legacy keys are locally decoded, not verified: the hosted server must still
+  // validate their signatures, and signed-device QA is required separately.
+  const source = readFileSync(new URL("../src/lib/config.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /\\bBuffer\\b|\\batob\\s*\\(/);
+});
+
+test("Expo runtime rejects opaque, privileged, foreign and malformed keys without EAS", () => {
+  const refused = [
+    "opaque-unclassified-key",
+    "sb_publishable_with space",
+    "SB_PUBLISHABLE_case_invalid",
+    mockLegacyKey({ role: "service_role", ref: "ewintxgdxdvschiqodkq" }),
+    mockLegacyKey({ role: "authenticated", ref: "ewintxgdxdvschiqodkq" }),
+    mockLegacyKey({ role: "anon", ref: "wfsfafmgvxevpzrurofz" }),
+    mockLegacyKey({ role: "anon", ref: "some-other-project" }),
+    mockLegacyKey({ role: "anon" }),
+    mockLegacyKey({ role: "anon", ref: null }),
+    mockLegacyKey({ role: "anon", ref: "ewintxgdxdvschiqodkq" }, "bad signature"),
+    "eyJhbGciOiJIUzI1NiJ9.!!invalid!!.signature",
+    "eyJhbGciOiJIUzI1NiJ9.e30.signature",
+    "eyJhbGciOiJIUzI1NiJ9.7w.signature",
+  ];
+  for (const key of refused) {
+    assert.deepEqual(selectBetaClientConfig(staging, key), disabled);
+  }
+});
