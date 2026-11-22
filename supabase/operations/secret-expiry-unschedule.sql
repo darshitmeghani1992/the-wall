@@ -12,6 +12,16 @@ BEGIN;
 UPDATE public.secret_mark_rollout
    SET enabled = false, updated_at = now()
  WHERE singleton;
+-- Missing/altered rollout rows are an inconsistent configuration, not an
+-- authorization to stop the one-hour cleanup timer.
+DO $disable_guard$
+BEGIN
+  IF (SELECT count(*) FROM public.secret_mark_rollout
+      WHERE singleton AND NOT enabled) <> 1 THEN
+    RAISE EXCEPTION 'TW_SECRET_ROLLOUT_ROW_MISSING';
+  END IF;
+END
+$disable_guard$;
 COMMIT;
 
 -- Stage 2: refuse to stop cleanup unless the backlog is empty. Locks keep a
@@ -20,6 +30,9 @@ COMMIT;
 -- transaction aborts and the cron job keeps running. Wait for deletion proof
 -- and retry only under the same release controls; never force-clear content.
 BEGIN;
+-- Hold the rollout flag stable through the backlog check and cron shutdown:
+-- otherwise a concurrent administrator can flip creation ON between checks.
+LOCK TABLE public.secret_mark_rollout IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE public.marks IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE public.mark_secrets IN SHARE ROW EXCLUSIVE MODE;
 
@@ -34,6 +47,10 @@ BEGIN
   IF (SELECT count(*) FROM cron.job
       WHERE jobname = 'the-wall-expire-secret-marks-v1') <> 1 THEN
     RAISE EXCEPTION 'TW_SECRET_EXPIRY_JOB_NOT_UNIQUE';
+  END IF;
+  IF (SELECT count(*) FROM public.secret_mark_rollout
+      WHERE singleton AND NOT enabled) <> 1 THEN
+    RAISE EXCEPTION 'TW_SECRET_ROLLOUT_ROW_MISSING';
   END IF;
   IF EXISTS (SELECT 1 FROM public.secret_mark_rollout
              WHERE singleton AND enabled) THEN
