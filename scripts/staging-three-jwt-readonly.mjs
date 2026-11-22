@@ -107,14 +107,14 @@ async function getJson(fetchImpl, url, apiKey, token) {
 
 export async function runStagingJwtAudit(env, fetchImpl = fetch) {
   const { actors, wallId, apiKey } = checkedConfig(env);
+  const wallUrl = new URL('/rest/v1/walls', STAGING);
+  wallUrl.searchParams.set('select', 'id,type,visibility');
+  wallUrl.searchParams.set('id', 'eq.' + wallId);
   for (const actor of actors) {
     const user = await getJson(fetchImpl, STAGING + '/auth/v1/user', apiKey, actor.jwt);
     if (!user || user.id !== actor.id) {
       throw new Error('Authenticated actor identity mismatch: ' + actor.role);
     }
-    const wallUrl = new URL('/rest/v1/walls', STAGING);
-    wallUrl.searchParams.set('select', 'id,type,visibility');
-    wallUrl.searchParams.set('id', 'eq.' + wallId);
     const rows = await getJson(fetchImpl, wallUrl.toString(), apiKey, actor.jwt);
     if (!Array.isArray(rows) || rows.length !== actor.expect ||
         (actor.expect === 1 && (rows[0]?.id !== wallId ||
@@ -122,7 +122,30 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
       throw new Error('Private Shared Wall RLS visibility mismatch: ' + actor.role);
     }
   }
-  return { status: 'PASS', httpRequests: 6, actorCount: 3, readOnly: true };
+  // Distinct negative HTTP evidence: the publishable/anon key must never read
+  // the exact private Wall already proven visible to the authorized actors.
+  // PostgREST may return RLS-filtered [] (200) or reject access (401/403).
+  // Neither is equivalent to a fabricated JWT or SQL SET ROLE exercise.
+  const anon = await fetchImpl(wallUrl.toString(), {
+    method: 'GET',
+    redirect: 'error',
+    headers: { apikey: apiKey, Authorization: 'Bearer ' + apiKey, Accept: 'application/json' },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (anon.status === 200) {
+    let rows;
+    try {
+      rows = await anon.json();
+    } catch {
+      throw new Error('Malformed anonymous staging HTTP JSON response');
+    }
+    if (!Array.isArray(rows) || rows.length !== 0) {
+      throw new Error('Private Shared Wall visible without authentication');
+    }
+  } else if (anon.status !== 401 && anon.status !== 403) {
+    throw new Error('Anonymous staging GET failed with HTTP ' + anon.status);
+  }
+  return { status: 'PASS', httpRequests: 7, actorCount: 3, readOnly: true };
 }
 
 if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
@@ -147,7 +170,10 @@ if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
         error.message.startsWith('Refusing non-staging') ||
         error.message.startsWith('Staging publishable') ||
         error.message.startsWith('Explicit staging-only') ||
-        error.message.startsWith('Malformed staging HTTP'))
+        error.message.startsWith('Malformed staging HTTP') ||
+        error.message.startsWith('Malformed anonymous staging HTTP') ||
+        error.message.startsWith('Private Shared Wall visible without authentication') ||
+        error.message.startsWith('Anonymous staging GET failed with HTTP '))
         ? error.message : 'Staging network/runtime error';
       console.error('NO-GO: ' + message);
       process.exitCode = 1;
