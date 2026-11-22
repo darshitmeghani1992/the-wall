@@ -1,3 +1,9 @@
+## D-41 · 2026-11-22 · Failed Auth session restoration must not hang or expose unreconciled destination state
+
+- **Risk:** A rejected initial `auth.getSession` or deferred destination reconciliation skipped existing loading-finalization code, leaving indefinite splash. A later Auth event error could do likewise.
+- **Decision (ARCHITECT → FRONTEND):** Convert thrown/result Auth bootstrap errors into a fail-closed signed-out re-auth route, not a success or infinite loading state. Begin an `AccountRouteFence` token *before* the first identity-dependent await, and ignore stale rejected bootstraps/events after account change (including A→B→A). Preserve deferred destination ownership barriers; never surface an unverified signed-in route.
+- **Status:** Source/test draft child of #173; exact CI and independent Reviewer and mounted-device/offline QA required. No Product scope/schema change, hosted writes or merge. **Enhanced Beta NO-GO.**
+
 ## D-40 · 2026-11-22 · Successful reaction-summary batches authoritatively clear missing IDs
 
 - **Trigger:** Aggregating `mark_reactions` omits zero-row Marks; a partial/empty successful batch merged by present IDs could leave a removed reaction visibly counted after background/foreground retry.
