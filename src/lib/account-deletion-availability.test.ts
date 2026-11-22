@@ -8,7 +8,7 @@ assert.equal(accountDeletionEnabledFor(""), false);
 assert.equal(accountDeletionEnabledFor("false"), false);
 assert.equal(accountDeletionEnabledFor("TRUE"), false);
 assert.equal(accountDeletionEnabledFor("1"), false);
-assert.equal(accountDeletionEnabledFor("true"), true);
+assert.equal(accountDeletionEnabledFor("true"), false, "an unverified 0031/worker cannot be enabled from EAS");
 assert.equal(isAccountDeletionEnabled, false, "deletion defaults off before hosted 0031 approval");
 
 const statusSource = readFileSync("app/settings.tsx", "utf8");

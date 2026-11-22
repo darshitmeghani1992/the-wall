@@ -8,7 +8,7 @@ assert.equal(mediaComposerEnabledFor(""), false);
 assert.equal(mediaComposerEnabledFor("false"), false);
 assert.equal(mediaComposerEnabledFor("TRUE"), false);
 assert.equal(mediaComposerEnabledFor("1"), false);
-assert.equal(mediaComposerEnabledFor("true"), true);
+assert.equal(mediaComposerEnabledFor("true"), false, "an inherited build flag cannot enable unverified C2/C3 media");
 assert.equal(isMediaComposerEnabled, false, "beta media is off without an explicit opt-in");
 
 const composer = readFileSync("app/create.tsx", "utf8");

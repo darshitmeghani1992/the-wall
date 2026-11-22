@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-35 · 2026-11-22 · High-risk beta creator capabilities cannot be enabled by public build flags alone
+- **Trigger:** The media, Secret and deletion UI helper functions accepted the string `true` from `EXPO_PUBLIC_*` even though C2/C3 processor/playback, one-hour Secret cron and account-deletion migration 0031/purge are not independently proven in staging. An inherited EAS environment could inadvertently advertise these unavailable irreversible/privacy-sensitive user journeys.
+- **Decision (ARCHITECT → FRONTEND):** Freeze the three *client-facing capability helpers* OFF for this private-beta candidate regardless of build environment. Require an explicit new reviewed source revision after the existing Founder/backend/runtime/QA gates to activate. Preserve server-side permission boundaries; hiding a composer is not security certification or a substitute for actual account deletion before TestFlight/App Store.
+- **Scope/Gates:** Isolated child of #167, six scoped modules/tests; source CI and independent device/Reviewer/QA remain pending. All original production, hosted write, migration, merge/deploy, SMTP, domain and Apple holds unchanged. **Enhanced Beta NO-GO.**
+
+
 ## D-34 · 2026-11-22 · OAuth provider availability cannot cross redirected origin boundary
 - **Trigger:** The Auth settings availability fetch included a public `apikey` but accepted default browser/native fetch redirects. That could expose the app's staging key to a redirected host or enable unapproved provider buttons from that response even when the intended Supabase Auth endpoint is unavailable.
 - **Decision (ARCHITECT → FRONTEND):** Set `redirect: "error"` and `method: "GET"` on the `/auth/v1/settings` provider probe, retaining all-error `noOAuthProviders` behavior. No new OAuth provider is enabled. Test mock redirect rejection and request options. **No client credential is secret**, but client access and capability discovery must still respect the approved origin. Review actual installed-device traffic before release.
