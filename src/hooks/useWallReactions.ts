@@ -94,6 +94,9 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
 
   const toggle = useCallback(
     (markId: string, emoji: ReactionEmoji) => {
+      // The initiating account must still own this rendered Wall before updating
+      // optimistic state. The data layer repeats this check after getUser().
+      if (!userId || currentUserId.current !== userId) return;
       const current = summariesRef.current[markId] ?? EMPTY;
       const prev = current.mine; // the user's single active reaction, or null
       const wasOn = prev === emoji;
@@ -111,11 +114,11 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
       setSummaries((cur) => ({ ...cur, [markId]: { counts, mine } }));
 
       // Persist; on failure, roll back to the server's truth for this Mark.
-      toggleReaction(markId, emoji, prev).catch(() => {
+      toggleReaction(userId, markId, emoji, prev).catch(() => {
         void refresh(markId);
       });
     },
-    [refresh],
+    [refresh, userId],
   );
 
   return { summaries: requestedUserId.current === (userId ?? null) ? summaries : {}, toggle };
