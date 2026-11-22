@@ -58,6 +58,8 @@ function FindPeopleEditor({
       if (share) await inviteFriends(actorHandle);
       if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       const draft = await loadOnboardingDraft(userId);
+      // Draft read is asynchronous. Do not write A's draft after B signs in.
+      if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       await saveOnboardingDraft(userId, { ...draft, postWalkthroughDestination: destination });
       if (lifecycleFence.current.isCurrent(token, liveActorId.current)) router.replace("/walkthrough");
     } catch (cause: any) {

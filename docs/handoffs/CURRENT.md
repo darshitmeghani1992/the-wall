@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-60 · Onboarding intermediate async guard — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated descendant of #143 `a4566db820f53438bf0fcb0b20c565d5bfa6ab58`, branch `codex/beta-onboarding-post-await-guards-20261122-auto7`. Added missing actor checks between async draft read and write in Find People, and between draft read/clear and Auth route refresh in Walkthrough. Preserves deferred destination navigation on successful `walkthrough→ready`. New source/race test; exact CI, Reviewer and independent native QA required. Enhanced Beta **NO-GO**; no hosted/prod changes, merges, deployments or held external actions.
+
+**Next:** Inspect exact SHA CI, native A→B draft and normal completion tests, then next unblocked beta slice; OTP/three JWT/media/Secret/deletion gates unchanged.
+
+
 ## CURRENT BETA-P0-59 · Walkthrough session/replay isolation — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Child of #142 `7dd545934ab231810acd5fec0ade9f7c4a154e43` on `codex/beta-walkthrough-actor-replay-scope-20261122-auto7`. Tour step, busy/finish lease, replay mode remount per actor/replay, preserving the in-flight walkthrough-to-ready redirect, with live actor guards before late navigation. New source and account-route test. Native QA, Reviewer and exact SHA CI required. No backend/hosted/main/prod/deploy/feature flag change; **Enhanced Beta NO-GO**. Media/Secret/analytics OFF; domain/Apple held.

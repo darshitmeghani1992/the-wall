@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-60 · Revalidate actor after onboarding draft awaits — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated child of PR #143 exact parent `a4566db820f53438bf0fcb0b20c565d5bfa6ab58`, branch `codex/beta-onboarding-post-await-guards-20261122-auto7`. A queued Find People or Walkthrough operation could load a draft for actor A, then actor B signs in before the code writes A's local draft or calls global `refreshAccountRoute()`. Render fences only after the later write were too late for these intermediate side effects. Added actor + revision checks **after each draft read and local clear, before the next side-effect**, preserving the tour's intentional post-refresh actor-only navigation so `walkthrough→ready` does not lose deferred Discover destination. Does not alter server-side identity checks, copy, API, flags or data model. Added `tests/frontend-onboarding-await-actor-guards.test.mjs` including executable pending-read actor-switch race.
+
+**Gates:** Final exact SHA CI, independent Reviewer and behavioral native QA (A→B during draft read/write and tour completion, normal A→ready→Discover path) still required. Staging only `ewintxgdxdvschiqodkq`, production protected; no hosted write, 0031, merge, deploy, Apple/domain, tester invitation or new API charges. Media/Secret/analytics OFF, Enhanced Beta **NO-GO** pending authentic OTP, three JWT actors, private media/Secret/deletion, independent QA/rollback and Founder GO.
+
+**Next:** Verify #143/#144 final-head CI; obtain independent review+device QA, continue nonoverlapping release tasks.
+
+
 ## BETA-P0-59 · Walkthrough step/replay actor and route scoping — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #142 immutable `7dd545934ab231810acd5fec0ade9f7c4a154e43`, new branch `codex/beta-walkthrough-actor-replay-scope-20261122-auto7`. First-use Walkthrough kept current step and in-flight completion state when a user changed accounts or switched replay route before cleanup. A new actor/replay keyed editor remounts the step and completion lease at render. The server account route is deliberately NOT part of the key: successful completion must finish its in-flight refresh before navigating to the selected post-tour destination. All asynchronous completion/navigation remains guarded against the parent's live authenticated actor, preventing an obsolete tour from pushing another account forward. Replay still never persists progress; canonical routes, microcopy, UI and Backend Auth are unchanged.
