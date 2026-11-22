@@ -23,7 +23,7 @@ export function selectBetaClientConfig(
   const hasSafePublicKey =
     typeof key === "string" &&
     key.length > 0 &&
-    !/\\s/.test(key) &&
+    !/\s/.test(key) &&
     !/^sb_secret_/i.test(key);
   if (!approvedOrigin || !hasSafePublicKey) {
     // src/lib/supabase.ts uses its existing inert localhost placeholder when
