@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-63 · Immutable six-digit OTP challenge email and exclusive auth operation — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #146 exact `f05cd07d1518bff36b68ed0a3ec248f630fd87ec`, branch `codex/beta-otp-challenge-email-snapshot-20261122-auto8`. Previously the sign-in screen awaited delivery for one email but displayed the current editable `email` state, and `verifyOtp` also read that mutable value. A user could edit the email while a send was in flight, causing the next screen to claim the code was sent to another address and to attempt verification for the wrong email. The sent challenge now captures a single trimmed email as `sentEmail`; displayed destination, verification and resend all use it. Changing email clears that challenge; the email field is disabled during requests, the code clears on resend and a synchronous shared ref prevents overlapping OTP/OAuth attempts. Same UI, no passwordless Auth API, backend settings, code template or policy change.
+
+**Verification:** New `tests/frontend-otp-challenge-email-snapshot.test.mjs` requires exact wiring; CI, independent Reviewer + native QA must cover editing during slow email send, resend after cooldown, 6-digit verification, different-email reset, overlapping taps, failed send and cancelled OAuth. Real SMTP/six-digit deliverability remains BLOCKED by held sender/domain and authorized tester inboxes; no email sent here, no credentials touched. Staging `ewintxgdxdvschiqodkq` only, original production protected; no hosted writes, migration, deploy, main merge, Apple/domain purchases or invitations. Media/Secret/analytics OFF, deletion OFF, Enhanced Beta **NO-GO** pending genuine 3-JWT actors, media/Secret/deletion and independent device/rollback.
+
+**Next:** Verify #146 and #147 exact-head CI and independent review/device QA, continue a separate unblocked task as available.
+
+
 ## BETA-P0-62 · Walkthrough post-route-refresh actor/ABA continuation lease — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #145 exact `99a3646e59ff023402861531d405f90532a5abbe`, branch `codex/beta-walkthrough-refresh-identity-lease-20261122-auto8`. During normal walkthrough completion, `refreshAccountRoute()` changes the server route to `ready`, intentionally invalidating the route focus fence. The former actor-ID-only check after that await could wrongly navigate or display an error if an account switched A→B→A, or the route switched to replay, before the old completion resumed. A monotonic actor/replay revision in the *parent render* is now captured by the editor; post-refresh navigation/error/finally are allowed only for the unchanged revision. Earlier awaited stages retain `AccountRouteFence` authorization. The deferred Discover destination and normal walkthrough→ready navigation remain allowed; no Auth, backend, API, product copy, flags or schema changes.
