@@ -1,3 +1,9 @@
+## 23 Nov 2026 — Trusted-schema CREATE permissions regression (draft #182; PREP only)
+
+New isolated [draft #182](https://github.com/darshitmeghani1992/the-wall/pull/182), based on verified [#181 final-head CI 45073273618 4/4 SUCCESS](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073273618), adds disposable PostgreSQL 77 regression: client roles and PUBLIC cannot CREATE objects in `public`, `auth`, `storage`. Source `55e257cab3ff9b025f22fee24c34eb306ed98185`; source and final docs-head CI still to check. Read-only staging ACL matches test expectations. This cannot establish pg_temp safety, actual JWT denial or authenticated function semantics; no hosted mutation, security grant, schema change or feature enabled. Rollback: leave draft unmerged or revert its test plus registration after review. Independent Reviewer/QA and release gates remain; **Enhanced Beta NO-GO**.
+
+---
+
 ## 23 Nov 2026 — Alert navigation fail-closed regression (draft #181, PREP only)
 
 Isolated [draft #181](https://github.com/darshitmeghani1992/the-wall/pull/181) adds canonical UUID checks and ten contract assertions so malformed Alert references cannot construct injected destination paths or focused-Mark query strings. Source `ca46dbbdb3b07ca0b6f9552d799ff405867a1703`; [initial CI 45073187558](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073187558) check result plus fresh final documentation-head CI still needed. DB typed UUID fields mean this is preventative client defense, not a confirmed live exploit or hosted authorization evidence. Rollback: do not integrate the draft or revert its two source/test commits on a reviewed candidate. No hosted state changed. Independent Reviewer/behavioral device QA and all Enhanced Beta launch blockers remain. **NO-GO**.
