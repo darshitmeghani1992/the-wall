@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { decideAuthCallback } from "@/lib/auth-callback-contract";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { colors, markColors } from "@/theme";
@@ -12,7 +13,13 @@ import { colors, markColors } from "@/theme";
  */
 export default function AuthCallback() {
   const router = useRouter();
-  const { code, error: providerError } = useLocalSearchParams<{ code?: string | string[]; error?: string | string[] }>();
+  const { code, error: providerError, error_code: providerErrorCode, error_description: providerErrorDescription } =
+    useLocalSearchParams<{
+      code?: string | string[];
+      error?: string | string[];
+      error_code?: string | string[];
+      error_description?: string | string[];
+    }>();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,13 +28,23 @@ export default function AuthCallback() {
     setError(null);
     const completeSignIn = async () => {
       try {
-        // An explicit OAuth refusal is never a successful callback, even if
-        // another account already has a valid session on this device.
-        if (providerError) throw new Error("Sign-in was cancelled or denied. Please try again.");
-        if (typeof code === "string" && code.length > 0) {
-          // Supabase AuthErrors often arrive in the result rather than throwing.
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        const decision = decideAuthCallback({
+          code,
+          error: providerError,
+          error_code: providerErrorCode,
+          error_description: providerErrorDescription,
+        });
+        // Even if another account has a session, an explicit refusal or malformed
+        // (including duplicate) code is never a successful sign-in.
+        if (decision.kind === "reject") {
+          throw new Error("Sign-in was cancelled or invalid. Please try again.");
+        }
+        if (decision.kind === "exchange") {
+          // Supabase can report an AuthError in the response without throwing.
+          const { data: exchanged, error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(decision.code);
           if (exchangeError) throw exchangeError;
+          if (!exchanged?.session) throw new Error("Sign-in did not create a session. Please try again.");
         } else {
           // A valid existing session can arrive here without an OAuth code.
           // Never treat a missing/invalid code as a successful login.
@@ -46,7 +63,7 @@ export default function AuthCallback() {
     return () => {
       active = false;
     };
-  }, [code, providerError, router]);
+  }, [code, providerError, providerErrorCode, providerErrorDescription, router]);
 
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, gap: 14 }}>
