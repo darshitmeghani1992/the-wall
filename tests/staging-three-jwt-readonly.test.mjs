@@ -154,7 +154,7 @@ test('rejects service-role/secret API keys before any HTTP request', async () =>
 });
 
 test('accepts legacy anon JWT-shaped public key only with anon role', async () => {
-  const key = mockJwt({ role: 'anon', iss: 'supabase' }, 'anon-signature');
+  const key = mockJwt({ role: 'anon', ref: 'ewintxgdxdvschiqodkq', iss: 'supabase' }, 'anon-signature');
   const mock = fakeNetwork({ apiKey: key });
   const result = await runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, mock.handler);
   assert.equal(result.status, 'PASS');
@@ -178,6 +178,23 @@ test('refuses mismatched, expired and privileged actor claims before HTTP', asyn
       ...base,
       TW_OWNER_JWT: actorJwt(OWNER_ID, claims),
     }, noNetwork), /Three distinct authenticated actor IDs\/JWTs required/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('rejects legacy anon keys with missing or foreign project ref before any HTTP', async () => {
+  let calls = 0;
+  const noNetwork = async () => { calls++; throw Error('should never call'); };
+  for (const key of [
+    mockJwt({ role: 'anon', iss: 'supabase' }, 'missing-ref'),
+    mockJwt({ role: 'anon', ref: 'wfsfafmgvxevpzrurofz' }, 'prod-ref'),
+    mockJwt({ role: 'anon', ref: 'arbitrary-other-ref' }, 'other-ref'),
+    mockJwt({ role: 'service_role', ref: 'ewintxgdxdvschiqodkq' }, 'service'),
+  ]) {
+    await assert.rejects(
+      runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, noNetwork),
+      /Staging publishable\/anon key required/,
+    );
   }
   assert.equal(calls, 0);
 });
