@@ -1,5 +1,12 @@
 # The-Wall Decision Log
 
+## D-25 · 2026-11-22 · Validate legacy public JWT role/project in local runtime before Supabase client creation
+- **Trigger:** #155–#157 guard EAS builds, read-only staging probes and the 3-JWT audit; #156's Expo runtime gate only checked staging URL and obvious modern `sb_secret_*`. Local Metro/alternative builds bypass EAS hooks and could bundle or forward a privileged or foreign legacy JWT.
+- **Decision:** Keep staged runtime config accessible only for exact approved staging host and keys of two known public formats: `sb_publishable_*`, or legacy JWT locally decoded (portable bounded base64url UTF-8) with `role=anon` and `ref=ewintxgdxdvschiqodkq`. Fail closed on unknown, malformed or privileged keys. This is a local consistency check **not signature verification**; backend must still validate every JWT and read-only probes must prove connectivity. Same `selectBetaClientConfig` API, no OAuth/hosted/policy/feature change.
+- **Alternatives:** Allow opaque keys (unsafe); depend solely on EAS (bypassable outside EAS); introduce Node Buffer/atob polyfill inside Expo (unnecessary dependency/platform risk).
+- **Reversibility / gates:** Small reversible frontend-only runtime guard and fake-credential unit tests, draft #158, independent Reviewer + installed-device QA required. Production enablement is a separate Founder decision; never weaken this in an unrelated PR. No live credentials or hosted writes.
+
+
 ## D-24 · 2026-11-22 · Add runtime staging origin guard for client outside EAS
 - **Trigger:** EAS pre-install and read-only staging preflight now enforce the approved project, but `src/lib/config.ts` previously exported arbitrary EXPO_PUBLIC URL directly to `createClient`. A local Expo or non-EAS start could accidentally use the original production origin.
 - **Decision:** For the held staging-only beta, select Supabase runtime client settings only for `https://ewintxgdxdvschiqodkq.supabase.co`, allowing a trailing slash; otherwise export undefined so the existing inert localhost fallback is used. Refuse modern `sb_secret_*` in the client runtime. Keep the stronger legacy JWT role/ref validation before EAS builds and HTTP preflight, and do not misrepresent the client-side filter as complete legacy-key validation.
