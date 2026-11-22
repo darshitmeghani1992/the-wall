@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type MutableRefObject } from "react";
 import { Alert, Pressable, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
@@ -8,36 +8,71 @@ import { useAuth } from "@/lib/auth";
 import { requestAccountDeletion } from "@/lib/account";
 import { isAccountDeletionEnabled } from "@/lib/account-deletion-availability";
 import { reconcileCommittedDeletion } from "@/lib/account-deletion-contract";
-import { SessionFocusFence } from "@/lib/session-generation";
+import {
+  SessionFocusFence,
+  sameActorScreenScope,
+  type ActorScreenScope,
+  type SessionGenerationToken,
+} from "@/lib/session-generation";
 import { colors, radius, spacing } from "@/theme";
 
 export default function DeleteAccountScreen() {
-  const router = useRouter();
   const { session, refreshAccountRoute } = useAuth();
   const actorId = session?.user.id ?? null;
-  const currentActorId = useRef(actorId);
+  const liveScopeRef = useRef<ActorScreenScope>({ actorId, revision: 0 });
+  // Remount and invalidate prior native callbacks on every identity transition,
+  // including A -> B -> A before focus cleanup runs.
+  if (liveScopeRef.current.actorId !== actorId) {
+    liveScopeRef.current = { actorId, revision: liveScopeRef.current.revision + 1 };
+  }
+  const scope = liveScopeRef.current;
+  return (
+    <DeleteAccountEditor
+      key={scope.revision}
+      scope={scope}
+      liveScopeRef={liveScopeRef}
+      refreshAccountRoute={refreshAccountRoute}
+    />
+  );
+}
+
+function DeleteAccountEditor({
+  scope,
+  liveScopeRef,
+  refreshAccountRoute,
+}: Readonly<{
+  scope: ActorScreenScope;
+  liveScopeRef: MutableRefObject<ActorScreenScope>;
+  refreshAccountRoute: () => Promise<void>;
+}>) {
+  const router = useRouter();
+  const actorId = scope.actorId;
   const actionFence = useRef(new SessionFocusFence());
   const inFlight = useRef(false);
+  // A destructive confirmation must never survive an account change.
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
-  currentActorId.current = actorId;
+  const isScopeCurrent = () => sameActorScreenScope(scope, liveScopeRef.current);
+  const isActionCurrent = (token: SessionGenerationToken) =>
+    isScopeCurrent() && actionFence.current.isCurrent(token, liveScopeRef.current.actorId);
 
   useFocusEffect(useCallback(() => {
+    if (!sameActorScreenScope(scope, liveScopeRef.current)) return undefined;
     actionFence.current.focus(actorId);
     inFlight.current = false;
     setBusy(false);
     return () => actionFence.current.blur();
-  }, [actorId]));
+  }, [actorId, scope, liveScopeRef]));
 
   async function scheduleDeletion() {
-    if (!isAccountDeletionEnabled || !actorId || confirmation !== "DELETE" || inFlight.current) return;
+    if (!isAccountDeletionEnabled || !actorId || !isScopeCurrent() || confirmation !== "DELETE" || inFlight.current) return;
     const token = actionFence.current.begin(actorId);
     if (!token) return;
     inFlight.current = true;
     setBusy(true);
     try {
       const result = await requestAccountDeletion(token.userId, confirmation);
-      if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
+      if (!isActionCurrent(token)) return;
       if (result.status === "owner_action_required") {
         const noun = result.ownedSharedWallCount === 1 ? "Shared Wall" : "Shared Walls";
         Alert.alert(
@@ -45,7 +80,7 @@ export default function DeleteAccountScreen() {
           `You still own ${result.ownedSharedWallCount} ${noun}. Transfer each one to an active member or delete it before deleting your account.`,
           [
             { text: "Not now", style: "cancel" },
-            { text: "Review my Walls", onPress: () => router.replace("/(tabs)/home") },
+            { text: "Review my Walls", onPress: () => { if (isActionCurrent(token)) router.replace("/(tabs)/home"); } },
           ],
         );
         return;
@@ -59,7 +94,7 @@ export default function DeleteAccountScreen() {
         return;
       }
       const reconciliation = await reconcileCommittedDeletion({
-        isCurrent: () => actionFence.current.isCurrent(token, currentActorId.current),
+        isCurrent: () => isActionCurrent(token),
         refreshAccountRoute,
         navigateToCanonicalGate: () => router.replace("/"),
       });
@@ -70,14 +105,14 @@ export default function DeleteAccountScreen() {
         );
       }
     } catch (cause) {
-      if (actionFence.current.isCurrent(token, currentActorId.current)) {
+      if (isActionCurrent(token)) {
         Alert.alert(
           "Couldn't schedule deletion",
           cause instanceof Error ? cause.message : "Please try again.",
         );
       }
     } finally {
-      if (actionFence.current.isCurrent(token, currentActorId.current)) {
+      if (isActionCurrent(token)) {
         inFlight.current = false;
         setBusy(false);
       }
@@ -96,7 +131,7 @@ export default function DeleteAccountScreen() {
           You can deactivate your account from Settings in the meantime.
         </Text>
         <View style={{ marginTop: 24 }}>
-          <Button label="Back to Settings" onPress={() => router.replace("/settings")} />
+          <Button label="Back to Settings" onPress={() => { if (isScopeCurrent()) router.replace("/settings"); }} />
         </View>
       </Screen>
     );
@@ -110,7 +145,7 @@ export default function DeleteAccountScreen() {
         accessibilityState={{ disabled: busy }}
         disabled={busy}
         hitSlop={10}
-        onPress={() => { if (!inFlight.current) router.back(); }}
+        onPress={() => { if (isScopeCurrent() && !inFlight.current) router.back(); }}
         style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start", opacity: busy ? 0.5 : 1 }}
       >
         <Text variant="label" color={colors.outline}>‹ BACK</Text>
@@ -159,10 +194,10 @@ export default function DeleteAccountScreen() {
         <Button
           label="Schedule account deletion"
           loading={busy}
-          disabled={!actorId || confirmation !== "DELETE"}
+          disabled={!isScopeCurrent() || confirmation !== "DELETE"}
           onPress={() => void scheduleDeletion()}
         />
-        <Button label="Keep my account" variant="ghost" disabled={busy} onPress={() => router.back()} />
+        <Button label="Keep my account" variant="ghost" disabled={busy} onPress={() => { if (isScopeCurrent()) router.back(); }} />
       </View>
     </Screen>
   );
