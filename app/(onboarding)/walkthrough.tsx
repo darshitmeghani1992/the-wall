@@ -73,7 +73,11 @@ function WalkthroughEditor({ liveActorId }: { liveActorId: { current: string | n
       await completeWalkthrough(userId);
       if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       const draft = await loadOnboardingDraft(userId);
+      // A different actor can sign in during the local draft read.
+      if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       try { await clearOnboardingDraft(userId); } catch { /* Completion is already durable server-side. */ }
+      // Never refresh the new actor's route from a completed old-actor tour.
+      if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       await refreshAccountRoute();
       if (liveActorId.current === userId) {
         const target = destinationAfterWalkthrough(draft.postWalkthroughDestination);
