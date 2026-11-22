@@ -30,6 +30,9 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
   // Marks whose summary we've already requested — avoids redundant fetches as the
   // list re-renders or grows via realtime.
   const requested = useRef(new ReactionRequestTracker());
+  // One optimistic reaction write per Mark at a time. Lease identity prevents
+  // a stale actor/request finally from releasing a newer actor's in-flight write.
+  const mutationLeases = useRef(new Map<string, symbol>());
   const requestedUserId = useRef(userId ?? null);
   const currentUserId = useRef(userId ?? null);
   currentUserId.current = userId ?? null;
@@ -37,6 +40,7 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
   useEffect(() => {
     requestedUserId.current = userId ?? null;
     requested.current.clear();
+    mutationLeases.current.clear();
     setSummaries({});
   }, [userId]);
 
@@ -96,7 +100,9 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
     (markId: string, emoji: ReactionEmoji) => {
       // The initiating account must still own this rendered Wall before updating
       // optimistic state. The data layer repeats this check after getUser().
-      if (!userId || currentUserId.current !== userId) return;
+      if (!userId || currentUserId.current !== userId || mutationLeases.current.has(markId)) return;
+      const lease = Symbol(markId);
+      mutationLeases.current.set(markId, lease);
       const current = summariesRef.current[markId] ?? EMPTY;
       const prev = current.mine; // the user's single active reaction, or null
       const wasOn = prev === emoji;
@@ -113,10 +119,21 @@ export function useWallReactions(marks: MarkWithAuthor[], userId?: string | null
       if (mine) counts[emoji] = (counts[emoji] ?? 0) + 1;
       setSummaries((cur) => ({ ...cur, [markId]: { counts, mine } }));
 
-      // Persist; on failure, roll back to the server's truth for this Mark.
-      toggleReaction(userId, markId, emoji, prev).catch(() => {
-        void refresh(markId);
-      });
+      // The visible optimistic value is provisional, never reported as a
+      // confirmed write. If the network fails, restore the pre-tap value even
+      // when the server cannot be re-read (offline), then try to resync.
+      void toggleReaction(userId, markId, emoji, prev)
+        .catch(() => {
+          if (currentUserId.current !== userId || mutationLeases.current.get(markId) !== lease) return;
+          setSummaries((cur) => ({ ...cur, [markId]: current }));
+          void refresh(markId).catch(() => {
+            // Offline refetch failure must not leave an unhandled rejection.
+            // The last confirmed pre-tap state remains visible; retry on tap/focus.
+          });
+        })
+        .finally(() => {
+          if (mutationLeases.current.get(markId) === lease) mutationLeases.current.delete(markId);
+        });
     },
     [refresh, userId],
   );
