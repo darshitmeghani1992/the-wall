@@ -88,3 +88,32 @@ test('beta smoke and EAS guard reject the original production project before any
   const easGuard = readFileSync(new URL('../scripts/validate-eas-backend.mjs', import.meta.url), 'utf8');
   assert.match(easGuard, /assertApprovedStagingOrigin\(origin\)/, 'EAS pre-install must enforce staging');
 });
+
+test('staging probe refuses secret and service-role keys without any network calls', async () => {
+  const approved = 'https://ewintxgdxdvschiqodkq.supabase.co';
+  assert.throws(
+    () => validatePublicClientConfig(approved, 'sb_secret_must-not-be-embedded'),
+    /secret API key forbidden/,
+  );
+  let networkCalls = 0;
+  const fakeFetch = async () => {
+    networkCalls += 1;
+    throw new Error('probe must fail before contacting staging');
+  };
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const legacyKey = (claimRef, role) => {
+    const claims = Buffer.from(JSON.stringify({ ref: claimRef, role })).toString('base64url');
+    return `${header}.${claims}.mock-signature`;
+  };
+  for (const key of [
+    'sb_secret_must-not-be-embedded',
+    legacyKey('ewintxgdxdvschiqodkq', 'service_role'),
+    legacyKey('wfsfafmgvxevpzrurofz', 'anon'),
+    'eyJinvalid.test.invalid',
+  ]) {
+    await assert.rejects(
+      verifyStagingBackend({ url: approved, key, fetchImpl: fakeFetch }),
+    );
+  }
+  assert.equal(networkCalls, 0, 'no request may use a secret, service-role or mismatched key');
+});
