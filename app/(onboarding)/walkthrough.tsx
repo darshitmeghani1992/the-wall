@@ -9,7 +9,7 @@ import { MarkCard } from "@/components/MarkCard";
 import { useAuth } from "@/lib/auth";
 import { completeWalkthrough } from "@/lib/account";
 import { clearOnboardingDraft, loadOnboardingDraft } from "@/lib/onboarding";
-import { destinationAfterWalkthrough, AccountRouteFence, walkthroughRequiresPersistence } from "@/lib/onboarding-contract";
+import { destinationAfterWalkthrough, AccountRouteFence, onboardingScreenScopeKey, walkthroughRequiresPersistence } from "@/lib/onboarding-contract";
 import { colors, markColors } from "@/theme";
 
 const MOMENTS = [
@@ -21,14 +21,23 @@ const MOMENTS = [
 
 /** Once-only first-use teaching. `replay=1` is presentation-only and never writes progress. */
 export default function Walkthrough() {
+  const { session, accountRoute } = useAuth();
+  const { replay } = useLocalSearchParams<{ replay?: string }>();
+  const actorId = session?.user.id ?? null;
+  const liveActorId = useRef<string | null>(actorId);
+  liveActorId.current = actorId;
+  // The tour's index, mutation lease and replay mode belong to one account.
+  const scopeKey = `${onboardingScreenScopeKey(actorId, accountRoute)}:${replay === "1" ? "replay" : "first-use"}`;
+  return <WalkthroughEditor key={scopeKey} liveActorId={liveActorId} />;
+}
+
+function WalkthroughEditor({ liveActorId }: { liveActorId: { current: string | null } }) {
   const router = useRouter();
   const { replay } = useLocalSearchParams<{ replay?: string }>();
   const isReplay = replay === "1";
   const reducedMotion = useReducedMotion();
   const { session, accountRoute, refreshAccountRoute } = useAuth();
   const userId = session?.user.id ?? null;
-  const currentUserId = useRef(userId);
-  currentUserId.current = userId;
   const lifecycleFence = useRef(new AccountRouteFence());
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -41,11 +50,11 @@ export default function Walkthrough() {
       ? accountRoute === "ready"
       : accountRoute === "walkthrough" || inFlight.current;
     if (accountRoute && !allowed) router.replace("/");
-    return () => currentFence.invalidate(currentUserId.current);
-  }, [accountRoute, isReplay, router]);
+    return () => currentFence.invalidate(liveActorId.current);
+  }, [accountRoute, isReplay, liveActorId, router]);
 
   async function leave() {
-    if (inFlight.current) return;
+    if (inFlight.current || userId !== liveActorId.current) return;
     if (!walkthroughRequiresPersistence(isReplay)) {
       if (router.canGoBack()) router.back();
       else router.replace("/(tabs)/home");
@@ -60,20 +69,20 @@ export default function Walkthrough() {
     setBusy(true);
     try {
       await completeWalkthrough(userId);
-      if (!lifecycleFence.current.isCurrent(token, currentUserId.current)) return;
+      if (!lifecycleFence.current.isCurrent(token, liveActorId.current)) return;
       const draft = await loadOnboardingDraft(userId);
       try { await clearOnboardingDraft(userId); } catch { /* Completion is already durable server-side. */ }
       await refreshAccountRoute();
-      if (currentUserId.current === userId) {
+      if (liveActorId.current === userId) {
         const target = destinationAfterWalkthrough(draft.postWalkthroughDestination);
         router.replace(target as never);
       }
     } catch (cause: any) {
-      if (currentUserId.current === userId) {
+      if (liveActorId.current === userId) {
         Alert.alert("Couldn't finish the tour", cause?.message ?? "Please try again.");
       }
     } finally {
-      if (currentUserId.current === userId) {
+      if (liveActorId.current === userId) {
         inFlight.current = false;
         setBusy(false);
       }

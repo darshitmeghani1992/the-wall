@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-59 · Walkthrough session/replay isolation — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Child of #142 `7dd545934ab231810acd5fec0ade9f7c4a154e43` on `codex/beta-walkthrough-actor-replay-scope-20261122-auto7`. Tour step, busy/finish lease, replay mode remount per actor/route, with live actor guards before late navigation. New source and account-route test. Native QA, Reviewer and exact SHA CI required. No backend/hosted/main/prod/deploy/feature flag change; **Enhanced Beta NO-GO**. Media/Secret/analytics OFF; domain/Apple held.
+
+**Next:** Verify own CI and independent behavioral QA for account changes during tour, then next nonoverlapping task; retain real OTP/JWT, media, Secret, deletion and native/rollback blockers.
+
+
 ## CURRENT BETA-P0-58 · Find People onboarding account scope — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Isolated child of PR #141 `fd3df87179d5bdb0e50e9d6a3eeae6c202efa71d` on `codex/beta-find-people-onboarding-actor-20261122-auto7`. Find People route remounts for current user/account-route and only uses matching user's handle for invitation sharing, preventing previous-account links while the Auth profile catches up. Async progress fence checks live actor before UI continuation; fallback generic share retained. Added source/route lease test; exact CI, independent Reviewer and native QA pending. Staging only, media/Secret OFF, beta **NO-GO**. No hosted mutation/merge/deploy/held domain or Apple change.
