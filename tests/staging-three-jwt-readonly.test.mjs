@@ -233,19 +233,20 @@ test('fails if the public anonymous key can read the same private Shared Wall', 
   assert.equal(request.redirect, 'error');
 });
 
-test('anonymous HTTP denial allows a 401/403 or RLS-empty 200, never an unexpected status/body', async () => {
-  for (const status of [401, 403]) {
+test('anonymous RLS requires filtered HTTP 200; 401/403 gateway denials are not policy proof', async () => {
+  // Confirm positive RLS evidence is a genuine empty JSON result, not a
+  // successful HTTP status on a malformed response.
+  assert.equal((await runStagingJwtAudit(base, fakeNetwork().handler)).status, 'PASS');
+  for (const status of [401, 403, 500, 302]) {
     const mock = fakeNetwork({ anonStatus: status });
-    const result = await runStagingJwtAudit(base, mock.handler);
-    assert.equal(result.status, 'PASS');
-    assert.equal(mock.calls.length, 7);
-  }
-  for (const options of [{ anonStatus: 500 }, { anonStatus: 302 }, { anonMalformed: true }]) {
-    const mock = fakeNetwork(options);
     await assert.rejects(runStagingJwtAudit(base, mock.handler),
-      /Anonymous staging GET failed|Malformed anonymous staging HTTP/);
+      new RegExp('Anonymous RLS check inconclusive: expected HTTP 200, got ' + status));
     assert.equal(mock.calls.length, 7);
   }
+  const malformed = fakeNetwork({ anonMalformed: true });
+  await assert.rejects(runStagingJwtAudit(base, malformed.handler),
+    /Malformed anonymous staging HTTP JSON/);
+  assert.equal(malformed.calls.length, 7);
 });
 
 test('anonymous negative check never bypasses the three server-verified JWT identities', async () => {
