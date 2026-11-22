@@ -1,3 +1,9 @@
+## D-40 · 2026-11-22 · Successful reaction-summary batches authoritatively clear missing IDs
+
+- **Trigger:** Aggregating `mark_reactions` omits zero-row Marks; a partial/empty successful batch merged by present IDs could leave a removed reaction visibly counted after background/foreground retry.
+- **Decision (ARCHITECT → FRONTEND):** Reconcile all *requested* IDs against each successful batch result. Missing IDs become independent `{counts:{}, mine:null}` objects, after existing session, mutation-lease and read-epoch gates. Ignore unrequested IDs. Treat rejected/network-failed batches as retryable failures, not authoritative empty data. No API/schema, UX or security-contract change.
+- **Status:** [Draft #173](https://github.com/darshitmeghani1992/the-wall/pull/173), pure regression tests plus source; CI and independent Reviewer/behavioral QA required for final SHA. Staging-only; no merges or hosted writes. Enhanced Beta **NO-GO**.
+
 # The-Wall Decision Log
 
 ## D-39 · 2026-11-22 · Reaction offline retry on app foreground
