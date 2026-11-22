@@ -9,7 +9,7 @@ import { MarkCard } from "@/components/MarkCard";
 import { useAuth } from "@/lib/auth";
 import { completeWalkthrough } from "@/lib/account";
 import { clearOnboardingDraft, loadOnboardingDraft } from "@/lib/onboarding";
-import { destinationAfterWalkthrough, AccountRouteFence, onboardingScreenScopeKey, walkthroughRequiresPersistence } from "@/lib/onboarding-contract";
+import { destinationAfterWalkthrough, AccountRouteFence, walkthroughRequiresPersistence } from "@/lib/onboarding-contract";
 import { colors, markColors } from "@/theme";
 
 const MOMENTS = [
@@ -27,7 +27,9 @@ export default function Walkthrough() {
   const liveActorId = useRef<string | null>(actorId);
   liveActorId.current = actorId;
   // The tour's index, mutation lease and replay mode belong to one account.
-  const scopeKey = `${onboardingScreenScopeKey(actorId, accountRoute)}:${replay === "1" ? "replay" : "first-use"}`;
+  // Keep this editor mounted when finishing onboarding advances the server route
+  // to "ready"; its in-flight callback must still resolve the deferred destination.
+  const scopeKey = `${actorId ?? "signed-out"}:${replay === "1" ? "replay" : "first-use"}`;
   return <WalkthroughEditor key={scopeKey} liveActorId={liveActorId} />;
 }
 

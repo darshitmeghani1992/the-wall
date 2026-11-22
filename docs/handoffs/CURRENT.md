@@ -2,7 +2,7 @@
 
 ## CURRENT BETA-P0-59 · Walkthrough session/replay isolation — 22 Nov 2026
 
-**ARCHITECT → FRONTEND:** Child of #142 `7dd545934ab231810acd5fec0ade9f7c4a154e43` on `codex/beta-walkthrough-actor-replay-scope-20261122-auto7`. Tour step, busy/finish lease, replay mode remount per actor/route, with live actor guards before late navigation. New source and account-route test. Native QA, Reviewer and exact SHA CI required. No backend/hosted/main/prod/deploy/feature flag change; **Enhanced Beta NO-GO**. Media/Secret/analytics OFF; domain/Apple held.
+**ARCHITECT → FRONTEND:** Child of #142 `7dd545934ab231810acd5fec0ade9f7c4a154e43` on `codex/beta-walkthrough-actor-replay-scope-20261122-auto7`. Tour step, busy/finish lease, replay mode remount per actor/replay, preserving the in-flight walkthrough-to-ready redirect, with live actor guards before late navigation. New source and account-route test. Native QA, Reviewer and exact SHA CI required. No backend/hosted/main/prod/deploy/feature flag change; **Enhanced Beta NO-GO**. Media/Secret/analytics OFF; domain/Apple held.
 
 **Next:** Verify own CI and independent behavioral QA for account changes during tour, then next nonoverlapping task; retain real OTP/JWT, media, Secret, deletion and native/rollback blockers.
 

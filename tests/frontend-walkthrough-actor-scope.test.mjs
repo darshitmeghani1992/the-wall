@@ -2,22 +2,26 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { AccountRouteFence, onboardingScreenScopeKey } from "../src/lib/onboarding-contract.ts";
+import { AccountRouteFence } from "../src/lib/onboarding-contract.ts";
 
 const source = readFileSync(new URL("../app/(onboarding)/walkthrough.tsx", import.meta.url), "utf8");
 
-test("tour step and finish state cannot be carried across accounts, routes or replay", () => {
+test("tour local index and finish state remount on actor or replay, not completion route", () => {
   assert.match(source, /const actorId = session\?\.user\.id \?\? null/);
   assert.match(source, /liveActorId\.current = actorId/);
-  assert.match(source, /onboardingScreenScopeKey\(actorId, accountRoute\)/);
+  assert.match(source, /const scopeKey = `\$\{actorId \?\? "signed-out"\}/);
   assert.match(source, /<WalkthroughEditor key=\{scopeKey\} liveActorId=\{liveActorId\}/);
   assert.match(source, /const \[index, setIndex\] = useState\(0\)/);
   assert.match(source, /const inFlight = useRef\(false\)/);
-  assert.notEqual(onboardingScreenScopeKey("A", "walkthrough"), onboardingScreenScopeKey("B", "walkthrough"));
-  assert.notEqual(onboardingScreenScopeKey("A", "walkthrough"), onboardingScreenScopeKey("A", "ready"));
+  const key = (actor, replay) => `${actor ?? "signed-out"}:${replay ? "replay" : "first-use"}`;
+  assert.notEqual(key("A", false), key("B", false));
+  assert.notEqual(key("A", false), key("A", true));
+  assert.equal(key("A", false), key("A", false));
+  // During completion, Auth route changes to ready; no remount until deferred navigation.
+  assert.match(source, /accountRoute === "walkthrough" \|\| inFlight\.current/);
 });
 
-test("delayed tour completion and navigation require live actor at every async checkpoint", () => {
+test("delayed tour completion and navigation require live actor at each async checkpoint", () => {
   assert.match(source, /if \(inFlight\.current \|\| userId !== liveActorId\.current\) return/);
   assert.match(source, /if \(!lifecycleFence\.current\.isCurrent\(token, liveActorId\.current\)\) return/);
   assert.match(source, /if \(liveActorId\.current === userId\)/);
@@ -33,7 +37,7 @@ test("delayed tour completion and navigation require live actor at every async c
   assert.equal(fence.isCurrent(second, "actor-B"), false);
 });
 
-test("replay remains presentation-only and cannot persist onboarding", () => {
+test("replay remains presentation-only", () => {
   assert.match(source, /if \(!walkthroughRequiresPersistence\(isReplay\)\)/);
   assert.match(source, /if \(accountRoute && !routeAllowed\) return <Redirect href="\/" \/>/);
 });
