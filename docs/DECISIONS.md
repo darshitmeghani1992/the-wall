@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-30 · 2026-11-22 · Treat public-anonymous private-Wall access as a distinct HTTP denial gate
+- **Trigger:** The opt-in staging three-JWT audit proved (when genuinely executed) authenticated owner/member access and outsider isolation but omitted a separate anonymous public-key read of the same private Shared Wall.
+- **Decision:** Require one additional GET using only a staging public anon/publishable key, exact private Wall filter and no redirect; accept a 401/403 or RLS-filtered empty 200 array, fail on any row, malformed 200 response or unexpected HTTP status. The prior three authenticated identities must first pass real Auth HTTP identity checks.
+- **Scope/Gates:** Draft #163 BACKEND harness/test only, no real user fixtures, hosted writes, network credentials, auth permission changes or beta GO. Source tests/green CI are not independent hosted JWT/RLS verification, Reviewer signoff or QA.
+
+
 ## D-29 · 2026-11-22 · Require a present, locked-OFF Secret rollout singleton before disabling expiry cleanup
 - **Trigger:** The #161 unschedule runbook checked whether any rollout row was enabled but did not require a row to exist or prevent a concurrent administrative update to enabled=true between validation and unschedule.
 - **Decision:** Preserve first-stage independent creation-disable commit, explicitly refuse a missing/invalid disabled singleton in both stages, and acquire a write-conflicting lock on the rollout table throughout final payload/job checks and cron shutdown. A missing row is NOT proof of disabled creation.
