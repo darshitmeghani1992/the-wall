@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-58 · Find People activation share and progress actor scoping — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of draft #141 immutable parent `fd3df87179d5bdb0e50e9d6a3eeae6c202efa71d`, branch `codex/beta-find-people-onboarding-actor-20261122-auto7`. `app/(onboarding)/find-people.tsx` could use cached previous-account profile handle in invitation copy while a new account's Auth profile was loading. Local busy/operation fence also belonged to the old route until effect cleanup, risking a stuck activation button or stale continuation on A→B. The activation body now remounts for authenticated actor + canonical account route; the invitation handle is admitted only if its profile ID matches the actor; pending continuation checks a shared render-current actor before any action and after async boundaries. Unavailable profile retains existing generic invitation rather than misrouting to the previous user's Wall. No new product UI text, API, schema or flags.
+
+**Tests/gates:** `tests/frontend-find-people-actor-scope.test.mjs` exercises actor/route key, profile-match matrix, stale A→B continuation and A→B→A lifecycle lease. Exact final SHA CI, independent Reviewer and device QA needed for actor swaps during sharing/draft write, no-profile fallback, navigation and retry; source unit tests cannot establish native share-sheet behavior. Staging only `ewintxgdxdvschiqodkq`, production protected; no hosted writes, merges, 0031, deploy, domain/DNS/Apple or tester invite. Media/Secret/analytics OFF and Enhanced Beta **NO-GO** pending real OTP/3 JWT actors, media/Secret/deletion and independent certification.
+
+**Next:** Verify final-head CI and reviewer/device QA, then continue another unblocked independent slice. Maintain PR #140/#141 review queue and issue #57.
+
+
 ## BETA-P0-57 · Discover relationship privacy and stale Unfriend native dialog — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated descendant of PR #140 immutable parent `f8ae7c2447d14c6b4cb68b0020b72265bd266e38`, branch `codex/beta-discover-actor-native-confirm-20261122-auto7`. In Discover, Friends/Requests/people search/public Shared Wall results and input remained in React state until asynchronous focus cleanup on actor changes, briefly exposing previous-account relationship information. A render-keyed editor now remounts at every identity change. An already-open native **Unfriend** confirmation now captures an action focus lease and checks a render-current actor reference before invoking the unchanged friend API. No backend/RPC/Auth/schema/policy, product copy, flags or staging changes.
