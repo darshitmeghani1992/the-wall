@@ -7,7 +7,7 @@ assert.equal(secretComposerEnabledFor(undefined), false);
 assert.equal(secretComposerEnabledFor("false"), false);
 assert.equal(secretComposerEnabledFor("1"), false);
 assert.equal(secretComposerEnabledFor("TRUE"), false);
-assert.equal(secretComposerEnabledFor("true"), true);
+assert.equal(secretComposerEnabledFor("true"), false, "a build flag cannot bypass missing one-hour Secret cleanup");
 assert.equal(isSecretComposerEnabled, false, "one-hour expiry scheduler has not been provisioned in preview");
 const source = readFileSync("app/create.tsx", "utf8");
 assert.match(source, /canToggleSecret = isSecretComposerEnabled &&/);
