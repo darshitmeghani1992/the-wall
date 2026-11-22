@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-33 · 2026-11-22 · Optional telemetry is hard-disabled in the Enhanced Beta client
+- **Trigger:** Even though the private beta approval required optional analytics OFF, the client-side `analytics.ts` automatically instantiated the PostHog SDK when `EXPO_PUBLIC_POSTHOG_KEY` was set; inherited EAS variables could activate collection without an explicit privacy sign-off.
+- **Decision (ARCHITECT → FRONTEND):** Make `track` and `identify` no-ops with no import/initialization of any third-party tracking SDK in the Enhanced Beta client. A key or build variable alone must not enable telemetry. Restore collection only under a separate Founder product/privacy approval and independent Reviewer/QA with event/identity/consent, bundle, network and policy evidence.
+- **Implementation:** Draft [#166](https://github.com/darshitmeghani1992/the-wall/pull/166), scoped to `src/lib/analytics.ts` + `tests/frontend-analytics-privacy-hold.test.mjs`; no hosted changes or flags. **Not** device-verified/independently certified. Existing D-22/D-14 staging-only and release holds stay in force.
+
+
 ## D-32 · 2026-11-22 · An anonymous HTTP denial alone cannot certify the private-Wall RLS predicate
 - **Trigger:** The seventh read-only private-Wall check counted HTTP 401/403 as proof of anonymous non-visibility. A valid RLS filter might instead return HTTP 200 with `[]`; 401/403 may originate at a gateway, API key validation or table-level grant denial, without exercising the Wall RLS predicate. Merely removing an invalid publishable Bearer in D-31 does not eliminate this ambiguity.
 - **Decision (ARCHITECT sequencing → BACKEND harness):** On the existing publicly readable `walls` SELECT endpoint with a valid staging public key, require HTTP 200 with exact empty JSON array for the seventh anonymous private-Wall check. Treat 401/403 as **inconclusive/NO-GO**, not privacy-pass; reject 3xx/5xx, invalid JSON and nonempty results. This does not grant anyone access or adjust production/staging schema. The existing 3 server-verified actor JWT checks are mandatory before the anonymous check.
