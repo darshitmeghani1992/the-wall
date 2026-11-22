@@ -142,8 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authSubjectRef.current = null;
         currentRouteFence.begin(null);
       }
-      // Fail closed to the existing welcome/re-auth flow; do not expose a
-      // session whose deferred destination ownership was not reconciled.
+      // Fail closed to the existing welcome/re-auth flow. Also revoke the
+      // subject marker: a later same-user TOKEN_REFRESHED must redo identity
+      // reconciliation, not take the session-only fast path after failure.
+      authSubjectRef.current = null;
+      currentRouteFence.invalidate(null);
       setSession(null);
       setAccountRoute(null);
       setProfile(null);
@@ -186,6 +189,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // If destination ownership cannot be reconciled, keep protected routes
         // unavailable rather than hanging on the loading screen or leaking it.
         if (currentRouteFence.isCurrent(eventToken, authSubjectRef.current ?? null)) {
+          // Never let a later token refresh revive a failed identity handoff.
+          authSubjectRef.current = null;
+          currentRouteFence.invalidate(null);
           setSession(null);
           setAccountRoute(null);
           setProfile(null);
