@@ -1,3 +1,11 @@
+## CURRENT · BETA-P0-96 · Trusted definer-schema CREATE ACL guard — 23 Nov 2026
+
+**ARCHITECT → BACKEND:** child [draft #182](https://github.com/darshitmeghani1992/the-wall/pull/182), base #181 immutable `a4481193855da532cf73099297f344b1e28ff27e`, [parent 4/4 final CI SUCCESS 45073273618](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073273618). Source `55e257cab3ff9b025f22fee24c34eb306ed98185`, tree `eb36de50d2accff6e5bd56670cab4648393b7204`: disposable SQL 77 asserts no anon/auth/PUBLIC CREATE on public/auth/storage schemas; registered in SEC-001 runner. Staging SQL confirms observed 3-schema ACL. CI of new source and final documentation head to verify. Catalog-only, not a real authenticated exploit test, pg_temp proof, Reviewer signoff or device QA.
+
+#181 final-head CI now Verified 4/4; neither draft is review/QA-approved or merge-ready. Original production untouched, no hosted writes/migrations/merges/deployments/tester invitations/held domain or Apple. Fresh staging 0 users/Walls/Marks, RLS 35/35, private media, no pg_cron. OTP, 3-actor JWT HTTP, C2/C3 playback, Secret cron, 0031 deletion, Reviewer/device QA open, #177 Founder/Product open. High-risk flags OFF; **Enhanced Beta NO-GO**. Canonical next task `docs/BUILD_STATUS.md`.
+
+---
+
 ## CURRENT · BETA-P0-95 · Alert destination UUID safety — 23 Nov 2026
 
 **ARCHITECT → FRONTEND:** isolated [draft #181](https://github.com/darshitmeghani1992/the-wall/pull/181) from #180 final exact `89a72b5d5918f7d05a5f303f2e48658681c6a972` (CI 45067509529 4/4). Source/test `ca46dbbdb3b07ca0b6f9552d799ff405867a1703`: canonical UUID guards for Alert actor/Wall/owner/focused Mark route parameters; malformed IDs no longer compose arbitrary nested paths or query strings, fall back to Discover/Alerts or omit bad Mark focus. Ten new pure route assertions. [Source CI 45073187558](https://github.com/darshitmeghani1992/the-wall/actions/runs/45073187558) triggered; inspect final result and **repeat exact documentation-head CI**. No independent Reviewer or installed-device QA, so no merge/deploy readiness.
