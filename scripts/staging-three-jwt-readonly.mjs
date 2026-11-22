@@ -122,10 +122,12 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
       throw new Error('Private Shared Wall RLS visibility mismatch: ' + actor.role);
     }
   }
-  // Distinct negative HTTP evidence: the publishable/anon key must never read
-  // the exact private Wall already proven visible to the authorized actors.
-  // PostgREST may return RLS-filtered [] (200) or reject access (401/403).
-  // Neither is equivalent to a fabricated JWT or SQL SET ROLE exercise.
+  // This is an *RLS* verification, not just proof that an HTTP request failed.
+  // With the public walls read grant in this beta, an authenticated application
+  // key acting as anon must reach PostgREST and receive RLS-filtered [] (200).
+  // A 401/403 could come from an invalid/expired API key, gateway, or grant
+  // misconfiguration *before* the anon role ever exercises the Wall policy.
+  // Treat any such denial as INCONCLUSIVE/NO-GO, not as RLS PASS.
   const anon = await fetchImpl(wallUrl.toString(), {
     method: 'GET',
     redirect: 'error',
@@ -141,21 +143,20 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
     },
     signal: AbortSignal.timeout(12000),
   });
-  if (anon.status === 200) {
-    let rows;
-    try {
-      rows = await anon.json();
-    } catch {
-      throw new Error('Malformed anonymous staging HTTP JSON response');
-    }
-    if (!Array.isArray(rows)) {
-      throw new Error('Malformed anonymous staging HTTP JSON response');
-    }
-    if (rows.length !== 0) {
-      throw new Error('Private Shared Wall visible without authentication');
-    }
-  } else if (anon.status !== 401 && anon.status !== 403) {
-    throw new Error('Anonymous staging GET failed with HTTP ' + anon.status);
+  if (anon.status !== 200) {
+    throw new Error('Anonymous RLS check inconclusive: expected HTTP 200, got ' + anon.status);
+  }
+  let rows;
+  try {
+    rows = await anon.json();
+  } catch {
+    throw new Error('Malformed anonymous staging HTTP JSON response');
+  }
+  if (!Array.isArray(rows)) {
+    throw new Error('Malformed anonymous staging HTTP JSON response');
+  }
+  if (rows.length !== 0) {
+    throw new Error('Private Shared Wall visible without authentication');
   }
   return { status: 'PASS', httpRequests: 7, actorCount: 3, readOnly: true };
 }
@@ -185,7 +186,7 @@ if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
         error.message.startsWith('Malformed staging HTTP') ||
         error.message.startsWith('Malformed anonymous staging HTTP') ||
         error.message.startsWith('Private Shared Wall visible without authentication') ||
-        error.message.startsWith('Anonymous staging GET failed with HTTP '))
+        error.message.startsWith('Anonymous RLS check inconclusive:'))
         ? error.message : 'Staging network/runtime error';
       console.error('NO-GO: ' + message);
       process.exitCode = 1;
