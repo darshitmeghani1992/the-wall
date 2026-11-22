@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-54 · Shared Wall member roster and native confirmation fencing — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Fresh isolated child of PR #137 exact `ef774e7f447234ae2644a2977e873a956ea644d5`, branch `codex/beta-shared-members-actor-confirm-20261122-automation6`, source `e07d3fcf9d858ece468d6e5999acf43f1c9c8ed5`/tree `1186c1a199fc795d8046da27efd3cbe65a58d5e5`. Member roster, invite search and membership actions now belong to a React-keyed actor+Wall editor; old native removal/transfer confirmation callbacks check a mutation focus token before performing protected actions. Node contract/source test added. CI/independent Reviewer/QA on final doc-inclusive SHA pending. No merge/deploy/hosted writes; **Enhanced Beta NO-GO**. Media/Secret/analytics remain OFF, original production protected.
+
+**Next:** Verify latest exact SHA's CI jobs, independent Reviewer and device QA for A→B and Wall X→Y with delayed native confirmation, pending actions and error/retry. Preserve user-authenticated staging QA, SMTP, media C2/C3, one-hour Secret scheduler, migration 0031/deletion, native/rollback and Founder gates. Continue another separate unblocked implementation slice.
+
 ## CURRENT BETA-P0-53 · Shared Wall settings session/Wall scoped editor — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Stacked isolated child of #136 immutable source `7d63536bf0891ee6068772496309af5465123984`, branch `codex/beta-shared-settings-actor-scope-20261122-automation6`; source implementation commit `4b383045111fdba1e93b650639fd968657424ac5` and tree `97fea4334281aa25922b231467c69e6f675e851b`. Shared Wall Settings now keys the editor to the authenticated actor and destination Wall, preventing old privacy/name/anonymous choices or delete confirmations from appearing across A→B and Wall X→Y before focus resets. Reads and mutations use separate focus fences; obsolete save/delete work cannot clear a newer session's mutation lock, and delete requires live confirmation of the exact loaded Wall name. New contract test `tests/frontend-shared-settings-session-isolation.test.mjs`; GitHub CI for final doc head pending. Independent REVIEWER and device QA not run. **NO-GO**; staging only, no hosted writes, merges, release, 0031, domain or Apple actions.
