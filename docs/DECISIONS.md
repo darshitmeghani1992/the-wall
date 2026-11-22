@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-28 · 2026-11-22 · Secret scheduler shutdown requires confirmed empty payload backlog
+- **Trigger:** Old operator unschedule file disabled new Secret creation then stopped the cleanup job even when one-time payloads remained, contrary to the one-hour deletion guarantee.
+- **Decision:** Keep the creation flag OFF independently and refuse shutdown unless an explicit transaction obtains concurrent write locks, confirms zero rows in `mark_secrets`, validates exactly one intended cron job, and confirms creation disabled. Keep cron running on any safety failure; never force-delete pending data merely to pass this gate.
+- **Constraints:** Draft #161 only; no live SQL, hosted migration, Secret activation or irreversible action. Require independent security Reviewer, disposable DB + cron concurrency QA and Founder operational release gates before usage. Existing Secret OFF and all other Enhanced Beta NO-GO conditions unchanged.
+
+
 ## D-27 · 2026-11-22 · HTTP preflight never follows redirects carrying public API credentials
 - **Trigger:** The staging-only preflight issued Auth/REST requests with the `apikey` header but retained default fetch redirect-follow, unlike the independently prepared three-JWT harness. Unexpected 30x responses may lead to additional outbound requests outside approved staging.
 - **Decision:** Set `redirect: 'error'` for every credential-bearing staging preflight GET; 302 and thrown redirect failures are NO-GO. Keep exact approved origin validation, public-key checks, and private table negative gates; no new endpoint or hosted permission change.
