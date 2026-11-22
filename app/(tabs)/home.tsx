@@ -309,7 +309,7 @@ export default function MyWall() {
             }}
           >
             {actorProfile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={{ width: "100%", height: "100%" }} />
+              <Image source={{ uri: actorProfile.avatar_url }} style={{ width: "100%", height: "100%" }} />
             ) : (
               <Text variant="display" style={{ fontSize: 24 }}>{initial}</Text>
             )}
@@ -423,7 +423,7 @@ export default function MyWall() {
   if (!accountRoute) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (accountRoute !== "ready") return <Redirect href={destinationForAccountRoute(accountRoute)} />;
   if (loadedSubject && loadedSubject !== `${userId}:${focusMarkId ?? ""}`) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
-  // The previous actor\'s personal Wall must not render before effects clear it.
+  // The previous actor's personal Wall must not render before effects clear it.
   if (wall && wall.owner_id !== userId) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference !== reference) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
   if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;

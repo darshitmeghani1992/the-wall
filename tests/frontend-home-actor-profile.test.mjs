@@ -9,7 +9,7 @@ const displaySource = source.slice(source.indexOf('  const initial = (actorProfi
 test("My Wall never uses an unowned cached profile in display or sharing", () => {
   assert.match(source, /const actorProfile = userId && profile\?\.id === userId \? profile : null/);
   assert.ok(displaySource.startsWith('  const initial = (actorProfile?.display_name'));
-  assert.doesNotMatch(displaySource, /\bprofile\?\./, "raw cached profile must not reach display code");
+  assert.doesNotMatch(displaySource, /\bprofile(?:\?\.|\.)/, "raw cached profile must not reach display code");
   assert.match(displaySource, /avatar_url \? /);
   assert.match(displaySource, /shareMyWall\(actorProfile\?\.handle\)/);
   assert.match(displaySource, /inviteFriends\(actorProfile\?\.handle\)/);
