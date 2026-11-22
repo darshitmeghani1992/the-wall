@@ -1,5 +1,11 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-55 · Shared Wall create draft actor isolation — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of #138 exact `d36dcab24f1744eeb38b1e1a69330074bc0cc047`, new branch `codex/beta-shared-create-actor-draft-20261122-automation6`, source `2e4c242f02e8caa48c4bd5ba9c01708b5b63ec72` / tree `c60d1723a68dcaa9f10db8c65eadc7f40ebd1ede`. Create Shared Wall title/visibility/Anonymous/Open Join drafts now live inside a session-keyed editor, instead of leaking A's local form state during B's new sign-in. Existing create mutation fence retained, no backend or protected infrastructure changes. New contract test `tests/frontend-shared-create-actor-draft.test.mjs`, exact final CI pending, independent REVIEWER/behavioral QA not yet done. Enhanced Beta **NO-GO**; staging-only, no deploy/merge.
+
+**Next:** Verify CI for current head and PRs #137/#138, obtain distinct Reviewer and native QA for A→B and new Wall creation, return to remaining unblocked queue items. Six-digit SMTP OTP, 3 real JWT actors, private media C2/C3, one-hour Secret cleanup, 0031 deletion and device/rollback still blocked. Keep media/Secret/analytics OFF, original production protected.
+
 ## CURRENT BETA-P0-54 · Shared Wall member roster and native confirmation fencing — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** Fresh isolated child of PR #137 exact `ef774e7f447234ae2644a2977e873a956ea644d5`, branch `codex/beta-shared-members-actor-confirm-20261122-automation6`, source `e07d3fcf9d858ece468d6e5999acf43f1c9c8ed5`/tree `1186c1a199fc795d8046da27efd3cbe65a58d5e5`. Member roster, invite search and membership actions now belong to a React-keyed actor+Wall editor; old native removal/transfer confirmation callbacks check a mutation focus token before performing protected actions. Node contract/source test added. CI/independent Reviewer/QA on final doc-inclusive SHA pending. No merge/deploy/hosted writes; **Enhanced Beta NO-GO**. Media/Secret/analytics remain OFF, original production protected.
