@@ -216,9 +216,17 @@ export default function SharedWallScreen() {
   }
 
   function confirmLeave() {
+    if (!userId || !wall || wall.id !== wallId || busy || mutationInFlight.current) return;
+    // A native alert can outlive a route/account switch. Its destructive
+    // callback is authorized only while the original focus and Wall persist.
+    const confirmationToken = mutationFence.begin(userId);
+    if (!confirmationToken) return;
     Alert.alert("Leave this Shared Wall?", "You can join again later only if Open Join is available or the owner invites you.", [
       { text: "Stay", style: "cancel" },
-      { text: "Leave", style: "destructive", onPress: () => void leave() },
+      { text: "Leave", style: "destructive", onPress: () => {
+        if (!mutationFence.isCurrent(confirmationToken, currentUserId.current) || currentWallId.current !== wallId) return;
+        void leave();
+      } },
     ]);
   }
 
