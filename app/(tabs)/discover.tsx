@@ -25,11 +25,26 @@ import { normalizeSharedWallSearch } from "@/lib/shared-wall-contract";
 import { searchPublicSharedWalls, type PublicSharedWall } from "@/lib/walls";
 import { colors, markColors, radius } from "@/theme";
 
+/** Keep Discover's private relationship/search state scoped to the active account
+ * synchronously at render, before navigation focus cleanup can run. */
 export default function PeopleScreen() {
+  const { session } = useAuth();
+  const actorId = session?.user.id ?? null;
+  // Native Alerts may outlive the old screen: share a render-current identity.
+  const liveActorId = useRef<string | null>(actorId);
+  liveActorId.current = actorId;
+  return <DiscoverForActor key={actorId ?? "signed-out"} userId={actorId} liveActorId={liveActorId} />;
+}
+
+function DiscoverForActor({
+  userId,
+  liveActorId,
+}: {
+  userId: string | null;
+  liveActorId: { current: string | null };
+}) {
   const router = useRouter();
   const { section } = useLocalSearchParams<{ section?: string }>();
-  const { session } = useAuth();
-  const userId = session?.user.id;
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"people" | "walls">("people");
   const [wallResults, setWallResults] = useState<PublicSharedWall[]>([]);
@@ -186,10 +201,25 @@ export default function PeopleScreen() {
   }
 
   function confirmUnfriend(profile: PersonRelationship["profile"], action: () => void) {
+    if (actionInFlight.current) return;
+    // Capture the focus generation when the native dialog opens. Checking only
+    // during perform() is insufficient: a queued dialog can outlive a session.
+    const confirmationToken = actionFence.current.begin(userId);
+    if (!confirmationToken) return;
     Alert.alert(
       `Unfriend ${profile.display_name}?`,
       "Private Walls and friends-only Mark access will no longer be available.",
-      [{ text: "Keep friend", style: "cancel" }, { text: "Unfriend", style: "destructive", onPress: action }],
+      [
+        { text: "Keep friend", style: "cancel" },
+        {
+          text: "Unfriend",
+          style: "destructive",
+          onPress: () => {
+            if (!actionFence.current.isCurrent(confirmationToken, liveActorId.current)) return;
+            action();
+          },
+        },
+      ],
     );
   }
 

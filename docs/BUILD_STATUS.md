@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-57 · Discover relationship privacy and stale Unfriend native dialog — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated descendant of PR #140 immutable parent `f8ae7c2447d14c6b4cb68b0020b72265bd266e38`, branch `codex/beta-discover-actor-native-confirm-20261122-auto7`. In Discover, Friends/Requests/people search/public Shared Wall results and input remained in React state until asynchronous focus cleanup on actor changes, briefly exposing previous-account relationship information. A render-keyed editor now remounts at every identity change. An already-open native **Unfriend** confirmation now captures an action focus lease and checks a render-current actor reference before invoking the unchanged friend API. No backend/RPC/Auth/schema/policy, product copy, flags or staging changes.
+
+**Evidence/gates:** New `tests/frontend-discover-actor-confirmation.test.mjs` covers keyed state ownership and a native confirmation actor-switch/blur/ABA lease matrix. Exact final-head CI, independent Reviewer and real device/simulator QA needed for A→B/B→A before focus cleanup, stale friend/search/result exposure, delayed Unfriend alert after sign-out/return/blur, in-flight network/mutations and normal happy path. Source-only tests cannot certify device behavior. STAGING ONLY `ewintxgdxdvschiqodkq`; protect original production. No hosted writes, migration 0031, branch merges, deployments, tester invites or domain/Apple actions. Media/Secret/analytics OFF, **Enhanced Beta NO-GO** pending OTP/three JWT actors, media C2/C3, Secret expiry, deletion, independent QA/rollback and Founder GO.
+
+**Next:** Verify CI for PR #140 and this isolated draft exact SHA, request independent Reviewer/QA, then continue a separate unblocked task from canonical queue.
+
+
 ## BETA-P0-56 · Shared Wall native Leave confirmation actor/Wall lease — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** New isolated child of draft #139 immutable parent `251f2de4684469ab4ef2c76b0c80ff160d0d68a8`, branch `codex/beta-shared-leave-dialog-scope-20261122-automation6`, source commit `ed7dd5303535c81f1db8f0261781722ebc0c702f` and source tree `39ab98e919306eab78c4f80b39277d32ae4de76e`. In `app/shared/[id].tsx`, a native Leave confirmation could remain open after a signed-in account or Shared Wall destination change; its delayed onPress then used the prior closure's Wall ID under the new active session. Confirming Leave now requires a loaded matching Wall and no active mutation, captures a focus generation when opened, and refuses any late callback after blur, actor switch or Wall X→Y route transition. Existing backend membership authorization remains authoritative; no copy, schema, RPC/Auth, analytics or media changes. Added `tests/frontend-shared-leave-confirmation.test.mjs` with a source guard plus A-W1→B-W1/A-W2/ABA lease matrix.

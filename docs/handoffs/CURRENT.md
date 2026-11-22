@@ -1,5 +1,12 @@
 # CURRENT — Operational Handoff
 
+## CURRENT BETA-P0-57 · Discover actor state and native Unfriend guard — 22 Nov 2026
+
+**ARCHITECT → FRONTEND:** Isolated child of PR #140 `f8ae7c2447d14c6b4cb68b0020b72265bd266e38` on `codex/beta-discover-actor-native-confirm-20261122-auto7`. Discover now remounts private relationship/search state synchronously when account changes; stale Unfriend native dialog callback checks the original focus token and current actor (updated in parent render). Existing authenticated mutation contract unchanged; source/lease regression test added. Exact CI, independent Reviewer and device QA pending; beta remains **NO-GO**. No production, hosted mutation, merge, deployment or held external action.
+
+**Next:** Verify own CI and unchanged SHA, obtain separate Reviewer/QA for native alert and actor transitions, then select next unblocked task. OTP/three JWT actors, media, Secret, deletion and device/rollback gates unresolved.
+
+
 ## CURRENT BETA-P0-56 · Shared Wall delayed Leave Alert scoping — 22 Nov 2026
 
 **ARCHITECT → FRONTEND:** New isolated child of PR #139 immutable `251f2de4684469ab4ef2c76b0c80ff160d0d68a8`, branch `codex/beta-shared-leave-dialog-scope-20261122-automation6`, source commit `ed7dd5303535c81f1db8f0261781722ebc0c702f` / tree `39ab98e919306eab78c4f80b39277d32ae4de76e`. Native Leave confirmation now carries a focus token plus exact Wall guard to reject a stale destructive callback after A→B, route X→Y or blur; backend membership authority unchanged. New source/lease regression test; final CI, independent Reviewer and behavioral device QA pending. **NO-GO.** No hosted mutation, branch merge, deployment, original production access or held external setup.
