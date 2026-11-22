@@ -1,5 +1,14 @@
 # The-Wall Build Status
 
+## BETA-P0-64 · Auth deep-link callback result/session gate — 22 Nov 2026
+
+**ROLE: ARCHITECT sequencing → FRONTEND implementation.** Draft [#148](https://github.com/darshitmeghani1992/the-wall/pull/148) is an isolated child of #147 at `ebe59ab34fcac7b7bd64981ce0c00ed60e9432b2`. The callback previously discarded the `{error}` returned by `exchangeCodeForSession` and could navigate to the app after a failed exchange or on a missing code without a session. It now requires a successful code exchange or an existing valid session, reports failure instead of routing, and cancels stale async navigation when the callback route unmounts. New `tests/frontend-auth-callback-session-gate.test.mjs` provides source-level regression assertions.
+
+**Verification / blocker:** GitHub exact-head CI queued at first checkpoint; this source test is not behavioral authentication proof. Independent Reviewer and device QA must test valid, expired/replayed, missing-code callback with/without valid session, slow exchange during navigation, and installed iOS/Android link handling. Real six-digit SMTP delivery, three genuine hosted JWT identities, media C2/C3, Secret cleanup, account deletion 0031, security and device release evidence remain blockers. No hosted writes/merges/deployments; production untouched; staging only; media/Secret/analytics OFF; Apple/domain holds preserved. **Enhanced Beta NO-GO.**
+
+**Next:** Verify PR #148 latest CI SHA, independent Reviewer and QA; continue next unblocked separate work in issue #57.
+
+
 ## BETA-P0-63 · Immutable six-digit OTP challenge email and exclusive auth operation — 22 Nov 2026
 
 **ROLE: ARCHITECT sequencing → FRONTEND implementation.** Isolated child of PR #146 exact `f05cd07d1518bff36b68ed0a3ec248f630fd87ec`, branch `codex/beta-otp-challenge-email-snapshot-20261122-auto8`. Previously the sign-in screen awaited delivery for one email but displayed the current editable `email` state, and `verifyOtp` also read that mutable value. A user could edit the email while a send was in flight, causing the next screen to claim the code was sent to another address and to attempt verification for the wrong email. The sent challenge now captures a single trimmed email as `sentEmail`; displayed destination, verification and resend all use it. Changing email clears that challenge; the email field is disabled during requests, the code clears on resend and a synchronous shared ref prevents overlapping OTP/OAuth attempts. Same UI, no passwordless Auth API, backend settings, code template or policy change.
