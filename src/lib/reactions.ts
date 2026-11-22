@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { track } from "./analytics";
+import { requireExpectedActor } from "./expected-actor";
 
 /**
  * Reactions on Marks. Backed by `mark_reactions` + RLS. Master Spec §31: ONE
@@ -73,10 +74,18 @@ export async function getReactionSummary(
  * (mark_id, user_id), so it both adds a first reaction and CHANGES an existing
  * one — a user never stacks two reactions.
  */
-export async function setReaction(markId: string, emoji: ReactionEmoji): Promise<void> {
-  const { data: authData } = await supabase.auth.getUser();
-  const uid = authData.user?.id;
-  if (!uid) throw new Error("You need to be signed in to react.");
+export async function setReaction(
+  expectedActorId: string,
+  markId: string,
+  emoji: ReactionEmoji,
+): Promise<void> {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  const uid = requireExpectedActor(
+    expectedActorId,
+    authData.user?.id,
+    "You need to be signed in to react.",
+  );
 
   const { error } = await supabase
     .from("mark_reactions")
@@ -87,17 +96,28 @@ export async function setReaction(markId: string, emoji: ReactionEmoji): Promise
 }
 
 /** Remove the signed-in user's reaction from a Mark. */
-export async function removeReaction(markId: string): Promise<void> {
-  const { data: authData } = await supabase.auth.getUser();
-  const uid = authData.user?.id;
-  if (!uid) return;
+export async function removeReaction(
+  expectedActorId: string,
+  markId: string,
+): Promise<void> {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  const uid = requireExpectedActor(
+    expectedActorId,
+    authData.user?.id,
+    "You need to be signed in to react.",
+  );
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("mark_reactions")
     .delete()
     .eq("mark_id", markId)
-    .eq("user_id", uid);
+    .eq("user_id", uid)
+    .select("mark_id")
+    .maybeSingle();
   if (error) throw error;
+  // RLS-denied and already-removed rows must not be reported as successful writes.
+  if (data?.mark_id !== markId) throw new Error("REACTION_ACTION_NOT_ALLOWED");
 }
 
 /**
@@ -107,13 +127,14 @@ export async function removeReaction(markId: string): Promise<void> {
  * removes it; tapping a different one switches to it (§31: one active reaction).
  */
 export async function toggleReaction(
+  expectedActorId: string,
   markId: string,
   emoji: ReactionEmoji,
   currentEmoji: string | null,
 ): Promise<void> {
   if (currentEmoji === emoji) {
-    await removeReaction(markId);
+    await removeReaction(expectedActorId, markId);
   } else {
-    await setReaction(markId, emoji);
+    await setReaction(expectedActorId, markId, emoji);
   }
 }
