@@ -12,22 +12,44 @@ assert.deepEqual(parseOAuthProviderAvailability({ external: { email: true } }), 
 
 let fetched = "";
 let keySeen = "";
+let redirectSeen: RequestRedirect | undefined;
+let methodSeen: string | undefined;
 const available = await fetchOAuthProviderAvailability({
   url: "https://example.supabase.co",
   anonKey: "public-test-key",
   fetchImpl: (async (url: string | URL | Request, options?: RequestInit) => {
     fetched = String(url);
     keySeen = String((options?.headers as Record<string, string>)?.apikey);
+    redirectSeen = options?.redirect;
+    methodSeen = options?.method;
     return { ok: true, json: async () => ({ external: { google: true, apple: false } }) } as Response;
   }) as typeof fetch,
 });
 assert.deepEqual(available, { google: true, apple: false });
 assert.equal(fetched, "https://example.supabase.co/auth/v1/settings");
 assert.equal(keySeen, "public-test-key");
+assert.equal(redirectSeen, "error");
+assert.equal(methodSeen, "GET");
 assert.deepEqual(await fetchOAuthProviderAvailability({ url: "https://example.supabase.co/rest/v1/", anonKey: "key" }), noOAuthProviders);
 assert.deepEqual(await fetchOAuthProviderAvailability({ url: "http://example.supabase.co", anonKey: "key" }), noOAuthProviders);
 assert.deepEqual(await fetchOAuthProviderAvailability({ url: "https://example.supabase.co", anonKey: "key", fetchImpl: (async () => { throw new Error("network"); }) as unknown as typeof fetch }), noOAuthProviders);
 assert.deepEqual(await fetchOAuthProviderAvailability({ url: "https://example.supabase.co", anonKey: "key", fetchImpl: (async () => ({ ok: false })) as unknown as typeof fetch }), noOAuthProviders);
+// Fetch with redirect:error rejects 30x responses instead of forwarding apikey.
+const redirects: RequestRedirect[] = [];
+const redirected = await fetchOAuthProviderAvailability({
+  url: "https://example.supabase.co",
+  anonKey: "public-test-key",
+  fetchImpl: (async (_url: string | URL | Request, options?: RequestInit) => {
+    redirects.push(options?.redirect ?? "follow");
+    if (options?.redirect !== "error") {
+      // A request accidentally following a redirect would enable an untrusted provider.
+      return { ok: true, json: async () => ({ external: { google: true } }) } as Response;
+    }
+    throw new TypeError("redirect refused");
+  }) as typeof fetch,
+});
+assert.deepEqual(redirects, ["error"]);
+assert.deepEqual(redirected, noOAuthProviders);
 
 // OAuth's code-exchange contract requires PKCE rather than the default implicit flow.
 const supabaseSource = readFileSync("src/lib/supabase.ts", "utf8");

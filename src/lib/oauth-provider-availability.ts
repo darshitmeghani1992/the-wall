@@ -43,6 +43,10 @@ export async function fetchOAuthProviderAvailability(
   const timeout = setTimeout(() => controller.abort(), 8_000);
   try {
     const response = await (options.fetchImpl ?? fetch)(`${origin}/auth/v1/settings`, {
+      method: "GET",
+      // Do not forward even a public app key to an unapproved redirect host,
+      // or trust OAuth-provider availability from a redirected response.
+      redirect: "error",
       headers: { apikey: key },
       signal: controller.signal,
     });

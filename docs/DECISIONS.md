@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-34 · 2026-11-22 · OAuth provider availability cannot cross redirected origin boundary
+- **Trigger:** The Auth settings availability fetch included a public `apikey` but accepted default browser/native fetch redirects. That could expose the app's staging key to a redirected host or enable unapproved provider buttons from that response even when the intended Supabase Auth endpoint is unavailable.
+- **Decision (ARCHITECT → FRONTEND):** Set `redirect: "error"` and `method: "GET"` on the `/auth/v1/settings` provider probe, retaining all-error `noOAuthProviders` behavior. No new OAuth provider is enabled. Test mock redirect rejection and request options. **No client credential is secret**, but client access and capability discovery must still respect the approved origin. Review actual installed-device traffic before release.
+- **Implementation:** [Draft #167](https://github.com/darshitmeghani1992/the-wall/pull/167), source/test only plus checkpoint docs; independent Reviewer/device QA and real Google/Apple settings still required. Existing staging-only/Apple/domain/privacy holds remain.
+
+
 ## D-33 · 2026-11-22 · Optional telemetry is hard-disabled in the Enhanced Beta client
 - **Trigger:** Even though the private beta approval required optional analytics OFF, the client-side `analytics.ts` automatically instantiated the PostHog SDK when `EXPO_PUBLIC_POSTHOG_KEY` was set; inherited EAS variables could activate collection without an explicit privacy sign-off.
 - **Decision (ARCHITECT → FRONTEND):** Make `track` and `identify` no-ops with no import/initialization of any third-party tracking SDK in the Enhanced Beta client. A key or build variable alone must not enable telemetry. Restore collection only under a separate Founder product/privacy approval and independent Reviewer/QA with event/identity/consent, bundle, network and policy evidence.
