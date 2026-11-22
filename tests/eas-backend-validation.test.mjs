@@ -4,10 +4,17 @@ import { test } from 'node:test';
 
 const script = new URL('../scripts/validate-eas-backend.mjs', import.meta.url);
 
-function run(url, key = 'sb_publishable_mock_for_tests') {
+function run(url, key = 'sb_publishable_mock_for_tests', flags = {}) {
   const env = { ...process.env };
   delete env.EXPO_PUBLIC_SUPABASE_URL;
   delete env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  // Isolate the test process from the runner's real EAS environment.
+  for (const flag of [
+    'EXPO_PUBLIC_MEDIA_MARKS_ENABLED',
+    'EXPO_PUBLIC_SECRET_MARKS_ENABLED',
+    'EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED',
+  ]) delete env[flag];
+  Object.assign(env, flags);
   if (url !== undefined) env.EXPO_PUBLIC_SUPABASE_URL = url;
   if (key !== undefined) env.EXPO_PUBLIC_SUPABASE_ANON_KEY = key;
   return spawnSync(process.execPath, [script.pathname], { env, encoding: 'utf8', timeout: 5000 });
@@ -98,4 +105,22 @@ test('EAS refuses opaque or noncanonical public-key formats before packaging', (
     assert.match(result.stderr, /EAS build blocked/);
     assert.equal((result.stdout + result.stderr).includes(key), false);
   }
+});
+
+
+test('EAS blocks stale high-risk feature flags even with valid staging credentials', () => {
+  const staging = 'https://ewintxgdxdvschiqodkq.supabase.co';
+  const flags = [
+    'EXPO_PUBLIC_MEDIA_MARKS_ENABLED',
+    'EXPO_PUBLIC_SECRET_MARKS_ENABLED',
+    'EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED',
+  ];
+  for (const flag of flags) {
+    const result = run(staging, undefined, { [flag]: 'true' });
+    assert.equal(result.status, 1, `${flag} must not enable an unverified beta`);
+    assert.match(result.stderr, /EAS build blocked/);
+    assert.equal((result.stdout + result.stderr).includes('sb_publishable_mock_for_tests'), false);
+  }
+  const inert = run(staging, undefined, Object.fromEntries(flags.map(flag => [flag, 'false'])));
+  assert.equal(inert.status, 0, 'explicitly OFF beta features leave valid staging builds eligible');
 });

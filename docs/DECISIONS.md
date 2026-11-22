@@ -1,5 +1,11 @@
 # The-Wall Decision Log
 
+## D-36 · 2026-11-22 · Preview build pre-install must reject unverified high-risk feature flags
+- **Trigger:** A staging-targeted EAS preview could still be built when inherited public variables indicated that media, Secret or account deletion were enabled, although the hosted processor, cron and permanent-delete lifecycle remain unverified. UI hard-holds in D-35 prevent activation, but the build configuration should not misrepresent release readiness.
+- **Decision (ARCHITECT → BACKEND):** Reject `EXPO_PUBLIC_MEDIA_MARKS_ENABLED`, `EXPO_PUBLIC_SECRET_MARKS_ENABLED` or `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` when equal to `true` at the existing EAS pre-install guard; preserve staging-origin/client-key checks and sanitized logs. `false`/unset leave the guard eligible. This is defense-in-depth, not a substitute for server authorization or independent source/device QA. Any subsequent activation still needs Founder, Reviewer and QA gates.
+- **Status:** Isolated child of #168 with Node spawn regression tests; no signing, source merge, hosted changes or release. **Enhanced Beta NO-GO**.
+
+
 ## D-35 · 2026-11-22 · High-risk beta creator capabilities cannot be enabled by public build flags alone
 - **Trigger:** The media, Secret and deletion UI helper functions accepted the string `true` from `EXPO_PUBLIC_*` even though C2/C3 processor/playback, one-hour Secret cron and account-deletion migration 0031/purge are not independently proven in staging. An inherited EAS environment could inadvertently advertise these unavailable irreversible/privacy-sensitive user journeys.
 - **Decision (ARCHITECT → FRONTEND):** Freeze the three *client-facing capability helpers* OFF for this private-beta candidate regardless of build environment. Require an explicit new reviewed source revision after the existing Founder/backend/runtime/QA gates to activate. Preserve server-side permission boundaries; hiding a composer is not security certification or a substitute for actual account deletion before TestFlight/App Store.
