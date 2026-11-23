@@ -168,7 +168,7 @@ test("Supabase adapter sends exact storage, RPC, and Auth Admin requests", async
   equal(calls[2].url, "https://ewintxgdxdvschiqodkq.supabase.co/storage/v1/object/attachments", "delete URL");
   equal(calls[2].method, "DELETE", "delete method");
   equal(JSON.stringify(calls[2].body), JSON.stringify({ prefixes: [`avatars/${USER}/avatar.jpg`] }), "delete body");
-  equal(calls[3].url, "https://ewintxgdxdvschiqodkq.supabase.co/rest/v1/rpc/prepare_account_deletion_for_purge", "prepare URL");
+  equal(calls[3].url, "https://ewintxgdxdvschiqodkq.supabase.co/rest/v1/rpc/prepare_account_deletion_for_purge_with_polls", "prepare URL");
   equal(calls[3].method, "POST", "prepare method");
   equal(JSON.stringify(calls[3].body), JSON.stringify({
     p_user_id: USER, p_expected_requested_at: DUE.requested_at,
