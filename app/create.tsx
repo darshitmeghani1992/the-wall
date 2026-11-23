@@ -371,7 +371,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     } catch {
       // Native permission/audio-session/recording failures are recoverable.
       // Never let an unhandled tap promise crash the composer or leak details.
-      if (isCurrentScope()) Alert.alert("Couldn\u0027t record", "Check microphone access and try again.");
+      if (isCurrentScope()) Alert.alert("Couldn't record", "Check microphone access and try again.");
     }
   }
 
