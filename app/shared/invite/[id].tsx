@@ -19,7 +19,7 @@ import {
 import type { DeferredAttemptToken, DeferredNavigationRef } from "@/lib/deferred-destination-contract";
 import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver";
 import { destinationForAccountRoute } from "@/lib/onboarding-contract";
-import { sharedInviteSubjectKey, sameSharedInviteSubject } from "@/lib/shared-invite-scope";
+import { pendingSharedInviteArrivalToken, sharedInviteSubjectKey, sameSharedInviteSubject } from "@/lib/shared-invite-scope";
 
 type ClaimedAttempt = { reference: string; subjectKey: string; token: DeferredAttemptToken | null };
 
@@ -34,6 +34,7 @@ export default function SharedWallInviteScreen() {
   const [loadedSubjectKey, setLoadedSubjectKey] = useState<string | null>(null);
   const [deferredAttempt, setDeferredAttempt] = useState<ClaimedAttempt | null>(null);
   const [deferredReadyToken, setDeferredReadyToken] = useState<DeferredAttemptToken | null>(null);
+  const arrivedDeferredToken = useRef<DeferredAttemptToken | null>(null);
   const claimedReference = useRef<string | null>(null);
   const [invite, setInvite] = useState<PendingSharedWallInvite>({ status: "unavailable" });
   const [loading, setLoading] = useState(true);
@@ -77,7 +78,7 @@ export default function SharedWallInviteScreen() {
     const token = fence.begin(userId ?? null);
     const requestedSubjectKey = subjectKey;
     if (!token || !wallId || !requestedSubjectKey || (reference && !activeAttempt)) return;
-    const capturedDeferredToken = reference ? activeAttempt?.token ?? null : null;
+    const capturedDeferredToken = pendingSharedInviteArrivalToken(activeAttempt?.token ?? null, arrivedDeferredToken.current);
     setLoading(true); setError(null); setLoadedSubjectKey(null);
     setDeferredReadyToken(null);
     try {
@@ -106,7 +107,10 @@ export default function SharedWallInviteScreen() {
         || !sameSharedInviteSubject(requestedSubjectKey, currentSubjectKey.current)) return;
       setLoadedSubjectKey(requestedSubjectKey);
       setInvite(next);
-      if (next.status === "available" && capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
+      if (next.status === "available" && capturedDeferredToken) {
+        arrivedDeferredToken.current = capturedDeferredToken;
+        setDeferredReadyToken(capturedDeferredToken);
+      }
     } catch (cause: any) {
       if (fence.isCurrent(token, currentUserId.current)
         && sameSharedInviteSubject(requestedSubjectKey, currentSubjectKey.current)) {
@@ -159,7 +163,7 @@ export default function SharedWallInviteScreen() {
   async function retryLoad() {
     if (!subjectKey || !sameSharedInviteSubject(subjectKey, currentSubjectKey.current)) return;
     if (reference && !activeAttempt) return;
-    const captured = reference ? activeAttempt?.token ?? null : null;
+    const captured = pendingSharedInviteArrivalToken(activeAttempt?.token ?? null, arrivedDeferredToken.current);
     if (captured && !await retryDeferredDestination(captured)) return;
     if (!sameSharedInviteSubject(subjectKey, currentSubjectKey.current)) return;
     await load();
