@@ -3,6 +3,15 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { APPROVED_STAGING_ORIGIN, assertApprovedStagingOrigin, classifyResult, requiredChecks, validatePublicClientConfig, verifyStagingBackend } from '../scripts/staging-preflight.mjs';
 
+
+const protectedTables = Object.freeze([
+  'mark_secrets', 'mark_media', 'anonymous_mark_authors',
+  'notification_origins', 'shared_wall_member_removals', 'media_uploads',
+  'media_envelope_keys', 'media_signing_rate_limits', 'secret_mark_rollout',
+]);
+const isProtectedProbe = (url) =>
+  protectedTables.some((table) => url.includes('/rest/v1/' + table + '?'));
+
 test('public client configuration requires HTTPS origin and key', () => {
   assert.equal(validatePublicClientConfig('https://ewintxgdxdvschiqodkq.supabase.co', 'sb_publishable_mock_for_tests'), 'https://ewintxgdxdvschiqodkq.supabase.co');
   for (const url of ['http://example.supabase.co', 'https://user:password@example.supabase.co', 'https://ewintxgdxdvschiqodkq.supabase.co/rest/v1', 'not-a-url']) {
@@ -12,15 +21,39 @@ test('public client configuration requires HTTPS origin and key', () => {
 });
 
 test('all current staging probes are readonly zero-row table checks', () => {
-  assert.equal(requiredChecks.length, 7);
+  assert.equal(requiredChecks.length, 13);
   assert(requiredChecks.every(({ path }) => path.includes('limit=0') || path === '/auth/v1/health'));
+});
+
+
+test('all eight server-only table HTTP probes are unique, bounded and deny-only', async () => {
+  const serverOnly = protectedTables.filter((table) => table !== 'secret_mark_rollout');
+  assert.equal(serverOnly.length, 8);
+  for (const table of serverOnly) {
+    const hits = requiredChecks.filter(({ path }) => path.startsWith('/rest/v1/' + table + '?'));
+    assert.equal(hits.length, 1, table + ' must have exactly one release probe');
+    assert.match(hits[0].path, /[?&]limit=0(?:&|$)/);
+    assert.deepEqual(hits[0].acceptedStatuses, [401, 403]);
+    for (const status of [200, 404]) {
+      const outcome = await verifyStagingBackend({
+        url: APPROVED_STAGING_ORIGIN,
+        key: 'sb_publishable_mock_for_tests',
+        fetchImpl: async (url) => ({
+          status: url.includes('/rest/v1/' + table + '?') ? status : isProtectedProbe(url) ? 403 : 200,
+          json: async () => ({ code: 'PGRST205' }),
+        }),
+      });
+      assert.equal(outcome.ready, false, table + ' must fail closed on HTTP ' + status);
+      assert.equal(outcome.checks.find((check) => check.name === hits[0].name)?.ok, false);
+    }
+  }
 });
 
 test('all required healthy endpoints pass without accessing row bodies', async () => {
   const seen = [];
   const fakeFetch = async (url, options) => {
     seen.push([url, options]);
-    return { status: url.includes('mark_secrets?') || url.includes('mark_media?') || url.includes('secret_mark_rollout?') ? 401 : 200, json: async () => { throw new Error('success body should not be read'); } };
+    return { status: isProtectedProbe(url) ? 401 : 200, json: async () => { throw new Error('success body should not be read'); } };
   };
   const result = await verifyStagingBackend({ url: 'https://ewintxgdxdvschiqodkq.supabase.co', key: 'sb_publishable_mock_for_tests', fetchImpl: fakeFetch });
   assert.equal(result.ready, true);
@@ -72,7 +105,7 @@ test('redirect exceptions from native fetch are a failed read-only staging gate'
 test('missing follows schema fails decisively, without exposing error body', async () => {
   const fetchImpl = async (url) => url.includes('/follows?')
     ? { status: 404, json: async () => ({ code: 'PGRST205', details: 'do not print this sensitive value' }) }
-    : { status: url.includes('mark_secrets?') || url.includes('mark_media?') || url.includes('secret_mark_rollout?') ? 401 : 200 };
+    : { status: isProtectedProbe(url) ? 401 : 200 };
   const result = await verifyStagingBackend({ url: 'https://ewintxgdxdvschiqodkq.supabase.co', key: 'sb_publishable_mock_for_tests', fetchImpl });
   assert.equal(result.ready, false);
   assert.deepEqual(result.checks[3], { name: 'follows_api', ok: false, status: 404, reason: 'schema_or_rpc_missing' });
@@ -89,7 +122,7 @@ test('auth denied and network failures are fail-closed', async () => {
 test('public read of a protected table fails the release gate', async () => {
   const fetchImpl = async (url) => ({
     status: url.includes('mark_secrets?') ? 200 :
-      url.includes('mark_media?') || url.includes('secret_mark_rollout?') ? 403 : 200,
+      isProtectedProbe(url) ? 403 : 200,
     json: async () => ({}),
   });
   const result = await verifyStagingBackend({ url: 'https://ewintxgdxdvschiqodkq.supabase.co', key: 'sb_publishable_mock_for_tests', fetchImpl });
@@ -101,7 +134,7 @@ test('public read of a protected table fails the release gate', async () => {
 test('missing Secret rollout gate is not confused with expected client denial', async () => {
   const fetchImpl = async (url) => ({
     status: url.includes('secret_mark_rollout?') ? 404 :
-      url.includes('mark_secrets?') || url.includes('mark_media?') ? 401 : 200,
+      isProtectedProbe(url) ? 401 : 200,
     json: async () => ({ code: 'PGRST205' }),
   });
   const result = await verifyStagingBackend({ url: 'https://ewintxgdxdvschiqodkq.supabase.co', key: 'sb_publishable_mock_for_tests', fetchImpl });
@@ -190,8 +223,7 @@ test('legacy staging anon JWT remains a Bearer on read-only preflight requests',
     key: legacy,
     fetchImpl: async (url, options) => {
       seen.push({ url, options });
-      return { status: url.includes('mark_secrets?') || url.includes('mark_media?') ||
-          url.includes('secret_mark_rollout?') ? 403 : 200 };
+      return { status: isProtectedProbe(url) ? 403 : 200 };
     },
   });
   assert.equal(result.ready, true);
