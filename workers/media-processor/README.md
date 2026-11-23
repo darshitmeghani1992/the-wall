@@ -20,6 +20,29 @@ The integration tests create real Photo/Voice/Video inputs, execute the local
 FFmpeg toolchain, probe canonical outputs, and reject a trailing-content image
 polyglot. They are processor tests, not iOS/Android playback certification.
 
+### Verify the worker's temporary filesystem
+
+The worker runs as `10001:10001` and creates an isolated directory for each
+job under `/tmp`. Mount a writable tmpfs owned by the same UID/GID with mode
+`0700` and a 512 MiB limit. The restricted ARM64 proof used
+`--tmpfs /tmp:rw,nosuid,nodev,noexec,size=512m,mode=0700,uid=10001,gid=10001`.
+Keep these permissions when translating the policy to the selected host.
+A mount owned by another account at mode `0700` prevents job workspace creation.
+
+Before enabling ingress, run this check inside the candidate container, as its
+configured user and with networking disabled:
+
+```sh
+set -eu
+test "$(id -u):$(id -g)" = "10001:10001"
+test "$(stat -c '%u:%g %a' /tmp)" = "10001:10001 700"
+probe="$(mktemp -d /tmp/the-wall-media-preflight.XXXXXX)"
+rmdir "$probe"
+```
+
+This check covers local workspace access. Record the selected image digest,
+SBOM and vulnerability scan and verify the host's network policy separately.
+
 ## Security boundary
 
 - `processEnvelope` verifies protocol-v2 Ed25519 compact JWS through native

@@ -24,6 +24,8 @@ spec:
       mountPath: /tmp
       sizeLimit: 512Mi
       mode: "0700"
+      ownerUid: 10001
+      ownerGid: 10001
     wallTimeSeconds:
       photo: 30
       voice: 45
