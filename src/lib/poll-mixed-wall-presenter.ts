@@ -53,3 +53,25 @@ export function mergeMixedWallItems(
     || b.id.localeCompare(a.id)
     || b.kind.localeCompare(a.kind));
 }
+
+export type MixedWallSegment =
+  | { kind: "marks"; key: string; entries: { item: Extract<HydratedMixedWallItem, { kind: "mark" }>; index: number }[] }
+  | { kind: "poll"; key: string; item: Extract<HydratedMixedWallItem, { kind: "poll" }>; index: number };
+
+/** Render full-width Poll cards between contiguous masonry runs of regular Marks. */
+export function groupMixedWallItems(items: readonly HydratedMixedWallItem[]): MixedWallSegment[] {
+  const groups: MixedWallSegment[] = [];
+  for (const [index, item] of items.entries()) {
+    if (item.kind === "poll") {
+      groups.push({ kind: "poll", key: `poll:${item.id}`, item, index });
+      continue;
+    }
+    const last = groups.at(-1);
+    if (last?.kind === "marks") {
+      last.entries.push({ item, index });
+    } else {
+      groups.push({ kind: "marks", key: `marks:${item.id}`, entries: [{ item, index }] });
+    }
+  }
+  return groups;
+}
