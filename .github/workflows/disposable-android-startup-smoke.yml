@@ -38,6 +38,29 @@ jobs:
           "$tools/sdkmanager" --sdk_root="$sdk_root" --install "emulator" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
           echo no | "$tools/avdmanager" create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --force
           printf '%s\n' "$sdk_root/emulator" "$sdk_root/platform-tools" >> "$GITHUB_PATH"
+      - name: Verify emulator boot before compiling the app
+        shell: bash
+        run: |
+          emulator -accel-check
+          adb start-server
+          log="$RUNNER_TEMP/android-emulator.log"
+          emulator -avd wall-smoke -port 5554 -no-window -no-snapshot -no-audio -no-boot-anim -gpu software >"$log" 2>&1 &
+          emulator_pid=$!
+          printf '%s\n' "$emulator_pid" > "$RUNNER_TEMP/android-emulator.pid"
+          for attempt in {1..70}; do
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then
+              echo "::error::Android emulator exited before boot."
+              exit 1
+            fi
+            if [[ "$(timeout 5 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == 1 ]]; then
+              echo "Android emulator boot completed."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Android emulator did not report a completed boot."
+          adb devices -l
+          exit 1
       - name: Build exact source with test-only signing and no backend
         shell: bash
         run: |
@@ -56,17 +79,6 @@ jobs:
         run: |
           apk=android/app/build/outputs/apk/release/app-release.apk
           test -s "$apk"
-          emulator -avd wall-smoke -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect >"$RUNNER_TEMP/android-emulator.log" 2>&1 &
-          emulator_pid=$!
-          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
-          timeout 240 adb wait-for-device
-          for attempt in {1..90}; do
-            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
-              break
-            fi
-            sleep 2
-          done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
           adb shell input keyevent 82
           adb shell svc wifi disable
           adb shell svc data disable
@@ -108,3 +120,11 @@ jobs:
           find("Email me a code")
           print("Sign-in is visible. No auth request was submitted.")
           PY
+      - name: Report emulator diagnostics and stop the temporary device
+        if: always()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/android-emulator.log"
+          if [[ -f "$log" ]]; then tail -100 "$log"; fi
+          pid_file="$RUNNER_TEMP/android-emulator.pid"
+          if [[ -f "$pid_file" ]]; then kill "$(cat "$pid_file")" 2>/dev/null || true; fi
