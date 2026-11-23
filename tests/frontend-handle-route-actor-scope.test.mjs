@@ -22,7 +22,7 @@ test("handle-link route subjects fail closed for account, handle, reference and 
 });
 
 test("deferred and ordinary handle results are rendered only for the current subject", () => {
-  assert.match(source, /subjectKey = handleLinkSubjectKey\(session\?\.user\.id, clean, reference, accountRoute === "ready"\)/);
+  assert.match(source, /subjectKey = handleLinkSubjectKey\(session\?\.user\.id, clean, reference, validHandle && accountRoute === "ready"\)/);
   assert.match(source, /currentSubjectKey\.current = subjectKey/);
   assert.match(source, /sameHandleLinkSubject\(capturedSubjectKey, currentSubjectKey\.current\)/);
   assert.match(source, /setResolvedView\(\{ subjectKey: capturedSubjectKey, status: "target", href: resolution\.href \}\)/);
@@ -31,7 +31,7 @@ test("deferred and ordinary handle results are rendered only for the current sub
   assert.match(source, /visibleView\?\.status === "retryable"/);
   assert.match(source, /visibleView\?\.status === "not_found"/);
   assert.match(source, /sameHandleLinkSubject\(attempt\?\.subjectKey, subjectKey\)/);
-  assert.match(source, /if \(reference && !activeAttempt\) return <Spinner/);
+  assert.match(source, /if \(validHandle && reference && !activeAttempt\) return <Spinner/);
   assert.match(source, /if \(!sameHandleLinkSubject\(subjectKey, currentSubjectKey\.current\)\) return/);
   assert.doesNotMatch(source, /if \(target\) return <Redirect/);
 });

@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { profileHandleLookupPattern } from "./handle-link-scope";
 import type { Profile, Wall } from "./types";
 import { updatePersonalWallSettings } from "./personal-wall-settings";
 import { executeProfileUpdate } from "./actor-bound-service-contract";
@@ -16,12 +17,12 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 
 /** Look up a profile by its @handle (case-insensitive). Powers handle deep links. */
 export async function getProfileByHandle(handle: string): Promise<Profile | null> {
-  const clean = handle.trim().replace(/^@/, "");
-  if (!clean) return null;
+  const pattern = profileHandleLookupPattern(handle);
+  if (!pattern) return null;
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
-    .ilike("handle", clean)
+    .ilike("handle", pattern)
     .maybeSingle();
   if (error) throw error;
   return (data as Profile) ?? null;
