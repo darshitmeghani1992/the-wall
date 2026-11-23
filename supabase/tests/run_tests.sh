@@ -187,6 +187,9 @@ echo "── load: 0035_standard_poll_create_read.sql"
 psql_test -f "$MIG/0035_standard_poll_create_read.sql" >/dev/null
 psql_test -f "$HERE/82_standard_poll_create_read.sql"
 psql_test -c "delete from public.marks where id='82000000-0000-4000-8000-000000000000';" >/dev/null
+echo "── load: 0036_standard_poll_ballots_close.sql"
+psql_test -f "$MIG/0036_standard_poll_ballots_close.sql" >/dev/null
+psql_test -f "$HERE/83_standard_poll_ballots_close.sql"
 
 for area in 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
