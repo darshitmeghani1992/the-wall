@@ -1,3 +1,9 @@
+## Current · BETA-P0-108 — integrated release handoff (23 Nov 2026)
+
+ARCHITECT compared #201→#206→#207→#208 exact ancestry; #206 integrates BACKEND media download integrity and FRONTEND composer retry, then #207/#208 add Discover/search and friend-request Alert fixes. Last source-only candidate #208 `dde8b90e08efbe04906d6f9d032f35aff4cf2332` tree `0fc5ff3fda88ef600859b60ce2f08d217196c3d9`. CI #206 `45145542787` and #207 `45147463741` 4/4 passed; #208 `45148328186` media job still running at capture (do not imply all passed). No signed installed build on #208, independent Reviewer or device QA. Separate #203 disposable ARM64 proof, not a merge artifact. **Next:** resolve #208 exact CI; hand to independent Reviewer then QA, and prepare new approved staging-only pinned builds. Existing OTP/domain, hosting, Secret scheduler, deletion and release authorizations block public beta. No hosted writes, migrations, branches belonging to other runs, merges, production access, or invitations. Full runbook and acceptance matrix at `docs/handoffs/OPEN_BETA_RELEASE_CANDIDATE.md`. **Enhanced/open beta NO-GO.**
+
+---
+
 ## Current · BETA-P0-107 — media stream integrity (23 Nov 2026)
 
 ARCHITECT → BACKEND isolated draft child of #201 `7f7ca5a46fda09b7a50539b5ad556071ff2b6559`. Prevent silent source truncation: strict optional Content-Length validation and all-bytes FileHandle writes prior to FFmpeg. Two new worker tests cover short writes and premature HTTP body completion with safe failure callback. Check new draft exact SHA/tree, CI four jobs, independent Reviewer/QA. No hosted worker, flags, migrations or changes to original production. Real OTP/three-user actors, media signed playback, Secret cron, 0031 account deletion, installed iOS/Android and authorization still block release. Resume via `docs/BUILD_STATUS.md` BETA-P0-107.

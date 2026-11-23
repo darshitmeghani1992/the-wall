@@ -1,3 +1,15 @@
+## BETA-P0-108 · Integrated candidate review/QA handoff — 23 Nov 2026
+
+**ARCHITECT integration; FRONTEND and BACKEND implementation owners; independent REVIEWER and QA pending.** New isolated documentation-only child of [#208](https://github.com/darshitmeghani1992/the-wall/pull/208) source SHA `dde8b90e08efbe04906d6f9d032f35aff4cf2332` / tree `0fc5ff3fda88ef600859b60ce2f08d217196c3d9`; preserves draft #30 and #34–#56/#58/#59 onwards, with #203 disposable ARM64 workflow excluded from the merge line. Source ancestry #201→#206→#207→#208 was compared at file level: #206 combines composer retry and media full-response/partial-write safety; #207/208 only change Discover and notification routing and their tests. No new app/worker files changed in this handoff.
+
+**Verified as of capture:** #206 [CI 45145542787](https://github.com/darshitmeghani1992/the-wall/actions/runs/45145542787) 4/4; #207 [CI 45147463741](https://github.com/darshitmeghani1992/the-wall/actions/runs/45147463741) 4/4. #208 [CI 45148328186](https://github.com/darshitmeghani1992/the-wall/actions/runs/45148328186) was IN_PROGRESS (3/4 succeeded, media running): its exact final SHA is **not yet green**. Earlier #201 Android internal APK does NOT contain integrated #208 fixes. Separate disposable ARM64 #203 proof targets worker source #206, but no promoted hosted worker image.
+
+**Immediate ready queue:** (1) Check exact #208 4-job CI conclusion and integration ancestry, (2) route source SHA/tree to independent Reviewer for full composer/media/Discover/Alert diff without self-approval, (3) prepare exact-source staging Android/iOS internal artifacts once signed/authorized and record device QA. **Blocked gates:** founder-held sender/domain and real six-digit OTP; three authorized staging actors; approved worker/container host; hosted C2/C3/playback, Secret one-hour cron, 0031 deletion; independent security/device/rollback and public environment/distribution approvals. Never promote CI as real hosted testing. Public/Enhanced beta **NO-GO**. Source release runbook/rollback/QA matrix: `docs/handoffs/OPEN_BETA_RELEASE_CANDIDATE.md` top section.
+
+**Next command:** `git fetch origin && git checkout --detach dde8b90e08efbe04906d6f9d032f35aff4cf2332 && npm ci && npm run test:contracts && npm run typecheck && npm run lint && npm run test:worker`. Do not merge, change staging hosted settings, activate flags, migrate or invite users without existing gates.
+
+---
+
 ## BETA-P0-107 · C3 worker source-stream integrity — 23 Nov 2026
 
 **ARCHITECT** release integration → **BACKEND** implementation on isolated child of #201 exact `7f7ca5a46fda09b7a50539b5ad556071ff2b6559`; #195 disposable ARM64 workflow remains separate. Worker now rejects invalid/short HTTP Content-Length after a signed download and retries short FileHandle writes rather than silently processing corrupted media. New worker tests simulate partial/zero-progress disk writes, truncated signed Storage responses, and verify failure callbacks cannot become success. No new schema, API, feature flag, hosted write or deployment.
