@@ -67,7 +67,7 @@ function parsePoll(value: unknown, wallId: string, markId: string): FocusedPoll 
       || !rawBallot.option_ids.every((id: unknown) => typeof id === "string" && identifiers.has(id))) return invalidPoll();
     ballot = { revision: rawBallot.revision, optionIds: rawBallot.option_ids };
   }
-  const display = { question, selectionMode, state, options, revision, ballot,
+  const display: Omit<FocusedPoll, "ballotTotal"> = { question, selectionMode, state, options, revision, ballot,
     capabilities: { canVote: state === "open" && capabilities.can_vote, canClose: state === "open" && capabilities.can_close } };
   if (results === null) return { ...display, ballotTotal: null };
   if (!isRecord(results) || !isCount(results.ballot_total) || !Array.isArray(results.counts)
