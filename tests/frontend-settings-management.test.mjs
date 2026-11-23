@@ -102,3 +102,11 @@ test("a current confirmation dispatches the originally captured target", () => {
   confirm();
   assert.deepEqual(runs, [["actor-a", "target-a"]]);
 });
+
+test("protected Settings lists return to the account gate after the session ends", () => {
+  for (const path of ["blocked-users", "approved-writers"]) {
+    const source = readFileSync(new globalThis.URL(`../app/${path}.tsx`, import.meta.url), "utf8");
+    assert.match(source, /const \{ session, loading: authLoading \} = useAuth\(\)/);
+    assert.match(source, /if \(!authLoading && !actorId\) return <Redirect href="\/" \/>;[\s\S]*?return \(\s*<Screen/);
+  }
+});

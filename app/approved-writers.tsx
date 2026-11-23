@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { PersonRow, type PersonRowIdentity } from "@/components/PersonRow";
@@ -25,7 +25,7 @@ type ApprovedWriterRow = Awaited<ReturnType<typeof listApprovedWriters>>[number]
 
 export default function ApprovedWritersScreen() {
   const router = useRouter();
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const actorId = session?.user.id ?? null;
   const currentActorId = useRef(actorId);
   currentActorId.current = actorId;
@@ -209,6 +209,8 @@ export default function ApprovedWritersScreen() {
 
   const currentActorLoaded = actorId !== null && loadedActorId === actorId;
   const approvedIds = new Set(writers.map((writer) => writer.userId));
+
+  if (!authLoading && !actorId) return <Redirect href="/" />;
 
   return (
     <Screen dockInset={false}>
