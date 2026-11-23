@@ -51,18 +51,22 @@ export function createWorkerIngressServer(dependencies: IngressDependencies): Se
     if (declared !== undefined && (!/^\d+$/.test(declared) || Number(declared) > BODY_MAX)) {
       return reply(response, 404);
     }
+    // Reserve capacity BEFORE reading the body or checking Ed25519.
+    // Otherwise many concurrent slow/forged requests can bypass the bounded
+    // queue and exhaust memory/crypto work while all worker slots are busy.
+    if (pending >= capacity) return reply(response, 503);
+    pending += 1;
     let compact: string;
     try {
       compact = await readBoundedBody(request);
       if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(compact)) {
-        return reply(response, 404);
+        throw new Error('invalid compact media dispatch');
       }
       await dependencies.verifier.verify(compact, Math.floor(Date.now() / 1000));
     } catch {
+      pending -= 1; // Failed admission must never hold a worker slot.
       return reply(response, 404);
     }
-    if (pending >= capacity) return reply(response, 503);
-    pending += 1;
     reply(response, 202);
     chain = chain.then(() => dependencies.process(compact))
       .then(() => dependencies.log?.('media_job_completed'))
@@ -74,15 +78,24 @@ export function createWorkerIngressServer(dependencies: IngressDependencies): Se
 async function readBoundedBody(request: IncomingMessage): Promise<string> {
   let size = 0;
   const chunks: Buffer[] = [];
-  request.setTimeout(5_000, () => request.destroy());
-  for await (const piece of request as unknown as AsyncIterable<Buffer>) {
-    const chunk = Buffer.from(piece);
-    size += chunk.byteLength;
-    if (size > BODY_MAX) throw new Error('oversized JWS');
-    chunks.push(chunk);
+  // An idle timeout alone is bypassable by an attacker trickling one byte
+  // every few seconds. The pre-verification admission slot must have a hard
+  // elapsed-time budget even while individual data events continue arriving.
+  const deadline = setTimeout(() => request.destroy(new Error('JWS body deadline exceeded')), 5_000);
+  deadline.unref();
+  try {
+    request.setTimeout(5_000, () => request.destroy());
+    for await (const piece of request as unknown as AsyncIterable<Buffer>) {
+      const chunk = Buffer.from(piece);
+      size += chunk.byteLength;
+      if (size > BODY_MAX) throw new Error('oversized JWS');
+      chunks.push(chunk);
+    }
+    if (size < 10) throw new Error('empty JWS');
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+  } finally {
+    clearTimeout(deadline);
   }
-  if (size < 10) throw new Error('empty JWS');
-  return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
 }
 
 function reply(response: ServerResponse, status: 202 | 404 | 503): void {

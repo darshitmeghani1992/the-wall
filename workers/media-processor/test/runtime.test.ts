@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
+import { request as httpRequest, type Server } from 'node:http';
 import { createWorkerIngressServer, startWorkerRuntime } from '../src/runtime.js';
 import type { EnvelopeVerifier, VerifiedWorkerDispatch } from '../src/contract.js';
 
@@ -83,6 +83,117 @@ test('bounded queue returns 503 while one verified job is still active', async (
     assert.equal((await send()).status, 503);
   } finally {
     release();
+    await stop(server);
+  }
+});
+
+test('an unverified slow dispatch cannot bypass the capacity bound during signature verification', async () => {
+  let releaseVerification!: () => void;
+  const holdVerification = new Promise<void>((resolve) => { releaseVerification = resolve; });
+  let enteredVerification!: () => void;
+  const started = new Promise<void>((resolve) => { enteredVerification = resolve; });
+  let verificationCalls = 0;
+  let processed = 0;
+  const server = createWorkerIngressServer({
+    maxPending: 1,
+    verifier: {
+      verify: async () => {
+        verificationCalls++;
+        enteredVerification();
+        await holdVerification;
+        return {} as VerifiedWorkerDispatch;
+      },
+    },
+    process: async () => { processed++; },
+  });
+  const origin = await host(server);
+  const send = () => fetch(origin + '/v1/media-jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/jose' },
+    body: 'signed.claim.signature',
+  });
+  try {
+    const first = send();
+    await started;
+    const second = await send();
+    assert.equal(second.status, 503, 'deny before a second expensive verifier starts');
+    assert.equal(verificationCalls, 1);
+    releaseVerification();
+    assert.equal((await first).status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    assert.equal(processed, 1);
+  } finally {
+    releaseVerification();
+    await stop(server);
+  }
+});
+
+test('failed JWS verification releases the reserved admission slot for a valid retry', async () => {
+  let verificationCalls = 0;
+  const server = createWorkerIngressServer({
+    verifier: {
+      verify: async () => {
+        verificationCalls++;
+        if (verificationCalls === 1) throw new Error('invalid signature');
+        return {} as VerifiedWorkerDispatch;
+      },
+    },
+    process: async () => {},
+  });
+  const origin = await host(server);
+  try {
+    const send = () => fetch(origin + '/v1/media-jobs', {
+      method: 'POST', headers: { 'Content-Type': 'application/jose' },
+      body: 'signed.claim.signature',
+    });
+    assert.equal((await send()).status, 404);
+    assert.equal((await send()).status, 202);
+    assert.equal(verificationCalls, 2);
+  } finally {
+    await stop(server);
+  }
+});
+
+test('slow trickled JWS body releases a pre-verification admission slot after five elapsed seconds', { timeout: 12_000 }, async () => {
+  const verified = { count: 0 };
+  const server = createWorkerIngressServer({
+    maxPending: 1, verifier: fakeVerifier(verified), process: async () => {},
+  });
+  const origin = await host(server);
+  // Transfer-Encoding: chunked keeps the request open even while it sends
+  // another byte every 200 ms; an idle-only timeout would never fire.
+  const slow = httpRequest(origin + '/v1/media-jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/jose', 'Transfer-Encoding': 'chunked' },
+  });
+  slow.on('error', () => {}); // expected when the server expires the body
+  slow.on('response', (response) => response.resume());
+  const disconnected = new Promise<void>((resolve) => slow.once('close', resolve));
+  slow.write('x');
+  const trickle = setInterval(() => { if (!slow.destroyed) slow.write('x'); }, 200);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const blocked = await fetch(origin + '/v1/media-jobs', {
+      method: 'POST', headers: { 'Content-Type': 'application/jose' },
+      body: 'signed.claim.signature',
+    });
+    assert.equal(blocked.status, 503, 'a slow request uses exactly one admission slot');
+    await Promise.race([
+      disconnected,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('slow body never expired')), 7_000)),
+    ]);
+    clearInterval(trickle);
+    // Let the server settle its rejection and release its capacity lease.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(verified.count, 0, 'incomplete body must not invoke Ed25519');
+    const resumed = await fetch(origin + '/v1/media-jobs', {
+      method: 'POST', headers: { 'Content-Type': 'application/jose' },
+      body: 'signed.claim.signature',
+    });
+    assert.equal(resumed.status, 202, 'capacity must recover for the next valid dispatch');
+    assert.equal(verified.count, 1);
+  } finally {
+    clearInterval(trickle);
+    slow.destroy();
     await stop(server);
   }
 });
