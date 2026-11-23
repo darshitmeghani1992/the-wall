@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, Switch, View } from "react-native";
+import { UNSTABLE_usePreventRemove as usePreventRemove } from "@react-navigation/native";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { Screen } from "@/components/Screen";
@@ -17,7 +18,7 @@ import {
   updatePersonalWallSettings,
   type PersonalWallSettings,
 } from "@/lib/personal-wall-settings";
-import { SessionFocusFence } from "@/lib/session-generation";
+import { SessionFocusFence, type SessionGenerationToken } from "@/lib/session-generation";
 import { border, colors, markColors, radius, spacing } from "@/theme";
 
 const initialDraft: PersonalSettingsDraft = {
@@ -29,6 +30,7 @@ const initialDraft: PersonalSettingsDraft = {
 export default function PersonalWallSettingsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
+  type RemovalAction = Parameters<typeof navigation.dispatch>[0];
   const { session } = useAuth();
   const actorId = session?.user.id ?? null;
   const currentActorId = useRef(actorId);
@@ -39,13 +41,13 @@ export default function PersonalWallSettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [approvedExit, setApprovedExit] = useState<{ action: RemovalAction; token: SessionGenerationToken } | null>(null);
 
   const loadFence = useRef(new SessionFocusFence());
   const actionFence = useRef(new SessionFocusFence());
   const mutationInFlight = useRef(false);
   const loadedActorId = useRef<string | null>(null);
   const dirtyRef = useRef(false);
-  const allowBackRef = useRef(false);
   const discardPromptOpen = useRef(false);
 
   const currentActorLoaded = actorId !== null && loadedActorId.current === actorId;
@@ -87,7 +89,7 @@ export default function PersonalWallSettingsScreen() {
     actionFence.current.focus(actorId);
     mutationInFlight.current = false;
     setBusy(false);
-    allowBackRef.current = false;
+    setApprovedExit(null);
     discardPromptOpen.current = false;
 
     if (!actorId || loadedActorId.current !== actorId) {
@@ -108,11 +110,13 @@ export default function PersonalWallSettingsScreen() {
     };
   }, [actorId, load]));
 
+  // The synchronous listener covers the brief interval before React renders the busy state.
   useEffect(() => navigation.addListener("beforeRemove", (event) => {
-    if (allowBackRef.current || !dirtyRef.current) return;
-    event.preventDefault();
-    // Do not dismiss an in-flight save or stack duplicate confirmation dialogs.
-    if (mutationInFlight.current || discardPromptOpen.current) return;
+    if (mutationInFlight.current) event.preventDefault();
+  }), [navigation]);
+
+  usePreventRemove((busy || dirty) && !approvedExit, ({ data }) => {
+    if (!dirtyRef.current || mutationInFlight.current || discardPromptOpen.current) return;
     const token = actionFence.current.begin(currentActorId.current);
     if (!token) return;
     discardPromptOpen.current = true;
@@ -135,13 +139,20 @@ export default function PersonalWallSettingsScreen() {
           onPress: () => {
             if (!actionFence.current.isCurrent(token, currentActorId.current)) return;
             discardPromptOpen.current = false;
-            allowBackRef.current = true;
-            navigation.dispatch(event.data.action);
+            setApprovedExit({ action: data.action, token });
           },
         },
       ],
     );
-  }), [navigation]);
+  });
+
+  useEffect(() => {
+    if (!approvedExit) return;
+    setApprovedExit(null);
+    if (actionFence.current.isCurrent(approvedExit.token, currentActorId.current)) {
+      navigation.dispatch(approvedExit.action);
+    }
+  }, [approvedExit, navigation]);
 
   async function save() {
     if (!actorId || currentActorId.current !== actorId || !currentActorLoaded || !saved || !dirty || !beginExclusiveMutation(mutationInFlight)) return;

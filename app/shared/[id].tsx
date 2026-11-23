@@ -4,6 +4,7 @@ import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
+import { FocusedPollCard } from "@/components/FocusedPollCard";
 import { Masonry } from "@/components/Masonry";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
@@ -12,6 +13,8 @@ import { getWall, getWallCapabilities, joinSharedWall, leaveSharedWall, type Wal
 import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getProfile } from "@/lib/profiles";
+import { isFocusedPollReaderEnabled, readFocusedWallCard, type FocusedPoll } from "@/lib/poll-focused-reader";
+import { supabase } from "@/lib/supabase";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { settleOptional } from "@/lib/optional-result";
 import { beginExclusiveMutation, endExclusiveMutation } from "@/lib/mutation-guard";
@@ -52,6 +55,7 @@ export default function SharedWallScreen() {
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const [focusedMark, setFocusedMark] = useState<MarkWithAuthor | null>(null);
+  const [focusedPoll, setFocusedPoll] = useState<FocusedPoll | null>(null);
   const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
   const pageGeneration = useRef(0);
   const [loading, setLoading] = useState(true);
@@ -103,12 +107,20 @@ export default function SharedWallScreen() {
     setDeferredReadyToken(null);
     setError(null);
     setFocusedMarkUnavailable(false);
-    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
     setLoadedIdentity(null);
     try {
       const wallPromise = getWall(requestedWallId);
       const capabilitiesPromise = getWallCapabilities(requestedWallId);
-      let markPromise: Promise<MarkWithAuthor | null> | null = null;
+      const readExact = (targetWallId: string, markId: string) => readFocusedWallCard(
+        token.userId, targetWallId, markId, getWallMark, async (args) => {
+          const { data, error } = await supabase.rpc("get_wall_mark_v2", args);
+          if (error) throw new Error("Couldn’t load this Poll. Please try again.");
+          return data;
+        },
+        isFocusedPollReaderEnabled,
+      );
+      let markPromise: ReturnType<typeof readExact> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
           ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "shared" as const, wallId: requestedWallId } }
@@ -119,7 +131,7 @@ export default function SharedWallScreen() {
             return wall?.type === "shared" && wallCapabilities?.wallType === "shared" ? wall : null;
           },
           wallMark: async (resolvedWallId, markId) => {
-            markPromise ??= getWallMark(resolvedWallId, markId);
+            markPromise ??= readExact(resolvedWallId, markId);
             return markPromise;
           },
         });
@@ -141,10 +153,10 @@ export default function SharedWallScreen() {
         setError("This Shared Wall isn't available.");
         return;
       }
-      const [ownerResult, page, exactMark] = await Promise.all([
+      const [ownerResult, page, exactContent] = await Promise.all([
         settleOptional(getProfile(nextWall.owner_id)),
         listWallMarks(nextWall.id),
-        focusMarkId ? (markPromise ?? getWallMark(nextWall.id, focusMarkId)) : Promise.resolve(null),
+        focusMarkId ? (markPromise ?? readExact(nextWall.id, focusMarkId)) : Promise.resolve(null),
       ]);
       if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId || generation !== pageGeneration.current) return;
       setWall(nextWall);
@@ -154,9 +166,11 @@ export default function SharedWallScreen() {
       setLoadedIdentity(`${userId}:${requestedWallId}:${focusMarkId ?? ""}`);
       setNextCursor(page.nextCursor);
       if (focusMarkId) {
+        const exactMark = exactContent?.kind === "mark" ? exactContent.mark : null;
         setFocusedMark(exactMark);
         setSelectedMark(exactMark?.secret ? null : exactMark);
-        setFocusedMarkUnavailable(!exactMark);
+        setFocusedPoll(exactContent?.kind === "poll" ? exactContent.poll : null);
+        setFocusedMarkUnavailable(!exactContent);
       }
       if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
     } catch (cause: any) {
@@ -293,6 +307,8 @@ export default function SharedWallScreen() {
   if (error && !wall) return <Unavailable message={error} onBack={() => router.back()} onRetry={() => void retryLoad()} />;
   if (!wall || capabilities?.wallType !== "shared") return <Unavailable message="This Shared Wall isn't available." onBack={() => router.back()} onRetry={() => void retryLoad()} />;
 
+  const visibleFocusedPoll = loadedIdentity === `${userId}:${wallId}:${focusMarkId ?? ""}` ? focusedPoll : null;
+  const visibleMarkCount = marks.length + (visibleFocusedPoll ? 1 : 0);
   const joinState = capabilities.joinState;
   const isOwner = joinState === "owner";
   const isMember = joinState === "member";
@@ -308,7 +324,7 @@ export default function SharedWallScreen() {
       </View>
       <Text variant="display" style={{ fontSize: 26 }}>{wall.name}</Text>
       <Text variant="body" color={colors.outline} style={{ marginTop: 4 }}>
-        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {marks.length} {nextCursor ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
+        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {visibleMarkCount} {nextCursor ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
       </Text>
 
       {error ? <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: 12 }}>{error}</Text> : null}
@@ -329,6 +345,7 @@ export default function SharedWallScreen() {
       {joinState === "invite_required" ? <StateNotice text={wall.visibility === "public" ? "You can view this Wall. Joining requires an invitation from the owner." : "Only accepted members can open this Wall."} /> : null}
       {joinState === "invited" ? <StateNotice text="You have an invitation waiting. Accept it before leaving Marks." /> : null}
 
+      {visibleFocusedPoll ? <FocusedPollCard poll={visibleFocusedPoll} /> : null}
       {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
         <View style={{ marginBottom: 16 }}>
           <Text variant="label">LINKED MARK</Text>
@@ -339,7 +356,7 @@ export default function SharedWallScreen() {
         <Masonry data={gridMarks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
           <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} isWallOwner={isOwner} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
         )} />
-      ) : (
+      ) : visibleFocusedPoll ? null : (
         <View style={{ paddingVertical: 36, alignItems: "center" }}><Text variant="headline">No Marks yet</Text><Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>{canLeaveMark ? `Be the first to leave a Mark on ${wall.name}.` : "This Shared Wall is waiting for its first Mark."}</Text></View>
       )}
       {nextCursor ? (
