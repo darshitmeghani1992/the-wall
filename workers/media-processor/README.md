@@ -95,8 +95,13 @@ The scheduler's `mark-media-ops` Edge function POSTs the signed compact JWS
 with `Content-Type: application/jose` to `/v1/media-jobs`. On valid signature,
 the ingress accepts one attempt (`202` empty, no-store) and processes it using
 C2's durable database lease; malformed/forged requests return `404` and a full
-worker returns `503` for retry. The C2 gateway redeems nonces and finalizes
-results using a dedicated gateway Bearer secret separate from the JWS.
+worker returns `503` for retry. Admission capacity is reserved **before** body
+read and Ed25519 verification, and a five-second **absolute elapsed-time** JWS
+body deadline (in addition to the inactivity limit) prevents slow trickle
+requests from holding the bounded pre-auth queue indefinitely. This does not
+replace private ingress ACLs, proxy rate/connection limits or verified host
+cancellation behavior. The C2 gateway redeems nonces and finalizes results
+using a dedicated gateway Bearer secret separate from the JWS.
 
 **Status:** local gateway/runtime code implemented and unit tested; hosted
 runtime, worker Edge function deployment and media-kind enablement still blocked
