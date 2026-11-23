@@ -64,7 +64,7 @@ create or replace function public.scrub_removed_secret_payload()
 returns trigger language plpgsql security definer
 set search_path = pg_catalog, public as $$
 begin
-  if old.type = 'secret'
+  if old.secret is true
      and old.status is distinct from new.status
      and (old.status = 'removed' or new.status = 'removed') then
     delete from public.mark_secrets where mark_id = new.id;
@@ -91,7 +91,7 @@ declare
 begin
   update public.marks m
      set status = 'removed'
-   where m.type = 'secret'
+   where m.secret is true
      and m.status = 'active'
      and exists (select 1 from public.mark_secrets s
                   where s.mark_id = m.id and now() >= s.expires_at);
