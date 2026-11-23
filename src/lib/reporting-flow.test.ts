@@ -91,7 +91,7 @@ test("a stale flow has no side effects or callbacks", async () => {
 });
 
 const wall = { id: "wall", type: "shared", name: "Project Wall" };
-const member = { wallType: "shared", joinState: "member" };
+const member = { wallType: "shared", joinState: "member" } as const;
 
 test("Shared Wall reporting verifies the exact Wall before showing its name", async () => {
   assert.deepEqual(
@@ -101,6 +101,7 @@ test("Shared Wall reporting verifies the exact Wall before showing its name", as
   assert.equal((await loadSharedWallReportTarget("different", async () => wall, async () => member)).status, "unavailable");
   assert.equal((await loadSharedWallReportTarget(wall.id, async () => null, async () => member)).status, "unavailable");
   assert.equal((await loadSharedWallReportTarget(wall.id, async () => wall, async () => null)).status, "unavailable");
+  assert.equal((await loadSharedWallReportTarget(wall.id, async () => wall, async () => ({ wallType: "personal" }))).status, "unavailable");
   assert.equal((await loadSharedWallReportTarget(wall.id, async () => wall, async () => ({ ...member, joinState: "owner" }))).status, "unavailable");
 });
 

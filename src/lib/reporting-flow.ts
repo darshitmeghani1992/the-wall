@@ -1,3 +1,5 @@
+import type { SharedWallCapabilitiesContract } from "./shared-wall-contract";
+
 export type UserReportFlowInput<TReason extends string> = {
   expectedActorId: string;
   targetUserId: string;
@@ -71,10 +73,14 @@ export type SharedWallReportLoadError = {
   message: string;
 };
 
+type ReportTargetCapabilities =
+  | Pick<SharedWallCapabilitiesContract, "wallType" | "joinState">
+  | { wallType: "personal" };
+
 export async function loadSharedWallReportTarget(
   wallId: string,
   readWall: (wallId: string) => Promise<{ id: string; type: string; name: string } | null>,
-  readCapabilities: (wallId: string) => Promise<{ wallType: string; joinState: string } | null>,
+  readCapabilities: (wallId: string) => Promise<ReportTargetCapabilities | null>,
 ): Promise<{ status: "ready"; wallName: string } | SharedWallReportLoadError> {
   try {
     const [wall, capabilities] = await Promise.all([readWall(wallId), readCapabilities(wallId)]);
