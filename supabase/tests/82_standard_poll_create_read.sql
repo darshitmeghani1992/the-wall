@@ -154,6 +154,30 @@ begin
   end if;
 end $$;
 reset role;
+
+-- A mixed v2 Wall history must not strip fields required by ordinary
+-- photo/voice/video Marks. Exercise the private projection on a synthetic
+-- record derived from a legitimate visible text fixture; no media URI or
+-- payload is persisted and this does not grant new table access.
+do $media_projection$
+declare
+  v_mark public.marks%rowtype;
+  v_item jsonb;
+begin
+  select * into v_mark from public.marks
+    where id=current_setting('tw.poll_mark')::uuid and type='text';
+  if not found then raise exception '82 FAIL: missing ordinary projection fixture'; end if;
+  v_mark.type := 'voice'::public.mark_type;
+  v_mark.media_url := 'https://example.invalid/synthetic-voice.m4a';
+  v_mark.payload := '{"durationMs":59000}'::jsonb;
+  v_item := public.poll_mark_envelope_v2(v_mark,auth.uid());
+  if v_item #>> '{mark,media_url}' is distinct from v_mark.media_url
+     or v_item #>> '{mark,payload,durationMs}' is distinct from '59000'
+     or v_item #>> '{mark,type}' is distinct from 'voice'
+     or (v_item->'mark') ? 'removed_by' then
+    raise exception '82 FAIL: mixed v2 ordinary media projection %',v_item;
+  end if;
+end $media_projection$;
 delete from public.mark_polls where mark_id=current_setting('tw.poll_mark')::uuid;
 do $$
 begin
