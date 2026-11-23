@@ -8,12 +8,12 @@
 import { assertApprovedStagingOrigin, assertLegacyAnonKeyMatchesOrigin, validatePublicClientConfig } from './staging-preflight.mjs';
 
 try {
-  const origin = validatePublicClientConfig(
-    process.env.EXPO_PUBLIC_SUPABASE_URL,
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-  );
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const origin = validatePublicClientConfig(url, process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
   // Hard stop: never package the original production project into any beta build.
   assertApprovedStagingOrigin(origin);
+  // Match the raw origin forms accepted by the Expo runtime configuration.
+  if (url !== origin && url !== `${origin}/`) throw new Error('Beta staging URL must use its canonical spelling');
   assertLegacyAnonKeyMatchesOrigin(origin, process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
   // No preview can advertise unverified privacy-sensitive features because an
   // old EAS environment happened to retain one of these public flags.
