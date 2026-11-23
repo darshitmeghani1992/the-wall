@@ -4,7 +4,7 @@ import { isPollInteractionEnabled, type PollMutation, type PollAddress } from "@
 import { supabase } from "@/lib/supabase";
 
 async function fetchPollDetail(args: PollReadRequest): Promise<unknown> {
-  const { data, error } = await supabase.rpc("get_wall_mark_v2", args);
+  const { data, error } = await supabase.rpc("get_wall_mark_item_v2", args);
   if (error) throw new Error("Couldn’t load this Poll. Please try again.");
   return data;
 }
