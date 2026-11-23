@@ -25,5 +25,6 @@ test("pending microphone permission is a real composer lifecycle gate, not an id
   assert.match(composer, /usePreventRemove\(\(hasContent \|\| voiceBusy \|\| submissionLocked\)/);
   assert.match(composer, /if \(!hasContent && !voiceBusy\) return router\.back\(\)/);
   assert.match(composer, /voiceStarting \? <View accessibilityRole="alert"/);
+  assert.match(composer, /if \(mediaAppActive\) return;[\s\S]*?void recorder\.reset\(\);\s*setMedia/);
   assert.match(composer, /if \(isCurrentScope\(\)\) Alert\.alert\("Couldn.t record"/);
 });
