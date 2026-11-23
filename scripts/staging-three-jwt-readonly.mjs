@@ -116,8 +116,15 @@ async function getJson(fetchImpl, url, apiKey, token) {
 export async function runStagingJwtAudit(env, fetchImpl = fetch) {
   const { actors, wallId, textMarkId, apiKey } = checkedConfig(env);
   const wallUrl = new URL('/rest/v1/walls', STAGING);
-  wallUrl.searchParams.set('select', 'id,type,visibility');
+  wallUrl.searchParams.set('select', 'id,type,visibility,owner_id');
   wallUrl.searchParams.set('id', 'eq.' + wallId);
+  // A visible Wall does not, by itself, prove that the declared owner owns it
+  // or that the declared member has accepted the invite. Check the exact
+  // accepted member row through the existing authenticated read policy.
+  const memberUrl = new URL('/rest/v1/wall_members', STAGING);
+  memberUrl.searchParams.set('select', 'wall_id,user_id,status');
+  memberUrl.searchParams.set('wall_id', 'eq.' + wallId);
+  memberUrl.searchParams.set('user_id', 'eq.' + actors[1].id);
   // Read metadata only, never private Mark text, author identity, or media.
   // Require a genuine active, non-Secret text fixture to prevent an empty
   // database from producing a meaningless privacy PASS.
@@ -133,8 +140,18 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
     const rows = await getJson(fetchImpl, wallUrl.toString(), apiKey, actor.jwt);
     if (!Array.isArray(rows) || rows.length !== actor.expect ||
         (actor.expect === 1 && (rows[0]?.id !== wallId ||
-          rows[0]?.type !== 'shared' || rows[0]?.visibility !== 'private'))) {
+          rows[0]?.type !== 'shared' || rows[0]?.visibility !== 'private' ||
+          rows[0]?.owner_id !== actors[0].id))) {
       throw new Error('Private Shared Wall RLS visibility mismatch: ' + actor.role);
+    }
+    if (actor.role === 'member') {
+      const memberRows = await getJson(fetchImpl, memberUrl.toString(), apiKey, actor.jwt);
+      if (!Array.isArray(memberRows) || memberRows.length !== 1 ||
+          memberRows[0]?.wall_id !== wallId ||
+          memberRows[0]?.user_id !== actor.id ||
+          memberRows[0]?.status !== 'accepted') {
+        throw new Error('Private Shared Wall accepted membership fixture mismatch');
+      }
     }
     const marks = await getJson(fetchImpl, markUrl.toString(), apiKey, actor.jwt);
     if (!Array.isArray(marks) || marks.length !== actor.expect ||
@@ -208,7 +225,7 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
   if (anonymousMarks.length !== 0) {
     throw new Error('Private text Mark visible without authentication');
   }
-  return { status: 'PASS', httpRequests: 11, actorCount: 3, readOnly: true };
+  return { status: 'PASS', httpRequests: 12, actorCount: 3, readOnly: true };
 }
 
 if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
@@ -227,6 +244,7 @@ if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
         error.message.startsWith('Authenticated actor identity mismatch:') ||
         error.message.startsWith('Private Shared Wall RLS visibility mismatch:') ||
         error.message.startsWith('Private text Mark RLS visibility mismatch:') ||
+        error.message.startsWith('Private Shared Wall accepted membership fixture mismatch') ||
         error.message.startsWith('Authenticated staging GET failed with HTTP ') ||
         error.message.startsWith('Three distinct authenticated') ||
         error.message.startsWith('Existing private Shared') ||
