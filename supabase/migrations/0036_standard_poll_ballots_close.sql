@@ -74,7 +74,7 @@ create constraint trigger poll_ballot_choices_cardinality
 -- Mark removal may already own the parent before it locks a profile. Never wait
 -- on either of those rows while holding the other in this opposite direction.
 create function public.lock_poll_mutation_target(p_actor uuid,p_wall_id uuid,p_mark_id uuid)
-returns public.marks language plpgsql security definer set search_path = pg_catalog, public as $
+returns public.marks language plpgsql security definer set search_path = pg_catalog, public as $poll_target$
 declare
   v_owner uuid;
   v_wall_type public.wall_type;
@@ -118,7 +118,7 @@ exception when lock_not_available then
   -- An overlapping state change has no authorized result yet. The caller may
   -- refresh/retry; it must not get a stale receipt or mutate a ballot.
   return null;
-end $;
+end $poll_target$;
 revoke all on function public.lock_poll_mutation_target(uuid,uuid,uuid)
   from public,anon,authenticated,service_role;
 
