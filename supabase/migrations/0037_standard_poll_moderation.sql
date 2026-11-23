@@ -10,20 +10,33 @@ alter table public.reports drop constraint reports_one_target;
 alter table public.reports add constraint reports_one_target
   check (num_nonnulls(mark_id, reported_user_id, reported_wall_id, reported_poll_id) = 1);
 
+-- Owner-executed helper is necessary: ordinary clients have no direct SELECT
+-- grant on private mark_polls. Bind the supplied actor to auth.uid() so this
+-- helper cannot serve as an arbitrary-user Poll existence oracle.
+create function public.can_report_poll(p_mark_id uuid, p_actor_id uuid)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $
+  select p_actor_id is not null and p_actor_id = auth.uid()
+    and public.is_active_account(p_actor_id)
+    and exists (
+      select 1 from public.mark_polls p
+      where p.mark_id = p_mark_id and p.status = 'active'
+        and public.can_view_wall(p.wall_id, p_actor_id)
+    )
+$;
+revoke all on function public.can_report_poll(uuid,uuid)
+  from public,anon,authenticated,service_role;
+grant execute on function public.can_report_poll(uuid,uuid) to authenticated;
+
 -- Preserve ordinary reporting; Poll reporters must be active and authorized
 -- to view the target Wall. A report cannot grant access to its Poll.
 drop policy if exists "reports insert self" on public.reports;
 create policy "reports insert self" on public.reports for insert to authenticated
   with check (
     reporter_id = auth.uid()
-    and (reported_poll_id is null or (
-      public.is_active_account(auth.uid())
-      and exists (
-        select 1 from public.mark_polls p
-        where p.mark_id = reported_poll_id and p.status = 'active'
-          and public.can_view_wall(p.wall_id, auth.uid())
-      )
-    ))
+    and (reported_poll_id is null or
+      public.can_report_poll(reported_poll_id, auth.uid()))
   );
 
 alter table public.moderation_actions
