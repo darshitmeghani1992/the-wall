@@ -45,6 +45,11 @@ assert.equal(
   "/(tabs)/alerts",
 );
 assert.equal(
+  notificationRoute(row({ kind: "friend_request", actor_id: OTHER_OWNER })),
+  "/(tabs)/discover?section=friends",
+  "a request opens the People category even when Discover previously showed Walls",
+);
+assert.equal(
   notificationRoute(row({ kind: "friend_accepted", actor_id: OTHER_OWNER })),
   `/person/${OTHER_OWNER}`,
 );
@@ -108,4 +113,4 @@ assert.equal(
   "a valid wall owner can still route to its profile when recipient metadata is missing",
 );
 
-console.log("notification route contract: 21 destination boundaries passed");
+console.log("notification route contract: 22 destination boundaries passed");
