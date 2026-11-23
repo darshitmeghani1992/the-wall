@@ -54,7 +54,7 @@ export async function resolveDeferredDestination(
       }
       case "shared_wall": {
         const wall = await operation(operations, "sharedWall")(destination.wallId);
-        if (!wall) return { status: "terminal_unavailable" };
+        if (wall?.id !== destination.wallId) return { status: "terminal_unavailable" };
         return {
           status: "available",
           href: `/shared/${destination.wallId}`,
@@ -74,7 +74,9 @@ export async function resolveDeferredDestination(
         const wall = destination.container.kind === "personal"
           ? await operation(operations, "personalWall")(destination.container.ownerId)
           : await operation(operations, "sharedWall")(destination.container.wallId);
-        if (!wall) return { status: "terminal_unavailable" };
+        if (!wall || (destination.container.kind === "shared" && wall.id !== destination.container.wallId)) {
+          return { status: "terminal_unavailable" };
+        }
         const mark = await operation(operations, "wallMark")(wall.id, destination.markId);
         if (!mark || mark.id !== destination.markId) return { status: "terminal_unavailable" };
         if (destination.container.kind === "personal") {

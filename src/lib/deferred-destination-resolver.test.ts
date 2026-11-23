@@ -48,7 +48,10 @@ assert.deepEqual(calls, [
 
 assert.equal((await resolveDeferredDestination({ kind: "personal_handle", handle: "maya" }, A, operations())).status, "available");
 assert.equal((await resolveDeferredDestination({ kind: "personal_user", userId: B }, A, operations())).status, "available");
-assert.equal((await resolveDeferredDestination({ kind: "shared_wall", wallId: WALL }, A, operations())).status, "available");
+assert.deepEqual(
+  await resolveDeferredDestination({ kind: "shared_wall", wallId: WALL }, A, operations()),
+  { status: "available", href: `/shared/${WALL}`, exactTarget: { kind: "shared", wallId: WALL, focusMarkId: null } },
+);
 assert.equal((await resolveDeferredDestination({ kind: "shared_invite", wallId: WALL }, A, operations())).status, "available");
 assert.equal((await resolveDeferredDestination({ kind: "mark", markId: MARK, container: { kind: "shared", wallId: WALL } }, A, operations())).status, "available");
 
@@ -57,6 +60,19 @@ assert.equal((await resolveDeferredDestination({ kind: "personal_user", userId: 
 assert.equal((await resolveDeferredDestination({ kind: "shared_wall", wallId: WALL }, A, operations({ sharedWall: async () => null }))).status, "terminal_unavailable");
 assert.equal((await resolveDeferredDestination({ kind: "shared_invite", wallId: WALL }, A, operations({ invitation: async () => ({ status: "unavailable" }) }))).status, "terminal_unavailable");
 assert.equal((await resolveDeferredDestination({ kind: "mark", markId: MARK, container: { kind: "personal", ownerId: B } }, A, operations({ wallMark: async () => null }))).status, "terminal_unavailable");
+
+const otherWall = operations({
+  sharedWall: async () => ({ id: B }),
+  wallMark: async () => { assert.fail("An unrelated Shared Wall must never receive the focused Mark lookup"); },
+});
+assert.deepEqual(
+  await resolveDeferredDestination({ kind: "shared_wall", wallId: WALL }, A, otherWall),
+  { status: "terminal_unavailable" },
+);
+assert.deepEqual(
+  await resolveDeferredDestination({ kind: "mark", markId: MARK, container: { kind: "shared", wallId: WALL } }, A, otherWall),
+  { status: "terminal_unavailable" },
+);
 
 for (const throwing of [
   { kind: "personal_handle", handle: "maya" } as const,
