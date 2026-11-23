@@ -77,7 +77,7 @@ test("all live destination families call the executable resolver boundary", () =
 test("legacy process-memory holder is removed and recovery helpers propagate query failures", () => {
   const profiles = read("src/lib/profiles.ts");
   const marks = read("src/lib/marks.ts");
-  assert.match(profiles, /getProfileByHandle[\s\S]*if \(error\) throw error/);
+  assert.match(profiles, /getProfileByHandle[\s\S]*profileHandleLookupPattern\(handle\)[\s\S]*\.ilike\("handle", pattern\)[\s\S]*if \(error\) throw error/);
   assert.match(profiles, /getPersonalWall[\s\S]*if \(error\) throw error/);
   assert.match(marks, /listWallMarks[\s\S]*if \(error\) throw error/);
   assert.match(marks, /getWallMark[\s\S]*if \(error\) throw error/);

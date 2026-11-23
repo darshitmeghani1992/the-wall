@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { DEFERRED_DESTINATION_TTL_MS, deferredRecordIsExpired, isAuthCallbackIntent, parseDeferredDestinationUrl, parseStoredDeferredDestination, serializeDeferredDestinationRecord } from "./deferred-destination-contract.ts";
+// @ts-ignore Dependency-free Node runner requires the explicit source extension.
+import { profileHandleLookupPattern } from "./handle-link-scope.ts";
+
+assert.equal(profileHandleLookupPattern(" @Maya_Two "), "Maya\\_Two");
+assert.equal(profileHandleLookupPattern("maya__three"), "maya\\_\\_three");
+assert.equal(profileHandleLookupPattern("Maya"), "Maya");
+assert.equal(profileHandleLookupPattern(""), null);
+assert.equal(profileHandleLookupPattern("maya%"), null);
+assert.equal(profileHandleLookupPattern("maya*"), null);
 
 const A = "11111111-1111-4111-8111-111111111111";
 const WALL = "22222222-2222-4222-8222-222222222222";
