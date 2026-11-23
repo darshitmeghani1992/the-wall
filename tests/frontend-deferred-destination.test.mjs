@@ -84,3 +84,11 @@ test("legacy process-memory holder is removed and recovery helpers propagate que
   assert.match(marks, /hydrateAuthors[\s\S]*if \(error\) throw error/);
   assert.match(marks, /postgres_changes[\s\S]*try \{[\s\S]*await hydrateAuthors\(\[raw\]\)[\s\S]*\} catch \{/);
 });
+
+test("invalid Personal Wall handles reach the unavailable state without beginning a deferred read", () => {
+  const handle = read("app/u/[handle].tsx");
+  assert.match(handle, /const validHandle = personalWallDeepLink\(clean\) === `thewall:\/\/u\/\$\{clean\}`/);
+  assert.match(handle, /handleLinkSubjectKey\([^\n]+validHandle && accountRoute === "ready"\)/);
+  assert.match(handle, /if \(validHandle && reference && !activeAttempt\) return <Spinner/);
+  assert.match(handle, /if \(!validHandle \|\| visibleView\?\.status === "not_found"\)[\s\S]*?label="My Wall"[\s\S]*?label="Discover"/);
+});

@@ -17,6 +17,7 @@ import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver"
 import { TargetRouteFence } from "@/lib/relationship-ui";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { handleLinkSubjectKey, sameHandleLinkSubject } from "@/lib/handle-link-scope";
+import { personalWallDeepLink } from "@/lib/share-contract";
 import { colors, markColors } from "@/theme";
 
 function Spinner() {
@@ -32,9 +33,10 @@ export default function HandleLink() {
   const router = useRouter();
   const { handle, __deferred_ref: rawReference } = useLocalSearchParams<{ handle: string; __deferred_ref?: string }>();
   const clean = String(handle ?? "").replace(/^@/, "").toLowerCase();
+  const validHandle = personalWallDeepLink(clean) === `thewall://u/${clean}`;
   const reference = typeof rawReference === "string" ? rawReference : null;
   const { loading, session, accountRoute } = useAuth();
-  const subjectKey = handleLinkSubjectKey(session?.user.id, clean, reference, accountRoute === "ready");
+  const subjectKey = handleLinkSubjectKey(session?.user.id, clean, reference, validHandle && accountRoute === "ready");
   const [resolvedView, setResolvedView] = useState<ResolvedView | null>(null);
   const [attempt, setAttempt] = useState<ClaimedAttempt | null>(null);
   const claimedKey = useRef<string | null>(null);
@@ -126,14 +128,14 @@ export default function HandleLink() {
   if (loading) return <Spinner />;
   if (!session) return <Redirect href="/welcome" />;
   if (accountRoute !== "ready") return <Redirect href="/" />;
-  if (reference && !activeAttempt) return <Spinner />;
+  if (validHandle && reference && !activeAttempt) return <Spinner />;
   if (reference && activeAttempt && !activeAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (visibleView?.status === "target") return <Redirect href={visibleView.href} />;
   if (visibleView?.status === "retryable") {
     return <Screen dockInset={false}><View style={{ flex: 1, justifyContent: "center", gap: 12 }}><Text accessibilityRole="alert" variant="headline">We couldn&apos;t open this Wall.</Text><Text variant="body" color={colors.outline}>Check your connection and try again.</Text><Button label="Retry" variant="yellow" onPress={() => void retry()} /><Button label="My Wall" variant="ghost" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
   }
-  if (visibleView?.status === "not_found") {
-    return <Screen dockInset={false}><View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}><Text variant="headline">This isn&apos;t available anymore.</Text><Button label="My Wall" variant="primary" onPress={() => router.replace("/(tabs)/home")} /></View></Screen>;
+  if (!validHandle || visibleView?.status === "not_found") {
+    return <Screen dockInset={false}><View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}><Text accessibilityRole="alert" variant="headline">This isn&apos;t available anymore.</Text><Button label="My Wall" variant="primary" onPress={() => router.replace("/(tabs)/home")} /><Button label="Discover" variant="ghost" onPress={() => router.replace("/(tabs)/discover")} /></View></Screen>;
   }
   return <Spinner />;
 }
