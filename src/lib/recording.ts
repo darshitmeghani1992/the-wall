@@ -36,6 +36,7 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
   const recRef = useRef<Audio.Recording | null>(null);
   const clipReady = useRef(onClipReady);
   const captureGeneration = useRef(0);
+  const starting = useRef(false);
   const latestDurationMs = useRef(0);
   clipReady.current = onClipReady;
 
@@ -60,28 +61,57 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
   }, []);
 
   async function start() {
-    setDenied(false);
-    const perm = await Audio.requestPermissionsAsync();
-    if (!perm.granted) {
-      setDenied(true);
-      return;
+    // A second tap must not start a second native microphone recorder.
+    if (starting.current || recRef.current) return;
+    starting.current = true;
+    const generation = captureGeneration.current;
+    const isCurrent = () => captureGeneration.current === generation;
+    let rec: Audio.Recording | null = null;
+
+    try {
+      setDenied(false);
+      const perm = await Audio.requestPermissionsAsync();
+      if (!isCurrent()) return; // reset or unmount while native permission sheet was open
+      if (!perm.granted) {
+        setDenied(true);
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      if (!isCurrent()) return;
+      rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      if (!isCurrent()) {
+        try { await rec.stopAndUnloadAsync(); } catch { /* not yet recording */ }
+        return;
+      }
+      rec.setProgressUpdateInterval(200);
+      rec.setOnRecordingStatusUpdate((status) => {
+        if (!isCurrent() || recRef.current !== rec || !status.isRecording) return;
+        const ms = status.durationMillis ?? 0;
+        latestDurationMs.current = ms;
+        setElapsedMs(ms);
+        if (ms >= MAX_VOICE_MS) void stop(); // hard cap at 60s
+      });
+      recRef.current = rec;
+      latestDurationMs.current = 0;
+      setElapsedMs(0);
+      await rec.startAsync();
+      if (!isCurrent() || recRef.current !== rec) {
+        if (recRef.current === rec) recRef.current = null;
+        try { await rec.stopAndUnloadAsync(); } catch { /* already released by reset */ }
+        return;
+      }
+      setPhase("recording");
+    } catch (cause) {
+      if (rec && recRef.current === rec) recRef.current = null;
+      if (rec) {
+        try { await rec.stopAndUnloadAsync(); } catch { /* cleanup best effort */ }
+      }
+      if (isCurrent()) setPhase("idle");
+      throw cause;
+    } finally {
+      starting.current = false;
     }
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const rec = new Audio.Recording();
-    await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    rec.setProgressUpdateInterval(200);
-    rec.setOnRecordingStatusUpdate((status) => {
-      if (!status.isRecording) return;
-      const ms = status.durationMillis ?? 0;
-      latestDurationMs.current = ms;
-      setElapsedMs(ms);
-      if (ms >= MAX_VOICE_MS) void stop(); // hard cap at 60s
-    });
-    recRef.current = rec;
-    latestDurationMs.current = 0;
-    setElapsedMs(0);
-    setPhase("recording");
-    await rec.startAsync();
   }
 
   async function stop() {
