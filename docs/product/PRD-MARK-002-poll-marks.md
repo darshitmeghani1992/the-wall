@@ -1,8 +1,8 @@
 # Poll Marks for the first public beta
 
-Status: poll scope approved by the Founder on 23 November 2026 (“Include polls only”). The behavior below is a Product proposal awaiting the protected UX decision and the Secret-mode decision. The proposal does not change the current app.
+Status: standard single-choice and multiple-choice polls are approved for the first public beta. Other interaction details below remain a Product proposal awaiting protected UX review. These documents do not change the app.
 
-The scope decision includes single-choice and multiple-choice Poll Marks on Personal and Shared Walls. Who-Said-This, Roast Me and Awards Night stay deferred. The existing public beta release gates apply. See [release tracker #57](https://github.com/darshitmeghani1992/the-wall/issues/57).
+On 23 November 2026, the Founder first chose “Include polls only” among the unresolved formats, then explicitly selected standard Poll Marks for this beta. The decision applies to Personal and Shared Walls and excludes Secret mode for polls. Who-Said-This, Roast Me and Awards Night stay deferred. The existing public beta release gates apply. See [release tracker #57](https://github.com/darshitmeghani1992/the-wall/issues/57).
 
 ## Proposed experience
 
@@ -15,7 +15,7 @@ The scope decision includes single-choice and multiple-choice Poll Marks on Pers
 
 ## Decisions before protected implementation
 
-- Master Build Specification §27 says any supported Mark may be Secret. The proposed Poll Mark relies on repeated or multi-person participation and results. Confirm that Poll Marks are ineligible for Secret for this beta, or supply a specific recipient, voting, reveal, results and expiration contract for Secret polls. Anonymous author mode remains independent.
+- The Founder’s standard-polls decision is the poll-specific exception to Master Build Specification §27. In this beta the composer cannot submit a Secret poll, and the server rejects a Secret poll request. This decision does not change Secret eligibility for other supported Mark types. Anonymous author mode for polls remains part of the separate proposed UX.
 - Review the inline composer action and the proposed poll-card and detail interaction against the existing UI approval process, including limits, voters, result visibility, editing and close behavior. Scope inclusion alone did not approve these interaction details.
 
 ## Acceptance
@@ -23,6 +23,7 @@ The scope decision includes single-choice and multiple-choice Poll Marks on Pers
 | Journey | Pass condition |
 |---|---|
 | Create | An eligible contributor can create a single-choice and multiple-choice poll on both Wall types. Invalid, duplicated or incomplete options cannot post. Rapid taps and a lost successful response create one Mark. |
+| Standard poll only | The Poll composer has no Secret interaction. An explicit or stale Secret setting cannot produce a standard poll silently. The server rejects Secret poll submissions without writing any Mark or ballot. Other Mark types retain their existing Secret rules. |
 | Vote and change | Single choice refuses multiple selections. Multiple choice accepts a valid set and rejects unknown or duplicate options. A changed ballot atomically replaces old selections. Retry, concurrent taps and two devices leave one valid ballot with accurate totals. |
 | Permissions | Owner, eligible contributor, accepted member, view-only follower and outsider see only permitted actions and content. Removal, blocking, deactivation or lost eligibility stops later access or voting. Read-only access never grants a ballot. |
 | Results and privacy | Zero-vote, open and closed states display correctly. Only the voter can read their own selections. Aggregates contain no voter or Anonymous author identifiers in cards, detail, links, alerts, logs or realtime payloads. |
