@@ -1,3 +1,9 @@
+## 23 Nov 2026 · Frozen-off Poll feedback integration checkpoint
+
+[Release draft integration from #231 + #232](https://github.com/darshitmeghani1992/the-wall/pull/231) preserves exact three #232 feedback source blobs on the unchanged #230 version in #231, source merge `3cac41462927bcd62e8d97664820038f232285ff`, tree `ba9878f07274fa24a9672341573881e0236eedae`. It prevents stale cross-device Poll ballot save confirmation after an authoritative refresh. This is **source integration only**: Poll creation/read/vote/close remain OFF, Realtime segregation is not implemented, and no migration or hosted work occurs. Verify new exact-head CI plus Reviewer and installed iPhone QA before any release conclusion. Apple/TestFlight, verified OTP, protected media, Secret and account-deletion gates remain NO-GO; existing rollback/disable instructions apply.
+
+---
+
 ## 23 Nov 2026 · Unactivated deletion worker origin fence (#210)
 
 Source-only risk reduction in isolated draft [#210](https://github.com/darshitmeghani1992/the-wall/pull/210), BACKEND implementation under ARCHITECT sequencing, child of integrated [#209](https://github.com/darshitmeghani1992/the-wall/pull/209). The prepared service-role deletion worker now rejects any Supabase origin except approved staging before adapter use; test matrix rejects original production, foreign/suffixed hosts, scheme/port/path/query/user-info, and preserves positive exact Storage/RPC/Auth Admin requests. Source/test commit `edb1a74999927c4f568ecf5e1d19484dd5828ffe`; check final docs-head, independent CI, Reviewer and QA separately. Staging migration 0031 and irreversible purge remain fully **HELD**. No external deployment or invocation. Different public environment requires independent new approved source+runtime fence; do not promote staging-only deletion code merely by changing an environment variable. Existing beta **NO-GO**.
