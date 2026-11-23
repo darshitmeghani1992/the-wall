@@ -153,6 +153,7 @@ begin
     raise exception '82 FAIL: keyset skipped same-key ordinary result or accepted partial cursor %',v_page;
   end if;
 end $$;
+reset role;
 
 -- A mixed v2 Wall history must not strip fields required by ordinary
 -- photo/voice/video Marks. Exercise the private projection on a synthetic
@@ -177,7 +178,6 @@ begin
     raise exception '82 FAIL: mixed v2 ordinary media projection %',v_item;
   end if;
 end $media_projection$;
-reset role;
 delete from public.mark_polls where mark_id=current_setting('tw.poll_mark')::uuid;
 do $$
 begin
