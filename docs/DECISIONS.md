@@ -1,3 +1,10 @@
+## D-49 · 23 Nov 2026 · Absolute elapsed-time deadline for reserved C3 pre-auth body slots (held)
+
+- **Finding:** D-48's new reservation bounds concurrent work before JWS verification, but the existing `IncomingMessage.setTimeout(5_000)` is a socket **inactivity** timeout. A peer can send a byte every few seconds to occupy a scarce pre-verification reservation indefinitely. No hosted exploitation is claimed.
+- **ARCHITECT → BACKEND scope:** Bound entire pre-verification JWS body read to five elapsed seconds with a disposable/unref'd timer, destroying incomplete requests even if chunks are trickled; always clear the timer in a `finally` and let D-48's rejection path release the admission counter. Retain byte-size limit, existing idle timeout, verified JWS requirement, empty 202/404/503 response contracts and durable C2 lease authority. A real HTTP chunked slow-trickle test must prove capacity returns for valid retry. This deadline does **not** cover the time spent in cryptographic verification; that separate phase stays capacity-bounded pending independent host review.
+- **Rejected:** Inactivity-only limiter (drip attack), accepting a default unlimited pre-auth read timeout, changing public authorization or adding credentials.
+- **Evidence/gates:** Integrated **draft [#261](https://github.com/darshitmeghani1992/the-wall/pull/261)** stacks only the #260 C3 source and regression on #258; independent exact-head CI, Reviewer and hostile ingress/hosting QA remain required. No hosted writes, signing, deployment, activation or policy change; staging only; public Enhanced Beta remains **NO-GO**.
+
 ## D-48 · 23 Nov 2026 · Bound C3 HTTP admission before signature verification (held)
 
 - **Trigger:** The existing C3 worker advertised an in-process maximum of 1–5 pending jobs but reserved that capacity only after the full HTTP body had been consumed and Ed25519 JWS validation completed. Simultaneous slow/forged requests could therefore bypass the bound and expend memory/crypto even when a job slot was occupied. This is a source-level exposure; no hosted incident is asserted.
