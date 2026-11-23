@@ -63,6 +63,23 @@ function fakeNetwork(options = {}) {
         json: async () => ({ id: options.mismatch ? base.TW_MEMBER_ID : ids[token] }),
       };
     }
+    if (url.includes('/rest/v1/wall_members?')) {
+      const params = new URL(url).searchParams;
+      assert.equal(params.get('select'), 'wall_id,user_id,status');
+      assert.equal(params.get('wall_id'), 'eq.' + WALL_ID);
+      assert.equal(params.get('user_id'), 'eq.' + MEMBER_ID);
+      assert.equal(init.headers.Authorization, 'Bearer ' + base.TW_MEMBER_JWT);
+      if (options.memberDenied) return { status: 403 };
+      if (options.memberMalformed) return { status: 200, json: async () => ({}) };
+      return {
+        status: 200,
+        json: async () => options.memberMissing ? [] : [{
+          wall_id: options.wrongMemberWall ? MARK_ID : WALL_ID,
+          user_id: options.wrongMemberUser ? OWNER_ID : MEMBER_ID,
+          status: options.memberPending ? 'pending' : 'accepted',
+        }],
+      };
+    }
     if (url.includes('/rest/v1/marks?')) {
       const params = new URL(url).searchParams;
       assert.equal(params.get('id'), 'eq.' + MARK_ID);
@@ -87,7 +104,7 @@ function fakeNetwork(options = {}) {
     }
     assert.ok(url.includes('/rest/v1/walls?'));
     assert.equal(new URL(url).searchParams.get('id'), 'eq.' + WALL_ID);
-    assert.equal(new URL(url).searchParams.get('select'), 'id,type,visibility');
+    assert.equal(new URL(url).searchParams.get('select'), 'id,type,visibility,owner_id');
     const isOutsider = token === base.TW_OUTSIDER_JWT;
     const isAnonymous = token === (options.apiKey || base.TW_STAGING_ANON_KEY);
     if (isAnonymous) {
@@ -109,17 +126,18 @@ function fakeNetwork(options = {}) {
       id: WALL_ID,
       type: options.wrongType ? 'personal' : 'shared',
       visibility: options.wrongVisibility ? 'public' : 'private',
+      owner_id: options.wrongOwner ? MEMBER_ID : OWNER_ID,
     }];
     return { status: 200, json: async () => rows };
   };
   return { handler, calls };
 }
 
-test('eleven read-only staging GETs: private Wall and active text Mark actor/anonymous RLS', async () => {
+test('twelve read-only staging GETs: private Wall and active text Mark actor/anonymous RLS', async () => {
   const mock = fakeNetwork();
   const result = await runStagingJwtAudit(base, mock.handler);
-  assert.deepEqual(result, { status: 'PASS', httpRequests: 11, actorCount: 3, readOnly: true });
-  assert.equal(mock.calls.length, 11);
+  assert.deepEqual(result, { status: 'PASS', httpRequests: 12, actorCount: 3, readOnly: true });
+  assert.equal(mock.calls.length, 12);
   assert.ok(mock.calls.every(([, init]) => init.method === 'GET'));
   assert.ok(mock.calls.every(([url]) => !url.includes('text=') && !url.includes('author_id=')));
   assert.ok(mock.calls.every(([, init]) => init.redirect === 'error'));
@@ -127,8 +145,8 @@ test('eleven read-only staging GETs: private Wall and active text Mark actor/ano
   // only the separate anonymous check omits a modern public-key Bearer.
   assert.equal(mock.calls[0][1].headers.Authorization, 'Bearer ' + base.TW_OWNER_JWT);
   assert.equal(mock.calls[1][1].headers.Authorization, 'Bearer ' + base.TW_OWNER_JWT);
-  assert.equal(mock.calls[9][1].headers.Authorization, undefined);
   assert.equal(mock.calls[10][1].headers.Authorization, undefined);
+  assert.equal(mock.calls[11][1].headers.Authorization, undefined);
 });
 
 test('fails before network on production, wrong protocol or alternate host', async () => {
@@ -178,12 +196,12 @@ test('rejects non-shared or non-private fixtures even when the actor visibility 
   }
 });
 
-test('each verified Auth actor sees Wall and text Mark before anonymous GETs', async () => {
+test('each verified actor sees Wall, accepted member fixture and Mark before anonymous GETs', async () => {
   const mock = fakeNetwork();
   await runStagingJwtAudit(base, mock.handler);
   assert.deepEqual(mock.calls.map(([url]) => new URL(url).pathname),
     ['/auth/v1/user', '/rest/v1/walls', '/rest/v1/marks',
-     '/auth/v1/user', '/rest/v1/walls', '/rest/v1/marks',
+     '/auth/v1/user', '/rest/v1/walls', '/rest/v1/wall_members', '/rest/v1/marks',
      '/auth/v1/user', '/rest/v1/walls', '/rest/v1/marks',
      '/rest/v1/walls', '/rest/v1/marks']);
 });
@@ -209,7 +227,7 @@ test('accepts legacy anon JWT-shaped public key only with anon role', async () =
   const mock = fakeNetwork({ apiKey: key });
   const result = await runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, mock.handler);
   assert.equal(result.status, 'PASS');
-  assert.equal(mock.calls.length, 11);
+  assert.equal(mock.calls.length, 12);
   assert.equal(mock.calls.at(-1)[1].headers.Authorization, 'Bearer ' + key);
 });
 
@@ -255,7 +273,7 @@ test('fails if the public anonymous key can read the same private Shared Wall', 
   const mock = fakeNetwork({ anonLeak: true });
   await assert.rejects(runStagingJwtAudit(base, mock.handler),
     /Private Shared Wall visible without authentication/);
-  assert.equal(mock.calls.length, 10);
+  assert.equal(mock.calls.length, 11);
   const [, request] = mock.calls.at(-1);
   assert.equal(request.headers.Authorization, undefined);
   assert.equal(request.headers.apikey, base.TW_STAGING_ANON_KEY);
@@ -270,12 +288,12 @@ test('anonymous RLS requires filtered HTTP 200; 401/403 gateway denials are not 
     const mock = fakeNetwork({ anonStatus: status });
     await assert.rejects(runStagingJwtAudit(base, mock.handler),
       new RegExp('Anonymous RLS check inconclusive: expected HTTP 200, got ' + status));
-    assert.equal(mock.calls.length, 10);
+    assert.equal(mock.calls.length, 11);
   }
   const malformed = fakeNetwork({ anonMalformed: true });
   await assert.rejects(runStagingJwtAudit(base, malformed.handler),
     /Malformed anonymous staging HTTP JSON/);
-  assert.equal(malformed.calls.length, 10);
+  assert.equal(malformed.calls.length, 11);
 });
 
 
@@ -304,6 +322,28 @@ test('fails closed on text Mark denial, leakage, wrong fixture or missing metada
     runStagingJwtAudit(base, fakeNetwork({ anonMarkLeak: true }).handler),
     /Private text Mark visible without authentication/,
   );
+});
+
+test('fixture must really be owned by owner actor and have accepted member membership', async () => {
+  const wrongOwner = fakeNetwork({ wrongOwner: true });
+  await assert.rejects(runStagingJwtAudit(base, wrongOwner.handler),
+    /Private Shared Wall RLS visibility mismatch: owner/);
+  assert.equal(wrongOwner.calls.length, 2);
+  for (const options of [
+    { memberMissing: true }, { memberPending: true },
+    { wrongMemberUser: true }, { wrongMemberWall: true },
+  ]) {
+    const mock = fakeNetwork(options);
+    await assert.rejects(runStagingJwtAudit(base, mock.handler),
+      /Private Shared Wall accepted membership fixture mismatch/);
+    assert.equal(mock.calls.length, 6);
+  }
+  const malformed = fakeNetwork({ memberMalformed: true });
+  await assert.rejects(runStagingJwtAudit(base, malformed.handler),
+    /Private Shared Wall accepted membership fixture mismatch/);
+  const denied = fakeNetwork({ memberDenied: true });
+  await assert.rejects(runStagingJwtAudit(base, denied.handler),
+    /Authenticated staging GET failed with HTTP 403/);
 });
 
 test('anonymous negative check never bypasses the three server-verified JWT identities', async () => {
