@@ -10,13 +10,13 @@ permissions:
 
 jobs:
   startup:
-    if: github.head_ref == 'codex/disposable-ios-startup-smoke-20261123'
+    if: github.head_ref == 'codex/ios26-ui-test-target-fix-20261123-auto18'
     runs-on: macos-26
     timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 889445ea0f4be42f9939059907c20062d1c9d6a1
+          ref: 3ce1985eceda9e011e1bdd2a811a81b8061f43bc
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -43,7 +43,7 @@ jobs:
       - name: Build the exact iOS app with signing disabled and no backend credentials
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = 889445ea0f4be42f9939059907c20062d1c9d6a1
+          test "$(git rev-parse HEAD)" = 3ce1985eceda9e011e1bdd2a811a81b8061f43bc
           test -z "$(git status --porcelain)"
           test -z "$EXPO_PUBLIC_SUPABASE_URL"
           test -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
@@ -147,6 +147,8 @@ jobs:
           fixture.build_configurations.each do |configuration|
             configuration.build_settings.merge!(
               "GENERATE_INFOPLIST_FILE" => "YES",
+              "PRODUCT_NAME" => "WallStartupUITests",
+              "PRODUCT_MODULE_NAME" => "WallStartupUITests",
               "PRODUCT_BUNDLE_IDENTIFIER" => "com.thewall.app.WallStartupUITests",
               "SWIFT_VERSION" => "5.0",
               "TARGETED_DEVICE_FAMILY" => "1",
