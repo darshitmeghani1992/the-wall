@@ -1,3 +1,10 @@
+## D-51 · 24 Nov 2026 · Native Voice recorder startup must be a visible, guarded composer state (held)
+
+- **Finding:** The existing synchronous microphone lease protected against duplicate starts and stale permission callbacks, but until native `startAsync()` resolved, the hook still exposed `idle`. The composer allowed an unrelated Mark submission or navigation in that permission window and did not catch native start rejection from the Voice tap.
+- **ARCHITECT boundary → FRONTEND implementation:** Extend local Voice phase to `starting` before the first native async permission request. Treat it like recording for client submit/discard/mode guards, show a minimal accessible pending state, return to idle on permission denial/native failure, and surface safe recoverable microphone errors. Preserve backend authorization, media privacy, 60s cap, generation fence and approved product behavior. Do not insert a dependency or enable disabled media.
+- **Evidence and gates:** Isolated [draft #264](https://github.com/darshitmeghani1992/the-wall/pull/264), based on #263 exact `2db48d083c4d489986f87327eacee0ddec86f1cf`; source/test SHA `d771ab3f87b954ee22425e9aedaddef54e1073cb`. Requires final-head CI and independent Reviewer plus real-device mic/cancel/deny/start/stop and accessible navigation tests; no signed iPhone testing claimed.
+- **Rollback:** Withhold/revert this held source-only branch. No server state or storage change. Staging-only, media/Poll/Secret gates OFF, original production untouched; full public beta NO-GO.
+
 ## D-50 · 23 Nov 2026 · Removed Secret Marks are permanently unrevealable (draft, held)
 
 - **PRODUCT acceptance:** Issue #57 and #66 require removed Secret Marks never yield content. Keep the existing `missing` denial reason rather than introduce a new public response contract. Other one-time reveal and one-hour expiry semantics remain unchanged; Secret rollout stays OFF.

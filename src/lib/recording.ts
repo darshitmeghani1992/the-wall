@@ -7,8 +7,8 @@ export { MAX_VOICE_MS, type VoiceResult } from "./voice-recording-result";
 export const MAX_VIDEO_MS = 30_000;
 
 export type VoiceRecorder = {
-  /** "idle" before first record, "recording" while capturing, "stopped" after. */
-  phase: "idle" | "recording" | "stopped";
+  /** "starting" while awaiting native permission/recording, before capture is safe. */
+  phase: "idle" | "starting" | "recording" | "stopped";
   /** Elapsed milliseconds while recording (drives the visible timer). */
   elapsedMs: number;
   /** Permission was denied — surface a settings hint instead of recording. */
@@ -64,6 +64,7 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
     // A second tap must not start a second native microphone recorder.
     if (starting.current || recRef.current) return;
     starting.current = true;
+    setPhase("starting");
     const generation = captureGeneration.current;
     const isCurrent = () => captureGeneration.current === generation;
     let rec: Audio.Recording | null = null;
@@ -74,6 +75,7 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
       if (!isCurrent()) return; // reset or unmount while native permission sheet was open
       if (!perm.granted) {
         setDenied(true);
+        setPhase("idle");
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });

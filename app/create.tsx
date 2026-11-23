@@ -175,6 +175,8 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const discardConfirmedRef = useRef(false);
   const recorder = useVoiceRecorder(attachVoiceClip);
   const recording = recorder.phase === "recording";
+  const voiceStarting = recorder.phase === "starting";
+  const voiceBusy = recording || voiceStarting;
   const busy = phase !== "idle";
   mediaRef.current = media;
 
@@ -191,6 +193,10 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }, [currentUserId, sessionGeneration]);
   useEffect(() => {
     if (mediaAppActive) return;
+    // iOS may background the app during a microphone permission prompt or an
+    // active recording. Discard the unfinished capture and release the mic;
+    // never resume recording without a new user tap after foregrounding.
+    void recorder.reset();
     setMedia((current) => current.map((draft) => {
       if (!["reserving", "uploading", "uploaded", "validating"].includes(draft.state)) return draft;
       const retryFrom = draft.state === "uploaded" || draft.state === "validating" ? "validation" : "upload";
@@ -221,7 +227,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     }));
     await recorder.reset();
   }
-  usePreventRemove((hasContent || recording || submissionLocked) && !discardConfirmedRef.current, ({ data }) => {
+  usePreventRemove((hasContent || voiceBusy || submissionLocked) && !discardConfirmedRef.current, ({ data }) => {
     if (!isCurrentScope() || submissionLocked) return;
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
@@ -268,7 +274,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const canSubmitPoll = isPollComposerEnabled && !secret && !anonymous && media.length === 0 && pollValidation?.status === "valid";
   const canSubmitExisting = !overLimit && hasTextOrMedia && !(secret && media.length)
     && (isMediaComposerEnabled || media.length === 0) && (!secret || isSecretComposerEnabled);
-  const canSubmit = Boolean(wallId && currentUserId && !recording && (pollMode ? canSubmitPoll : canSubmitExisting));
+  const canSubmit = Boolean(wallId && currentUserId && !voiceBusy && (pollMode ? canSubmitPoll : canSubmitExisting));
 
   function updatePollDraft(update: (draft: PollDraft) => PollDraft) {
     if (isPollComposerEnabled && pollMode) lockRef.current.runIntent(() => setPollDraft(update));
@@ -363,8 +369,14 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function toggleVoice() {
-    if (recording) await recorder.stop();
-    else await recorder.start();
+    try {
+      if (recording) await recorder.stop();
+      else if (!voiceStarting) await recorder.start();
+    } catch {
+      // Native permission/audio-session/recording failures are recoverable.
+      // Never let an unhandled tap promise crash the composer or leak details.
+      if (isCurrentScope()) Alert.alert("Couldn't record", "Check microphone access and try again.");
+    }
   }
 
   function updateDraft(clientId: string, next: MediaWriterDraft) {
@@ -447,7 +459,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
 
   function confirmDiscard() {
     if (!isCurrentScope()) return;
-    if (!hasContent && !recording) return router.back();
+    if (!hasContent && !voiceBusy) return router.back();
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
       { text: "Discard", style: "destructive", onPress: () => {
@@ -576,8 +588,8 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   </Screen>;
 
   const canAddPhoto = isMediaComposerEnabled && !busy && (media.length === 0 || media[0].kind === "photo") && media.length < 5;
-  const canAddAv = isMediaComposerEnabled && !busy && media.length === 0;
-  const canToggleSecret = isSecretComposerEnabled && !media.length && !busy && !recording;
+  const canAddAv = isMediaComposerEnabled && !busy && !voiceBusy && media.length === 0;
+  const canToggleSecret = isSecretComposerEnabled && !media.length && !busy && !voiceBusy;
   return <Screen dockInset={false}>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
       marginTop: 12, marginBottom: 16 }}>
@@ -599,7 +611,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     {isPollComposerEnabled ? (
       <View style={{ marginBottom: 14 }}>
         <AttachButton label={pollMode ? "Back to text and media" : "Poll"}
-          disabled={busy || submissionLocked || (!pollMode && (recording || secret || anonymous || media.length > 0))}
+          disabled={busy || submissionLocked || (!pollMode && (voiceBusy || secret || anonymous || media.length > 0))}
           onPress={() => lockRef.current.runIntent(() => setPollMode((current) => !current))} />
       </View>
     ) : null}
@@ -623,7 +635,11 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     <Text variant="label" color={overLimit ? colors.error : text.length > MAX_TEXT - 40 ? markColors.roastOrange : colors.outline}
       style={{ alignSelf: "flex-end", marginTop: 6 }}>{text.length}/{MAX_TEXT}</Text>
 
-    {isMediaComposerEnabled ? (recording ? <View style={{ marginTop: 14, borderWidth: 2, borderColor: colors.ink,
+    {isMediaComposerEnabled ? (voiceStarting ? <View accessibilityRole="alert" style={{ marginTop: 14, borderWidth: 2, borderColor: colors.ink,
+      borderRadius: radius.card, padding: 16, gap: 8, backgroundColor: markColors.skyBlue }}>
+      <Text variant="headline">Preparing microphone…</Text>
+      <Text variant="label" color={colors.outline}>Complete the microphone permission request to begin recording.</Text>
+    </View> : recording ? <View style={{ marginTop: 14, borderWidth: 2, borderColor: colors.ink,
       borderRadius: radius.card, padding: 16, alignItems: "center", gap: 12, backgroundColor: markColors.skyBlue }}>
       <Text variant="display" style={{ fontSize: 26 }}>{formatDuration(recorder.elapsedMs)}</Text>
       <Text variant="label" color={colors.outline}>RECORDING · UP TO 60s</Text>
