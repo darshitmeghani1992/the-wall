@@ -1,0 +1,106 @@
+name: Disposable iOS startup smoke
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/disposable-ios-startup-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    if: github.head_ref == 'codex/disposable-ios-startup-smoke-20261123'
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3a62a2967fe609ef6ab57320ec214e5e3fc4734a
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify Xcode and provision an isolated iOS 26 simulator
+        shell: bash
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version | grep -E '^26([.]|$)'
+          pod --version
+          runtime=$(xcrun simctl list runtimes --json | python3 -c '
+          import json, sys
+          runtimes = [
+              runtime for runtime in json.load(sys.stdin)["runtimes"]
+              if runtime["isAvailable"]
+              and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-26-")
+          ]
+          if not runtimes:
+              sys.exit("No installed iOS 26 simulator runtime.")
+          print(max(runtimes, key=lambda r: tuple(map(int, r["version"].split("."))))["identifier"])
+          ')
+          device=$(xcrun simctl create "Wall iOS startup smoke" com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$runtime")
+          printf 'WALL_IOS_DEVICE=%s\n' "$device" >> "$GITHUB_ENV"
+      - name: Build the exact iOS app with signing disabled and no backend credentials
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = 3a62a2967fe609ef6ab57320ec214e5e3fc4734a
+          test -z "$(git status --porcelain)"
+          test -z "$EXPO_PUBLIC_SUPABASE_URL"
+          test -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          npm ci --no-audit --no-fund
+          npx expo prebuild --non-interactive --platform ios --no-install
+          pod install --project-directory=ios
+          workspace=$(find ios -maxdepth 1 -name '*.xcworkspace' -print | head -1)
+          test -n "$workspace"
+          scheme=$(basename "$workspace" .xcworkspace)
+          build_log="$RUNNER_TEMP/wall-ios-build.log"
+          if ! xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+            -sdk iphonesimulator -destination "id=$WALL_IOS_DEVICE" -jobs 2 \
+            -derivedDataPath "$RUNNER_TEMP/wall-ios-derived" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO COMPILER_INDEX_STORE_ENABLE=NO \
+            build >"$build_log" 2>&1; then
+            grep -n -E 'error:|BUILD FAILED' "$build_log" | tail -35 || true
+            tail -80 "$build_log"
+            exit 1
+          fi
+          tail -12 "$build_log"
+      - name: Launch to Welcome without sign-in or network configuration
+        shell: bash
+        run: |
+          app=$(find "$RUNNER_TEMP/wall-ios-derived/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print | head -1)
+          test -n "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = com.thewall.app
+          xcrun simctl boot "$WALL_IOS_DEVICE"
+          xcrun simctl bootstatus "$WALL_IOS_DEVICE" -b
+          xcrun simctl install "$WALL_IOS_DEVICE" "$app"
+          xcrun simctl launch "$WALL_IOS_DEVICE" com.thewall.app
+          cat > "$RUNNER_TEMP/check-welcome.swift" <<'SWIFT'
+          import Foundation
+          import Vision
+
+          let handler = VNImageRequestHandler(url: URL(fileURLWithPath: CommandLine.arguments[1]))
+          let request = VNRecognizeTextRequest()
+          request.recognitionLevel = .accurate
+          try handler.perform([request])
+          let recognized = (request.results ?? [])
+              .compactMap { $0.topCandidates(1).first?.string }
+              .joined(separator: " ")
+              .lowercased()
+          if !recognized.contains("get started") || !recognized.contains("welcome to") {
+              exit(1)
+          }
+          print("The exact iOS simulator build launched to the Welcome screen. No sign-in was attempted.")
+          SWIFT
+          xcrun swiftc "$RUNNER_TEMP/check-welcome.swift" -o "$RUNNER_TEMP/check-welcome"
+          for attempt in {1..20}; do
+            xcrun simctl io "$WALL_IOS_DEVICE" screenshot "$RUNNER_TEMP/wall-ios-welcome.png"
+            if "$RUNNER_TEMP/check-welcome" "$RUNNER_TEMP/wall-ios-welcome.png"; then exit 0; fi
+            sleep 3
+          done
+          echo "::error::Welcome labels were not recognized in the native simulator UI."
+          exit 1
+      - name: Stop the isolated simulator
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "$WALL_IOS_DEVICE" ]]; then xcrun simctl shutdown "$WALL_IOS_DEVICE" || true; fi
