@@ -273,7 +273,7 @@ test('fails if the public anonymous key can read the same private Shared Wall', 
   const mock = fakeNetwork({ anonLeak: true });
   await assert.rejects(runStagingJwtAudit(base, mock.handler),
     /Private Shared Wall visible without authentication/);
-  assert.equal(mock.calls.length, 10);
+  assert.equal(mock.calls.length, 11);
   const [, request] = mock.calls.at(-1);
   assert.equal(request.headers.Authorization, undefined);
   assert.equal(request.headers.apikey, base.TW_STAGING_ANON_KEY);
@@ -288,7 +288,7 @@ test('anonymous RLS requires filtered HTTP 200; 401/403 gateway denials are not 
     const mock = fakeNetwork({ anonStatus: status });
     await assert.rejects(runStagingJwtAudit(base, mock.handler),
       new RegExp('Anonymous RLS check inconclusive: expected HTTP 200, got ' + status));
-    assert.equal(mock.calls.length, 10);
+    assert.equal(mock.calls.length, 11);
   }
   const malformed = fakeNetwork({ anonMalformed: true });
   await assert.rejects(runStagingJwtAudit(base, malformed.handler),
