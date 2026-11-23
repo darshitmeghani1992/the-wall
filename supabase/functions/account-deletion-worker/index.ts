@@ -153,7 +153,7 @@ export function createSupabaseAccountDeletionAdapter(input: Readonly<{
       if (!response.ok) throw new Error("avatar deletion unavailable");
     },
     prepare: async (userId, requestedAt) => {
-      const value = await rpc("prepare_account_deletion_for_purge", {
+      const value = await rpc("prepare_account_deletion_for_purge_with_polls", {
         p_user_id: userId, p_expected_requested_at: requestedAt,
       });
       if (typeof value !== "boolean") throw new Error("invalid preparation response");
