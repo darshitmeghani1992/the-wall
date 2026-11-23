@@ -20,7 +20,7 @@ import {
 import { followUser, unfollowUser } from "@/lib/follows";
 import { useAuth } from "@/lib/auth";
 import { friendActionsFor, normalizePeopleSearchQuery, type FriendActionKind } from "@/lib/relationship-ui";
-import { SessionFocusFence } from "@/lib/session-generation";
+import { SessionFocusFence, type SessionGenerationToken } from "@/lib/session-generation";
 import { normalizeSharedWallSearch } from "@/lib/shared-wall-contract";
 import { searchPublicSharedWalls, type PublicSharedWall } from "@/lib/walls";
 import { colors, markColors, radius } from "@/theme";
@@ -58,6 +58,7 @@ function DiscoverForActor({
   const [error, setError] = useState<string | null>(null);
   const currentUserId = useRef<string | null>(userId ?? null);
   const currentQuery = useRef(query);
+  const lastPeopleSearch = useRef<{ query: string; token: SessionGenerationToken } | null>(null);
   const networkFence = useRef(new SessionFocusFence());
   const searchFence = useRef(new SessionFocusFence());
   const actionFence = useRef(new SessionFocusFence());
@@ -91,6 +92,7 @@ function DiscoverForActor({
     const nextUserId = userId ?? null;
     networkFence.current.focus(nextUserId);
     searchFence.current.focus(nextUserId);
+    lastPeopleSearch.current = null;
     actionFence.current.focus(nextUserId);
     setBusyId(null);
     setSearching(false);
@@ -132,6 +134,7 @@ function DiscoverForActor({
       const nextResults = await searchPeople(userId!, normalized);
       if (!searchFence.current.isCurrent(token, currentUserId.current)) return;
       if (normalizePeopleSearchQuery(currentQuery.current) !== normalized) return;
+      lastPeopleSearch.current = { query: normalized, token };
       setResults(nextResults);
       setSearchedQuery(normalized);
     } catch (cause: any) {
@@ -168,6 +171,7 @@ function DiscoverForActor({
     if (actionInFlight.current) return;
     const token = actionFence.current.begin(userId ?? null);
     if (!token) return;
+    const refresh = lastPeopleSearch.current;
     actionInFlight.current = true;
     setBusyId(personId);
     let actionSucceeded = false;
@@ -176,17 +180,16 @@ function DiscoverForActor({
       actionSucceeded = true;
       if (!actionFence.current.isCurrent(token, currentUserId.current)) return;
       await loadNetwork();
-      const normalized = normalizePeopleSearchQuery(currentQuery.current);
-      if (normalized) {
-        const nextResults = await searchPeople(userId!, normalized);
-        if (actionFence.current.isCurrent(token, currentUserId.current)
-          && normalizePeopleSearchQuery(currentQuery.current) === normalized) {
-          setResults(nextResults);
-          setSearchedQuery(normalized);
-        }
+      if (!refresh || !actionFence.current.isCurrent(token, currentUserId.current)
+        || !searchFence.current.isCurrent(refresh.token, currentUserId.current)) return;
+      const nextResults = await searchPeople(token.userId, refresh.query);
+      if (actionFence.current.isCurrent(token, currentUserId.current)
+        && searchFence.current.isCurrent(refresh.token, currentUserId.current)) {
+        setResults(nextResults);
       }
     } catch (cause: any) {
-      if (actionFence.current.isCurrent(token, currentUserId.current)) {
+      if (actionFence.current.isCurrent(token, currentUserId.current)
+        && (!actionSucceeded || !refresh || searchFence.current.isCurrent(refresh.token, currentUserId.current))) {
         Alert.alert(
           actionSucceeded ? "Updated, but couldn't refresh" : "Couldn't update that",
           actionSucceeded ? "The change was saved. Pull away and return to refresh this screen." : cause?.message ?? "Please try again.",
