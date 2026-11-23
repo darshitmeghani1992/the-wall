@@ -7,6 +7,7 @@ import { Text } from "@/components/Text";
 import { useAuth } from "@/lib/auth";
 import {
   adminRemoveMark,
+  adminRemovePoll,
   adminResolveReport,
   adminSuspendAccount,
   listModerationActions,
@@ -158,6 +159,7 @@ export default function ModerationScreen() {
     const destructive = targetAction !== "none";
     const title = targetAction === "remove_mark"
       ? "Remove this Mark and resolve?"
+      : targetAction === "remove_poll" ? "Remove this Poll and resolve?"
       : targetAction === "suspend_user"
         ? "Suspend this account and resolve?"
         : finalStatus === "dismissed" ? "Dismiss this report?" : "Resolve this report?";
@@ -166,7 +168,7 @@ export default function ModerationScreen() {
       : "This closes the report without changing the reported target.", [
       { text: "Cancel", style: "cancel" },
       {
-        text: targetAction === "suspend_user" ? "Suspend" : targetAction === "remove_mark" ? "Remove" : "Confirm",
+        text: targetAction === "suspend_user" ? "Suspend" : (targetAction === "remove_mark" || targetAction === "remove_poll") ? "Remove" : "Confirm",
         style: destructive ? "destructive" : "default",
         onPress: () => void execute(report, token.userId, token, targetAction, finalStatus),
       },
@@ -185,6 +187,7 @@ export default function ModerationScreen() {
     setBusyId(report.id);
     setError(null);
     const targetId = targetAction === "remove_mark" ? report.mark_id
+      : targetAction === "remove_poll" ? report.reported_poll_id ?? null
       : targetAction === "suspend_user" ? report.reported_user_id : null;
     const reason = `Report ${report.id}: ${report.reason}`;
     let completed = false;
@@ -197,6 +200,7 @@ export default function ModerationScreen() {
       reason,
       isCurrent: () => fence.current.isCurrent(token, currentActorId.current),
       removeMark: adminRemoveMark,
+      removePoll: adminRemovePoll,
       suspendAccount: adminSuspendAccount,
       resolveReport: adminResolveReport,
       onComplete: (reportId) => {
@@ -322,6 +326,9 @@ function ReportCard({
       <View style={{ gap: spacing.unit * 2 }}>
         {report.mark_id ? (
           <Button label="Remove Mark + resolve" variant="yellow" disabled={busy} onPress={() => onAction("remove_mark", "resolved")} />
+        ) : null}
+        {report.reported_poll_id ? (
+          <Button label="Remove Poll + resolve" variant="yellow" disabled={busy} onPress={() => onAction("remove_poll", "resolved")} />
         ) : null}
         {report.reported_user_id ? (
           <Button label="Suspend account + resolve" variant="yellow" disabled={busy} onPress={() => onAction("suspend_user", "resolved")} />
