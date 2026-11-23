@@ -35,6 +35,12 @@ export function samePollSelection(a: readonly string[], b: readonly string[]): b
   return a.length === b.length && a.every((id) => b.includes(id));
 }
 
+export function confirmedPollVoteMessage(submitted: readonly string[], latest: FocusedPoll): string {
+  if (!latest.ballot) return "There’s no current vote from this account.";
+  return samePollSelection(submitted, latest.ballot.optionIds)
+    ? "Vote saved." : "The vote shown is your latest selection.";
+}
+
 export function preparePollMutation(
   kind: PollAction,
   target: PollAddress,
