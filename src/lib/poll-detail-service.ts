@@ -1,4 +1,5 @@
-import { getWallMark } from "@/lib/marks";
+import { getWallMark, hydrateAuthors } from "@/lib/marks";
+import { hydrateMixedWallPage } from "@/lib/poll-mixed-wall-presenter";
 import { isMixedPollHistoryEnabled, readMixedWallHistory, type MixedWallCursor, type MixedWallReadRequest } from "@/lib/poll-mixed-history";
 import { isFocusedPollReaderEnabled, readFocusedPoll, readFocusedWallCard, type PollReadRequest } from "@/lib/poll-focused-reader";
 import { isPollInteractionEnabled, type PollMutation, type PollAddress } from "@/lib/poll-voting-contract";
@@ -35,4 +36,10 @@ export function loadMixedWallHistory(actorId: string, wallId: string, cursor: Mi
       if (error) throw new Error("Couldn’t load this Wall history. Please try again.");
       return data;
     });
+}
+
+/** Preserve ordinary Mark author presentation without expanding the private v2 payload. */
+export async function loadHydratedMixedWallHistory(actorId: string, wallId: string, cursor: MixedWallCursor | null) {
+  const page = await loadMixedWallHistory(actorId, wallId, cursor);
+  return page ? hydrateMixedWallPage(page, hydrateAuthors) : null;
 }
