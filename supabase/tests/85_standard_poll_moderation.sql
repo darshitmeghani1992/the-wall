@@ -38,7 +38,7 @@ insert into public.reports(id,reporter_id,reported_poll_id,reason)
 reset role;
 set local role authenticated;
 set local "test.uid"='88888888-8888-8888-8888-888888888888';
-do $
+do $poll_visibility$
 declare v_error text;
 begin
   begin
@@ -50,7 +50,7 @@ begin
     get stacked diagnostics v_error=returned_sqlstate;
     if v_error <> '42501' then raise exception '85 FAIL: wrong reporter denial %',v_error; end if;
   end;
-end $;
+end $poll_visibility$;
 reset role;
 \echo '85 (private Poll reporting visibility): PASS'
 
