@@ -24,7 +24,7 @@ function withFocusedMark(path: string, markId: string | null): string {
 export function notificationRoute(notification: NotificationRouteInput): string {
   switch (notification.kind) {
     case "friend_request":
-      return "/(tabs)/discover";
+      return "/(tabs)/discover?section=friends";
     case "friend_accept":
     case "friend_accepted":
       return isCanonicalUuid(notification.actor_id) ? `/person/${notification.actor_id}` : "/(tabs)/discover";
