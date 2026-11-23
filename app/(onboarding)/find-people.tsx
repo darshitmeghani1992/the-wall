@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { inviteFriends } from "@/lib/share";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding";
 import { AccountRouteFence, onboardingScreenScopeKey, type AccountRoute } from "@/lib/onboarding-contract";
+import { beginExclusiveMutation, endExclusiveMutation } from "@/lib/mutation-guard";
 import { colors } from "@/theme";
 
 /** Activation choice only; people search itself stays in the canonical Discover surface. */
@@ -42,6 +43,7 @@ function FindPeopleEditor({
 }) {
   const router = useRouter();
   const lifecycleFence = useRef(new AccountRouteFence());
+  const continuationInFlight = useRef(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -51,7 +53,8 @@ function FindPeopleEditor({
   }, [accountRoute, liveActorId, router]);
 
   async function continueWith(destination: "discover" | null, share = false) {
-    if (busy || !userId || userId !== liveActorId.current || accountRoute !== "walkthrough") return;
+    if (!userId || userId !== liveActorId.current || accountRoute !== "walkthrough") return;
+    if (!beginExclusiveMutation(continuationInFlight)) return;
     const token = lifecycleFence.current.begin(userId);
     setBusy(true);
     try {
@@ -67,7 +70,10 @@ function FindPeopleEditor({
         Alert.alert("Couldn't continue", cause?.message ?? "Please try again.");
       }
     } finally {
-      if (lifecycleFence.current.isCurrent(token, liveActorId.current)) setBusy(false);
+      if (lifecycleFence.current.isCurrent(token, liveActorId.current)) {
+        endExclusiveMutation(continuationInFlight);
+        setBusy(false);
+      }
     }
   }
 
