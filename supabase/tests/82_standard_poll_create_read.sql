@@ -13,18 +13,11 @@ begin
   if not exists (select 1 from public.marks where id='82000000-0000-4000-8000-000000000000' and type='poll') then
     raise exception '82 FAIL: missing legacy fixture';
   end if;
-  begin
-    insert into public.marks(wall_id,author_id,type)
-      values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','poll');
-    raise exception '82 FAIL: privileged parent without definition';
-  exception when check_violation then null;
-  end;
-  begin
-    insert into public.mark_polls(mark_id,wall_id,question,selection_mode)
-      values ('82000000-0000-4000-8000-000000000000','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','Revive legacy','single');
-    raise exception '82 FAIL: legacy Mark acquired a sidecar';
-  exception when check_violation then null;
-  end;
+  if has_function_privilege('authenticated','public.private_poll_envelope_v2(public.mark_polls,uuid)','EXECUTE')
+     or exists (select 1 from pg_publication_tables where schemaname='public'
+       and tablename in ('mark_polls','mark_poll_options','mark_poll_rollout','mark_poll_creation_requests')) then
+    raise exception '82 FAIL: provider publication or private helper access';
+  end if;
 end $$;
 
 update public.walls set visibility='private' where id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -83,13 +76,13 @@ begin
      or v_result #>> '{item,poll,capabilities,can_vote}' is distinct from 'false' then
     raise exception '82 FAIL: v2 poll detail %',v_result;
   end if;
-  v_page := public.list_wall_marks_v2(auth.uid(),v_wall,null,null,null,1);
+  v_page := public.list_wall_marks_v2(auth.uid(),v_wall,null,null,null,null,1);
   v_cursor := v_page->'next_cursor';
   if v_page #>> '{items,0,mark,id}' is distinct from v_poll::text or v_cursor = 'null'::jsonb then
     raise exception '82 FAIL: v2 first page %',v_page;
   end if;
   v_page := public.list_wall_marks_v2(auth.uid(),v_wall,(v_cursor->>'pinned')::boolean,
-    (v_cursor->>'created_at')::timestamptz,(v_cursor->>'mark_id')::uuid,1);
+    (v_cursor->>'created_at')::timestamptz,(v_cursor->>'mark_id')::uuid,v_cursor->>'kind',1);
   if v_page #>> '{items,0,kind}' is distinct from 'mark' then raise exception '82 FAIL: mixed pagination %',v_page; end if;
   v_result := public.read_poll_marks(auth.uid(),v_wall,array[v_legacy,v_poll]);
   if jsonb_array_length(v_result->'items') is distinct from 1 or v_result #>> '{items,0,mark_id}' is distinct from v_poll::text then
@@ -123,11 +116,52 @@ begin
   if exists(select 1 from public.notifications where mark_id=current_setting('tw.poll_mark')::uuid) then
     raise exception '82 FAIL: poll escaped to legacy Alerts';
   end if;
-  begin
-    delete from public.mark_polls where mark_id=current_setting('tw.poll_mark')::uuid;
-    raise exception '82 FAIL: deleted definition beneath surviving Mark';
-  exception when check_violation then null;
-  end;
+  if exists (select 1 from public.marks where id=current_setting('tw.poll_mark')::uuid) then
+    raise exception '82 FAIL: new Poll stored in legacy Mark table';
+  end if;
+end $$;
+
+-- Type-sensitive pagination and focus distinguish a legitimate synthetic tie.
+set local "test.uid"='11111111-1111-1111-1111-111111111111';
+insert into public.marks(id,wall_id,author_id,type,text,created_at)
+select mark_id,wall_id,author_id,'text','Same-key ordinary fixture',created_at
+from public.mark_polls where mark_id=current_setting('tw.poll_mark')::uuid;
+set local role authenticated;
+set local "test.uid"='11111111-1111-1111-1111-111111111111';
+do $$
+declare
+  v_wall uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  v_poll uuid := current_setting('tw.poll_mark')::uuid;
+  v_page jsonb;
+  v_cursor jsonb;
+begin
+  if public.get_wall_mark_v2(auth.uid(),v_wall,v_poll) <> '{"status":"unavailable"}'::jsonb
+     or public.get_wall_mark_item_v2(auth.uid(),v_wall,v_poll,'poll') #>> '{item,kind}' is distinct from 'poll'
+     or public.get_wall_mark_item_v2(auth.uid(),v_wall,v_poll,'mark') #>> '{item,kind}' is distinct from 'mark'
+     or public.get_wall_mark_item_v2(auth.uid(),v_wall,v_poll,'other') <> '{"status":"unavailable"}'::jsonb then
+    raise exception '82 FAIL: exact typed focus and ambiguous legacy fallback';
+  end if;
+  v_page := public.list_wall_marks_v2(auth.uid(),v_wall,null,null,null,null,1);
+  v_cursor := v_page->'next_cursor';
+  if v_cursor->>'kind' is distinct from 'poll' or v_cursor->>'mark_id' is distinct from v_poll::text then
+    raise exception '82 FAIL: mixed tie cursor %',v_page;
+  end if;
+  v_page := public.list_wall_marks_v2(auth.uid(),v_wall,(v_cursor->>'pinned')::boolean,
+    (v_cursor->>'created_at')::timestamptz,(v_cursor->>'mark_id')::uuid,v_cursor->>'kind',1);
+  if v_page #>> '{items,0,kind}' is distinct from 'mark' or v_page #>> '{items,0,mark,id}' is distinct from v_poll::text
+     or public.list_wall_marks_v2(auth.uid(),v_wall,null,null,null,'poll',1) <> '{"status":"invalid"}'::jsonb then
+    raise exception '82 FAIL: keyset skipped same-key ordinary result or accepted partial cursor %',v_page;
+  end if;
+end $$;
+reset role;
+delete from public.mark_polls where mark_id=current_setting('tw.poll_mark')::uuid;
+do $$
+begin
+  if exists (select 1 from public.mark_poll_options where mark_id=current_setting('tw.poll_mark')::uuid)
+     or not exists (select 1 from public.marks where id=current_setting('tw.poll_mark')::uuid
+       and text='Same-key ordinary fixture') then
+    raise exception '82 FAIL: independent parent removal did not preserve the ordinary row';
+  end if;
 end $$;
 rollback;
-\echo '82 (standard poll create/read, v2, legacy quarantine) : PASS'
+\echo '82 (standard poll create/read, typed keyset, legacy separation) : PASS'

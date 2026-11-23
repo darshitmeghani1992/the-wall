@@ -1,5 +1,14 @@
 \set ON_ERROR_STOP on
 begin;
+
+do $$
+begin
+  if exists (select 1 from pg_publication_tables where schemaname='public'
+      and tablename in ('mark_poll_ballots','mark_poll_ballot_choices','mark_poll_mutation_requests')) then
+    raise exception '83 FAIL: private ballot relations are published';
+  end if;
+end $$;
+
 do $$
 begin
   if (select voting_enabled from public.mark_poll_rollout where singleton) is distinct from false

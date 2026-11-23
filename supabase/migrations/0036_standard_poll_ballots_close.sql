@@ -34,6 +34,16 @@ alter table public.mark_poll_mutation_requests enable row level security;
 revoke all on public.mark_poll_ballots, public.mark_poll_ballot_choices,
   public.mark_poll_mutation_requests from public, anon, authenticated, service_role;
 
+do $publication$
+begin
+  if exists (
+    select 1 from pg_catalog.pg_publication_tables where schemaname = 'public'
+      and tablename in ('mark_poll_ballots','mark_poll_ballot_choices','mark_poll_mutation_requests')
+  ) then
+    raise exception 'POLL_STORAGE_MUST_BE_UNPUBLISHED';
+  end if;
+end $publication$;
+
 -- Enforce selection cardinality even for privileged direct writes. Deletion of
 -- an Auth identity cascades ballots and their choices, including closed polls.
 create function public.check_poll_ballot_cardinality()
@@ -70,25 +80,23 @@ create constraint trigger poll_ballot_choices_cardinality
 
 -- One ballot per voter. Replacements are atomic and retry-safe under the poll
 -- row lock. No caller-supplied voter_id or read of other voters is accepted.
--- Serialize against Wall membership, account lifecycle, blocks and Mark removal.
--- Mark removal may already own the parent before it locks a profile. Never wait
--- on either of those rows while holding the other in this opposite direction.
+-- Serialize against Wall membership, account lifecycle, blocks and the private
+-- Poll parent. Conflicting lifecycle locks fail closed for a caller retry.
 create function public.lock_poll_mutation_target(p_actor uuid,p_wall_id uuid,p_mark_id uuid)
-returns public.marks language plpgsql security definer set search_path = pg_catalog, public as $poll_target$
+returns public.mark_polls language plpgsql security definer set search_path = pg_catalog, public as $poll_target$
 declare
   v_owner uuid;
   v_wall_type public.wall_type;
   v_author uuid;
-  v_mark public.marks%rowtype;
+  v_poll public.mark_polls%rowtype;
   v_pair record;
 begin
   if p_actor is null or p_actor is distinct from auth.uid() then return null; end if;
   select w.owner_id,w.type into v_owner,v_wall_type from public.walls w
     where w.id=p_wall_id for share;
   if not found then return null; end if;
-  select m.author_id into v_author from public.marks m
-    where m.id=p_mark_id and m.wall_id=p_wall_id and m.type='poll' and m.status='active'
-      and not m.secret and not m.anonymous;
+  select p.author_id into v_author from public.mark_polls p
+    where p.mark_id=p_mark_id and p.wall_id=p_wall_id and p.status='active';
   if not found or v_author is null then return null; end if;
 
   perform p.id from public.profiles p where p.id in (p_actor,v_author,v_owner)
@@ -105,15 +113,15 @@ begin
     perform public.lock_user_pair(v_pair.first_actor,v_pair.second_actor);
   end loop;
 
-  select * into v_mark from public.marks m
-    where m.id=p_mark_id and m.wall_id=p_wall_id and m.type='poll' and m.status='active'
-    for share nowait;
-  if not found or v_mark.secret or v_mark.anonymous or v_mark.author_id is distinct from v_author
+  select * into v_poll from public.mark_polls p
+    where p.mark_id=p_mark_id and p.wall_id=p_wall_id and p.status='active'
+    for update nowait;
+  if not found or v_poll.author_id is distinct from v_author
      or not public.is_active_account(p_actor) or not public.is_active_account(v_author)
      or not public.can_view_wall(p_wall_id,p_actor) or public.is_blocked(p_actor,v_author) then
     return null;
   end if;
-  return v_mark;
+  return v_poll;
 exception when lock_not_available then
   -- An overlapping state change has no authorized result yet. The caller may
   -- refresh/retry; it must not get a stale receipt or mutate a ballot.
@@ -128,7 +136,6 @@ create function public.replace_poll_ballot(
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog, public, extensions as $$
 declare
   v_actor uuid := auth.uid();
-  v_mark public.marks%rowtype;
   v_poll public.mark_polls%rowtype;
   v_old_revision bigint;
   v_revision bigint;
@@ -152,13 +159,11 @@ begin
   end if;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,83));
-  v_mark := public.lock_poll_mutation_target(v_actor,p_wall_id,p_mark_id);
-  if v_mark.id is null or not (
+  v_poll := public.lock_poll_mutation_target(v_actor,p_wall_id,p_mark_id);
+  if v_poll.mark_id is null or not (
     exists (select 1 from public.walls w where w.id=p_wall_id and w.owner_id=v_actor)
     or public.can_contribute(p_wall_id,v_actor)
   ) then return '{"status":"unavailable"}'::jsonb; end if;
-  select * into v_poll from public.mark_polls p where p.mark_id=p_mark_id and p.wall_id=p_wall_id for update;
-  if not found then return '{"status":"unavailable"}'::jsonb; end if;
   select * into v_receipt from public.mark_poll_mutation_requests r
     where r.actor_id=v_actor and r.request_id=p_request_id for update;
   v_hash := encode(extensions.digest(convert_to(jsonb_build_object(
@@ -215,7 +220,6 @@ create function public.close_poll_mark(
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog, public, extensions as $$
 declare
   v_actor uuid := auth.uid();
-  v_mark public.marks%rowtype;
   v_poll public.mark_polls%rowtype;
   v_hash text;
   v_receipt public.mark_poll_mutation_requests%rowtype;
@@ -227,12 +231,10 @@ begin
     return '{"status":"invalid"}'::jsonb; end if;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,83));
-  v_mark := public.lock_poll_mutation_target(v_actor,p_wall_id,p_mark_id);
-  if v_mark.id is null or v_mark.author_id is distinct from v_actor then
+  v_poll := public.lock_poll_mutation_target(v_actor,p_wall_id,p_mark_id);
+  if v_poll.mark_id is null or v_poll.author_id is distinct from v_actor then
     return '{"status":"unavailable"}'::jsonb;
   end if;
-  select * into v_poll from public.mark_polls p where p.mark_id=p_mark_id and p.wall_id=p_wall_id for update;
-  if not found then return '{"status":"unavailable"}'::jsonb; end if;
   v_hash := encode(extensions.digest(convert_to(jsonb_build_object(
     'version',1,'kind','close','wall_id',p_wall_id,'mark_id',p_mark_id,
     'poll_revision',p_expected_poll_revision)::text,'UTF8'),'sha256'),'hex');
@@ -256,11 +258,10 @@ end $$;
 
 -- Existing v2-only projection: aggregate snapshots are derived from surviving
 -- ballots, not frozen. Auth deletion cascades votes on open AND closed polls.
-create or replace function public.poll_mark_envelope_v2(p_mark public.marks, p_actor uuid)
+create or replace function public.private_poll_envelope_v2(p_poll public.mark_polls, p_actor uuid)
 returns jsonb language plpgsql stable security definer set search_path = pg_catalog, public as $$
 declare
   v_parent jsonb;
-  v_definition public.mark_polls%rowtype;
   v_options jsonb;
   v_counts jsonb;
   v_total bigint;
@@ -268,53 +269,49 @@ declare
   v_ballot jsonb;
   v_can_vote boolean;
 begin
-  if p_mark.status<>'active' or not public.can_view_wall(p_mark.wall_id,p_actor) then return null; end if;
-  if p_mark.type not in ('text','photo','voice','video','poll') then return null; end if;
+  if p_actor is null or p_actor is distinct from auth.uid()
+     or not public.is_active_account(p_actor)
+     or not public.can_view_wall(p_poll.wall_id,p_actor) or p_poll.status <> 'active'
+     or not public.is_active_account(p_poll.author_id) or public.is_blocked(p_actor,p_poll.author_id) then
+    return null;
+  end if;
   v_parent := jsonb_build_object(
-    'id',p_mark.id,'wall_id',p_mark.wall_id,
-    'author_id',case when p_mark.anonymous then null else p_mark.author_id end,
-    'type',p_mark.type,'text',p_mark.text,'color',p_mark.color,
-    'anonymous',p_mark.anonymous,'secret',p_mark.secret,'rotation',p_mark.rotation,
-    'pinned',p_mark.pinned,'status',p_mark.status,'created_at',p_mark.created_at);
-  if p_mark.type<>'poll' then return jsonb_build_object('kind','mark','mark',v_parent); end if;
-  if p_mark.secret or p_mark.anonymous or p_mark.author_id is null
-    or not public.is_active_account(p_mark.author_id)
-    or public.is_blocked(p_actor,p_mark.author_id) then return null; end if;
-  select * into v_definition from public.mark_polls p
-    where p.mark_id=p_mark.id and p.wall_id=p_mark.wall_id;
-  if not found then return null; end if;
+    'id',p_poll.mark_id,'wall_id',p_poll.wall_id,'author_id',p_poll.author_id,
+    'type','poll','text',null,'color',null,'anonymous',false,'secret',false,
+    'rotation',0,'pinned',p_poll.pinned,'status',p_poll.status,'created_at',p_poll.created_at
+  );
   select coalesce(jsonb_agg(jsonb_build_object('option_id',o.option_id,
     'position',o.position,'label',o.label) order by o.position),'[]'::jsonb),
     coalesce(jsonb_agg(jsonb_build_object('option_id',o.option_id,
     'count',(select count(*) from public.mark_poll_ballot_choices c
-       where c.mark_id=p_mark.id and c.option_id=o.option_id)) order by o.position),'[]'::jsonb)
-    into v_options,v_counts from public.mark_poll_options o where o.mark_id=p_mark.id;
-  select count(*) into v_total from public.mark_poll_ballots b where b.mark_id=p_mark.id;
+       where c.mark_id=p_poll.mark_id and c.option_id=o.option_id)) order by o.position),'[]'::jsonb)
+    into v_options,v_counts from public.mark_poll_options o where o.mark_id=p_poll.mark_id;
+  select count(*) into v_total from public.mark_poll_ballots b where b.mark_id=p_poll.mark_id;
   select jsonb_build_object('revision',b.revision,
     'option_ids',(select coalesce(jsonb_agg(c.option_id order by c.option_id),'[]'::jsonb)
       from public.mark_poll_ballot_choices c
       where c.mark_id=b.mark_id and c.voter_id=b.voter_id))
-    into v_ballot from public.mark_poll_ballots b where b.mark_id=p_mark.id and b.voter_id=p_actor;
+    into v_ballot from public.mark_poll_ballots b where b.mark_id=p_poll.mark_id and b.voter_id=p_actor;
   select r.voting_enabled into v_vote_enabled from public.mark_poll_rollout r where singleton;
-  v_can_vote := coalesce(v_vote_enabled,false) and v_definition.closed_at is null
+  v_can_vote := coalesce(v_vote_enabled,false) and p_poll.closed_at is null
     and public.is_active_account(p_actor) and exists(
-      select 1 from public.walls w where w.id=p_mark.wall_id
-      and (w.owner_id=p_actor or public.can_contribute(p_mark.wall_id,p_actor)));
+      select 1 from public.walls w where w.id=p_poll.wall_id
+      and (w.owner_id=p_actor or public.can_contribute(p_poll.wall_id,p_actor)));
   return jsonb_build_object('kind','poll','mark',v_parent,'poll',jsonb_build_object(
-    'mark_id',p_mark.id,'revision',v_definition.revision,
-    'selection_mode',v_definition.selection_mode,'question',v_definition.question,
+    'mark_id',p_poll.mark_id,'revision',p_poll.revision,
+    'selection_mode',p_poll.selection_mode,'question',p_poll.question,
     'options',v_options,
-    'state',case when v_definition.closed_at is null then 'open' else 'closed' end,
+    'state',case when p_poll.closed_at is null then 'open' else 'closed' end,
     'capabilities',jsonb_build_object('can_vote',v_can_vote,'can_edit',false,
-      'can_close',coalesce(v_vote_enabled,false) and v_definition.closed_at is null
-        and p_mark.author_id=p_actor),
+      'can_close',coalesce(v_vote_enabled,false) and p_poll.closed_at is null
+        and p_poll.author_id=p_actor),
     'ballot',v_ballot,'results',jsonb_build_object('ballot_total',v_total,'counts',v_counts)));
 end $$;
 
 revoke all on function public.check_poll_ballot_cardinality(),
   public.replace_poll_ballot(uuid,uuid,uuid,uuid,bigint,bigint,uuid[]),
   public.close_poll_mark(uuid,uuid,uuid,uuid,bigint),
-  public.poll_mark_envelope_v2(public.marks,uuid)
+  public.private_poll_envelope_v2(public.mark_polls,uuid)
   from public,anon,authenticated,service_role;
 grant execute on function public.replace_poll_ballot(uuid,uuid,uuid,uuid,bigint,bigint,uuid[]),
   public.close_poll_mark(uuid,uuid,uuid,uuid,bigint) to authenticated;
