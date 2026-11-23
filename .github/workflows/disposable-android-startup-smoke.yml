@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: dde8b90e08efbe04906d6f9d032f35aff4cf2332
+          ref: 8d7032e4d7902ca2bcefdea9d4283007bc7e22bb
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -27,12 +27,21 @@ jobs:
           test -c /dev/kvm
           sudo chown root:"$(id -gn)" /dev/kvm
           sudo chmod 660 /dev/kvm
-          sdkmanager --install "emulator" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
-          echo no | avdmanager create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --force
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          tools="$sdk_root/cmdline-tools/latest/bin"
+          if [[ ! -x "$tools/sdkmanager" || ! -x "$tools/avdmanager" ]]; then
+            echo "::error::Standard runner has no Android SDK command-line tools at $tools."
+            exit 1
+          fi
+          export ANDROID_HOME="$sdk_root"
+          printf 'ANDROID_HOME=%s\n' "$sdk_root" >> "$GITHUB_ENV"
+          "$tools/sdkmanager" --sdk_root="$sdk_root" --install "emulator" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
+          echo no | "$tools/avdmanager" create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --force
+          printf '%s\n' "$sdk_root/emulator" "$sdk_root/platform-tools" >> "$GITHUB_PATH"
       - name: Build exact source with test-only signing and no backend
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = dde8b90e08efbe04906d6f9d032f35aff4cf2332
+          test "$(git rev-parse HEAD)" = 8d7032e4d7902ca2bcefdea9d4283007bc7e22bb
           test -z "$(git status --porcelain)"
           test -z "$EXPO_PUBLIC_SUPABASE_URL"
           test -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
