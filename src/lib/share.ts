@@ -6,10 +6,11 @@ import {
   personalWallDeepLink,
   markDeepLink,
   markSharePreview,
+  sharedWallDeepLink,
   type MarkShareDestination,
 } from "./share-contract";
 
-export { isMarkShareable, markDeepLink, type MarkShareDestination } from "./share-contract";
+export { isMarkShareable, markDeepLink, sharedWallDeepLink, type MarkShareDestination } from "./share-contract";
 
 /**
  * Sharing helpers use only installed-app custom-scheme routes. Universal HTTPS
@@ -60,13 +61,9 @@ export async function sharePersonWall(
   track("Wall Shared", { has_handle: Boolean(safeHandle), context: "person" });
 }
 
-/** Shared links enter through an auth-safe resolver so sign-in never loses the target. */
-export function sharedWallDeepLink(wallId: string): string {
-  return `thewall://s/${wallId}`;
-}
-
 export async function shareSharedWall(wallId: string, name: string): Promise<void> {
   const link = sharedWallDeepLink(wallId);
+  if (!link) throw new Error("Cannot share an invalid Shared Wall link.");
   await Share.share({ message: `Come see "${name}" on The Wall ✦\n${link}` });
   track("Wall Shared", { context: "shared" });
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { isMarkShareable, markDeepLink, markSharePreview, personalWallDeepLink } from "./share-contract.ts";
+import { isMarkShareable, markDeepLink, markSharePreview, personalWallDeepLink, sharedWallDeepLink } from "./share-contract.ts";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
 import { parseDeferredDestinationUrl } from "./deferred-destination-contract.ts";
 
@@ -19,6 +19,14 @@ for (const invalid of [
 ]) {
   assert.equal(personalWallDeepLink(invalid), null, `must not create unopenable handle link: ${String(invalid).slice(0, 30)}`);
 }
+
+const mixedCaseWall = "DeAdBeEf-abcd-4123-8123-123456789abc";
+assert.equal(sharedWallDeepLink(WALL), `thewall://s/${WALL}`);
+assert.deepEqual(parseDeferredDestinationUrl(sharedWallDeepLink(mixedCaseWall)), {
+  kind: "shared_wall", wallId: mixedCaseWall.toLowerCase(),
+});
+assert.equal(sharedWallDeepLink(""), null);
+assert.equal(sharedWallDeepLink("not-a-wall"), null);
 
 assert.equal(
   markDeepLink(MARK, { kind: "personal", ownerId: OWNER }),
