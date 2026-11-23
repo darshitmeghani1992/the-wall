@@ -29,7 +29,7 @@ import {
 import { isPollComposerEnabled } from "@/lib/poll-composer-rollout";
 import { supabase } from "@/lib/supabase";
 import { getPersonalWall } from "@/lib/profiles";
-import { formatDuration, MAX_VIDEO_MS, useVoiceRecorder } from "@/lib/recording";
+import { formatDuration, MAX_VIDEO_MS, useVoiceRecorder, type VoiceResult } from "@/lib/recording";
 import {
   abortProtectedMediaUpload, clearProtectedMediaOtherSessions, clearProtectedMediaResumeScope,
   createProtectedMediaTransport, getLocalMediaSize, MEDIA_LIMITS,
@@ -173,7 +173,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const mediaRef = useRef(media);
   const voicePreviewRef = useRef<Audio.Sound | null>(null);
   const discardConfirmedRef = useRef(false);
-  const recorder = useVoiceRecorder();
+  const recorder = useVoiceRecorder(attachVoiceClip);
   const recording = recorder.phase === "recording";
   const busy = phase !== "idle";
   mediaRef.current = media;
@@ -347,21 +347,24 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     ]);
   }
 
-  async function toggleVoice() {
-    if (recording) {
-      const clip = await recorder.stop();
-      if (!clip) return;
-      try {
-        const bytes = await getLocalMediaSize(clip.uri);
-        if (bytes > MEDIA_LIMITS.audio) throw new Error("Voice recordings must be under 8 MB.");
-        setMedia([createMediaWriterDraft({ kind: "voice", uri: clip.uri, mime: clip.mime,
-          bytes, durationMs: clip.durationMs }, createRequestId())]);
-      } catch (cause) {
-        Alert.alert("Couldn't use that recording", cause instanceof Error ? cause.message : "Please record it again.");
-      }
-      return;
+  async function attachVoiceClip(clip: VoiceResult) {
+    const canAttach = () => isCurrentScope() && !discardConfirmedRef.current;
+    if (!canAttach()) return;
+    try {
+      const bytes = await getLocalMediaSize(clip.uri);
+      if (!canAttach()) return;
+      if (bytes > MEDIA_LIMITS.audio) throw new Error("Voice recordings must be under 8 MB.");
+      lockRef.current.runIntent(() => setMedia([createMediaWriterDraft({
+        kind: "voice", uri: clip.uri, mime: clip.mime, bytes, durationMs: clip.durationMs,
+      }, createRequestId())]));
+    } catch (cause) {
+      if (canAttach()) Alert.alert("Couldn't use that recording", cause instanceof Error ? cause.message : "Please record it again.");
     }
-    await recorder.start();
+  }
+
+  async function toggleVoice() {
+    if (recording) await recorder.stop();
+    else await recorder.start();
   }
 
   function updateDraft(clientId: string, next: MediaWriterDraft) {

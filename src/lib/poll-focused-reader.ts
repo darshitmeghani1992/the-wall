@@ -20,6 +20,8 @@ export type PollReadRequest = {
   p_expected_actor_id: string;
   p_wall_id: string;
   p_mark_id: string;
+  /** The private Poll parent must never be resolved through an untyped Mark ID. */
+  p_kind: "poll";
 };
 
 /** Leave legacy clients and hosted endpoints untouched while Poll read QA is held. */
@@ -112,6 +114,7 @@ export async function readFocusedPoll(
     p_expected_actor_id: actorId.toLowerCase(),
     p_wall_id: canonicalWallId,
     p_mark_id: canonicalMarkId,
+    p_kind: "poll",
   });
   return parsePoll(result, canonicalWallId, canonicalMarkId);
 }
