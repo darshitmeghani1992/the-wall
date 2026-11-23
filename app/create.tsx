@@ -6,6 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { UNSTABLE_usePreventRemove as usePreventRemove } from "@react-navigation/native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
+import { PollDraftFields } from "@/components/PollDraftFields";
 import { MarkView } from "@/components/marks/MarkView";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
@@ -21,6 +22,12 @@ import {
 } from "@/lib/mark-writer-contract";
 import { createTextMark, protectedMediaWriterRpc, type MarkWithAuthor } from "@/lib/marks";
 import { ComposerScopeLease, composerScopeKey, resolveComposerTarget } from "@/lib/composer-scope";
+import {
+  hasPollDraftContent, newPollDraft, parsePollCreateResult, pollCreateArgs, preparePollCreate, validatePollDraft,
+  type PollDraft, type PollCreateIntent,
+} from "@/lib/poll-composer-contract";
+import { isPollComposerEnabled } from "@/lib/poll-composer-rollout";
+import { supabase } from "@/lib/supabase";
 import { getPersonalWall } from "@/lib/profiles";
 import { formatDuration, MAX_VIDEO_MS, useVoiceRecorder } from "@/lib/recording";
 import {
@@ -143,6 +150,9 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const currentUserId = session?.user.id;
   const actorProfile = currentUserId && profile?.id === currentUserId ? profile : null;
   const [text, setText] = useState("");
+  const [pollMode, setPollMode] = useState(false);
+  const [pollDraft, setPollDraft] = useState(newPollDraft);
+  const pollRequestRef = useRef<PollCreateIntent | null>(null);
   const [color, setColor] = useState<string>(stickySwatches[0]);
   const [anonymous, setAnonymous] = useState(false);
   const [secret, setSecret] = useState(false);
@@ -201,7 +211,8 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     void voicePreviewRef.current?.unloadAsync().catch(() => undefined);
   }, []);
 
-  const hasContent = text.trim().length > 0 || media.length > 0;
+  const hasTextOrMedia = text.trim().length > 0 || media.length > 0;
+  const hasContent = hasTextOrMedia || hasPollDraftContent(pollDraft);
   async function cleanupDrafts() {
     if (currentUserId) await Promise.allSettled(mediaRef.current.map(async (draft) => {
       if (!draft.uploadId) return;
@@ -253,7 +264,15 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
 
   const overLimit = text.length > MAX_TEXT;
   const markType: MarkType = media[0]?.kind ?? "text";
-  const canSubmit = Boolean(wallId && currentUserId && !overLimit && hasContent && !recording && !(secret && media.length) && (isMediaComposerEnabled || media.length === 0) && (!secret || isSecretComposerEnabled));
+  const pollValidation = pollMode ? validatePollDraft(pollDraft) : null;
+  const canSubmitPoll = isPollComposerEnabled && !secret && !anonymous && media.length === 0 && pollValidation?.status === "valid";
+  const canSubmitExisting = !overLimit && hasTextOrMedia && !(secret && media.length)
+    && (isMediaComposerEnabled || media.length === 0) && (!secret || isSecretComposerEnabled);
+  const canSubmit = Boolean(wallId && currentUserId && !recording && (pollMode ? canSubmitPoll : canSubmitExisting));
+
+  function updatePollDraft(update: (draft: PollDraft) => PollDraft) {
+    if (isPollComposerEnabled && pollMode) lockRef.current.runIntent(() => setPollDraft(update));
+  }
 
   function requestNonSecretMedia(intent: () => void) {
     if (!lockRef.current.allowsIntent()) return;
@@ -445,6 +464,39 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     const token = lifecycleRef.current;
     const isCurrent = () => isCurrentScope() && token === lifecycleRef.current && session?.user.id === currentUserId && mediaAppActive;
     try {
+      if (pollMode) {
+        if (!canSubmitPoll || pollValidation?.status !== "valid") return;
+        const request = preparePollCreate(currentUserId, wallId, pollValidation.payload, pollRequestRef.current, createRequestId);
+        pollRequestRef.current = request;
+        setPhase("posting");
+        const { data, error } = await supabase.rpc("create_poll_mark", pollCreateArgs(request));
+        if (!isCurrent()) return;
+        if (error) throw error;
+        const result = parsePollCreateResult(data);
+        if (!result) throw new Error("Invalid Poll response");
+        if (result.status === "created" || result.status === "existing") {
+          if (result.markStatus === "pending") {
+            Alert.alert("Poll submitted", "Your Poll will appear after it’s approved.", [{
+              text: "Done",
+              onPress: () => {
+                if (!isCurrentScope()) return;
+                discardConfirmedRef.current = true;
+                if (router.canDismiss()) router.dismissAll();
+                router.push(sharedMode ? `/shared/${sharedWallId}` : `/person/${recipientId}`);
+              },
+            }]);
+          } else {
+            setConfirmedMarkId(result.markId);
+          }
+          return;
+        }
+        Alert.alert("Couldn’t post your Poll", result.status === "request_id_reused"
+          ? "This draft changed unexpectedly. Change the draft and try again."
+          : result.status === "invalid" ? "Check the question and options, then try again."
+            : "This Wall isn’t accepting Polls right now.");
+        return;
+      }
+
       if (!media.length) {
         const submission = prepareTextMarkSubmission({ wallId, text, color, anonymous, secret }, textSubmissionRef.current);
         textSubmissionRef.current = submission;
@@ -497,7 +549,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
       setConfirmedMarkId(result.markId);
     } catch (cause) {
       if (isCurrentScope() && (!(cause instanceof MediaWriterError) || cause.code !== "stale")) {
-        Alert.alert("Couldn't post that", safeMediaMessage(cause));
+        Alert.alert(pollMode ? "Couldn’t post your Poll" : "Couldn't post that", safeMediaMessage(cause));
       }
     } finally {
       setPhase("idle");
@@ -541,7 +593,16 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
       </Pressable>
     </View>
 
-    {media.length ? <View style={{ gap: 12, marginBottom: 14 }}>{media.map((draft, index) =>
+    {isPollComposerEnabled ? (
+      <View style={{ marginBottom: 14 }}>
+        <AttachButton label={pollMode ? "Back to text and media" : "Poll"}
+          disabled={busy || submissionLocked || (!pollMode && (recording || secret || anonymous || media.length > 0))}
+          onPress={() => lockRef.current.runIntent(() => setPollMode((current) => !current))} />
+      </View>
+    ) : null}
+    {isPollComposerEnabled && pollMode
+      ? <PollDraftFields draft={pollDraft} disabled={submissionLocked} updateDraft={updatePollDraft} />
+      : <>{media.length ? <View style={{ gap: 12, marginBottom: 14 }}>{media.map((draft, index) =>
       <DraftCard key={draft.clientUploadId} draft={draft} index={index} count={media.length} disabled={busy}
         onRemove={() => void removeDraft(draft)} onRetry={() => void retryDraft(draft)}
         onMove={(direction) => moveDraft(index, direction)} onPlayVoice={() => void playVoice(draft.uri)} />
@@ -625,10 +686,11 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     {!media.length && !recording ? <><Text variant="label" color={colors.outline}
       style={{ marginTop: 20, marginBottom: 12 }}>PREVIEW</Text><View style={{ alignItems: "center" }}>
       <View style={{ width: "70%" }}><MarkView mark={preview} /></View></View></> : null}
+    </>}
     <View style={{ marginTop: 18, marginBottom: 8 }}>{wallId === null && currentUserId
       ? <ActivityIndicator color={markColors.brandYellow} />
       : <Button label={phase === "uploading" ? "Uploading & processing…" : phase === "posting" ? "Posting…"
-        : secret ? "Post Secret Mark 🔒" : "Leave a Mark ✦"} variant="primary" loading={busy}
+        : pollMode ? "Post Poll" : secret ? "Post Secret Mark 🔒" : "Leave a Mark ✦"} variant="primary" loading={busy}
         disabled={!canSubmit} onPress={submit} />}</View>
   </Screen>;
 }
