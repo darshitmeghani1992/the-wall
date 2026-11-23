@@ -16,6 +16,11 @@ export function personalWallDeepLink(handle?: string | null): string | null {
   return link.length <= 8 * 1024 ? link : null;
 }
 
+/** Build a view-only Shared Wall link accepted by the deferred destination parser. */
+export function sharedWallDeepLink(wallId: string): string | null {
+  return isCanonicalUuid(wallId) ? `thewall://s/${wallId.toLowerCase()}` : null;
+}
+
 export type MarkShareDestination =
   | { kind: "personal"; ownerId: string }
   | { kind: "shared"; wallId: string };
