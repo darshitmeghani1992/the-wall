@@ -4,6 +4,9 @@
 
 Fresh read-only staging: 35/35 RLS public tables, zero Auth users/Walls/Marks, private media, no Secret cron. OTP six-digit delivery, three genuine JWT actors + SQL/INSERT RETURNING, hosted C2/C3 media playback/cleanup, Secret, deletion 0031, installed iOS/Android, reviewers, rollback and release environment still block Enhanced/open beta. Media/Secret/analytics/deletion OFF. Historical production untouched; no hosted writes, merges, deployment or invitations. **Next:** request independent review on unchanged candidate and coordinate approved staging worker host/runtime security+SMTP sender; keep working on release-critical independent source slices. Canonical queue `docs/BUILD_STATUS.md` BETA-P0-106.
 
+**CI follow-up:** [45132119181](https://github.com/darshitmeghani1992/the-wall/actions/runs/45132119181) failed one of 44 media tests: old invalid-port negative fixture did not provide new required staging origin. Corrected only fixture setup in `f9f49f284d6bd77c92bc264180c9bc50cdae4ef1`; genuine port rejection and origin denial both remain. Check new exact-head CI; do not treat #195 sibling proof as merged.
+
+
 ---
 
 ## Current — BETA-P0-105 · 23 Nov 2026
