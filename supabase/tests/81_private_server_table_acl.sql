@@ -83,6 +83,26 @@ BEGIN
         END LOOP;
       END IF;
     END LOOP;
+
+    -- Positive server-worker contract and deliberately narrower postgres-only
+    -- internals. The media key registry and removal-history side table are
+    -- accessed via reviewed SECURITY DEFINER functions, not direct service
+    -- table privileges. The other six tables are intended for service worker
+    -- CRUD in migrations; silently losing those grants would break cleanup,
+    -- moderation, notifications or media processing even if RLS still passes.
+    FOREACH v_privilege IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+      IF v_name IN ('media_envelope_keys', 'shared_wall_member_removals') THEN
+        IF has_table_privilege('service_role', v_oid, v_privilege)
+           OR (v_privilege IN ('SELECT', 'INSERT', 'UPDATE')
+               AND has_any_column_privilege('service_role', v_oid, v_privilege)) THEN
+          RAISE EXCEPTION '81 FAIL: service_role has unintended direct % on definer-only public.%',
+            v_privilege, v_name;
+        END IF;
+      ELSIF NOT has_table_privilege('service_role', v_oid, v_privilege) THEN
+        RAISE EXCEPTION '81 FAIL: service_role missing required % on worker table public.%',
+          v_privilege, v_name;
+      END IF;
+    END LOOP;
   END LOOP;
 
   IF v_checked <> 8 THEN
@@ -90,4 +110,4 @@ BEGIN
   END IF;
 END $private_server_storage$;
 
-\echo '81 (server-only sensitive table RLS, policy and CRUD ACL): PASS'
+\echo '81 (private table client denies and service worker contract): PASS'
