@@ -1,3 +1,11 @@
+## 23 Nov 2026 · BETA-P0-102 service worker versus definer-only table ACL
+
+Draft [#189](https://github.com/darshitmeghani1992/the-wall/pull/189), child of #188 immutable `ae8626a9e1737d61a00acbd57b35f874e48f20fe`, adds a disposable SQL positive service-role CRUD contract on six worker tables and negative direct-CRUD (including column) contract on two postgres-only tables. Migrations 0021/0026 explicitly deny service_role rights on the key registry and removal-history table; access is through SECURITY DEFINER functions. Staging SELECT-only checked all eight; public RLS 35/35, Auth users/Walls/Marks 0/0/0, private media bucket, cron absent. Known excess authenticated grants on `mark_secrets` remain issue #186 and Secret OFF.
+
+No runtime, migration, data or production change; source commit `59c58d98671c5909f31fdbfa25790b3167e037df`. CI/independent reviews for unchanged documentation head must be verified. Required real SMTP/OTP, three JWT actors and SQL/HTTP negatives, Shared Wall INSERT RETURNING, C2/C3 playback, Secret expiry, deletion 0031, independent Reviewer and device QA remain unverified; Enhanced Beta **NO-GO**. Rollback: keep draft unmerged, or independently review a scoped revert; no hosted changes to reverse.
+
+---
+
 ## 23 Nov 2026 · BETA-P0-101 service-only ancillary ACL regression
 
 [Draft #188](https://github.com/darshitmeghani1992/the-wall/pull/188) is an isolated test-only child of #187 (`425fe3f68e683bd44cf3abfa769940782266c3e2`, parent [CI 45090124735](https://github.com/darshitmeghani1992/the-wall/actions/runs/45090124735) success). Test 81 now additionally denies anon/authenticated TRUNCATE/REFERENCES (including column grants)/TRIGGER for seven private identity/media/server tables, reflecting fresh SELECT-only staging ACL evidence. The known eighth-table `mark_secrets` excess ACL remains unresolved under issue #186; existing eight-table RLS, no-policy, CRUD and column checks remain. No live DDL, ACL, flag, feature, runtime or user change. Rollback: keep child draft unmerged or revert the test-only commit on independently reviewed integration. New source `b767f80a416ad8f9d53a30bdc8e06413786c915d`, follow-up source `8b6971a7d38223dad624874e3eb332cdfc286e2`; inspect exact final documentation SHA/tree and four-job CI after checkpoint writes, do not imply independent Reviewer/QA.
