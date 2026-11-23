@@ -10,6 +10,9 @@
 
 **Next exact commands/tasks:** inspect unchanged [#198 checks](https://github.com/darshitmeghani1992/the-wall/pull/198/checks) for CI 4/4 including `npm run test:worker`; request independent Reviewer and separate QA. Architect must integrate approved #195 proof strategy into one candidate only after branch/file-level review, provision approved staging C3 host/egress/tmpfs and invoke authorized hosted C2/C3 only after gates. Founder action remains configuring a verified sender for real six-digit staging OTP in secure console (no credentials in chat); parallel backend/device prep continues.
 
+**CI regression diagnosis (23 Nov):** [first exact-docs-head CI 45132119181](https://github.com/darshitmeghani1992/the-wall/actions/runs/45132119181) failed only in Media processor job, 43/44 tests passing: existing invalid-port test omitted the newly required staging URL and received the deliberate origin denial instead of reaching port validation. No production code or authorization check weakened. Isolated test-only commit `f9f49f284d6bd77c92bc264180c9bc50cdae4ef1` supplies approved staging origin for that pre-existing port-negative assertion; new [source rerun 45132867680](https://github.com/darshitmeghani1992/the-wall/actions/runs/45132867680) and final checkpoint-head CI must be checked before declaring PASS. Reviewer/QA still absent.
+
+
 ---
 
 ## BETA-P0-105 · Three-JWT private Wall audit now proves actual owner and accepted member — 23 Nov 2026
