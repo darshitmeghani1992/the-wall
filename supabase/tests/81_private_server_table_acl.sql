@@ -83,6 +83,35 @@ BEGIN
         END LOOP;
       END IF;
     END LOOP;
+
+    -- Server-side access has three deliberately different contracts:
+    -- * the two definer-only tables deny direct service_role CRUD,
+    -- * three identity/notification/Secret side tables require service SELECT,
+    -- * three media worker tables require direct service CRUD (migration 0020).
+    -- Do not demand full CRUD on tables where checked-in migrations grant
+    -- service_role SELECT only; hosted Supabase defaults may be broader.
+    IF v_name IN ('media_envelope_keys', 'shared_wall_member_removals') THEN
+      FOREACH v_privilege IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+        IF has_table_privilege('service_role', v_oid, v_privilege)
+           OR (v_privilege IN ('SELECT', 'INSERT', 'UPDATE')
+               AND has_any_column_privilege('service_role', v_oid, v_privilege)) THEN
+          RAISE EXCEPTION '81 FAIL: service_role has direct % on definer-only public.%',
+            v_privilege, v_name;
+        END IF;
+      END LOOP;
+    ELSIF v_name IN ('anonymous_mark_authors', 'notification_origins', 'mark_secrets') THEN
+      IF NOT has_table_privilege('service_role', v_oid, 'SELECT') THEN
+        RAISE EXCEPTION '81 FAIL: service_role missing required SELECT on public.%',
+          v_name;
+      END IF;
+    ELSE
+      FOREACH v_privilege IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+        IF NOT has_table_privilege('service_role', v_oid, v_privilege) THEN
+          RAISE EXCEPTION '81 FAIL: service_role missing required % on media worker table public.%',
+            v_privilege, v_name;
+        END IF;
+      END LOOP;
+    END IF;
   END LOOP;
 
   IF v_checked <> 8 THEN
@@ -90,4 +119,4 @@ BEGIN
   END IF;
 END $private_server_storage$;
 
-\echo '81 (server-only sensitive table RLS, policy and CRUD ACL): PASS'
+\echo '81 (private table client denies and service worker contract): PASS'
