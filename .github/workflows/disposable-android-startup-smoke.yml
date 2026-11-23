@@ -1,0 +1,140 @@
+name: Disposable Android startup smoke
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/disposable-android-startup-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    if: github.head_ref == 'codex/disposable-android-startup-smoke-20261123'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8d7032e4d7902ca2bcefdea9d4283007bc7e22bb
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install local SDK image
+        shell: bash
+        run: |
+          test -c /dev/kvm
+          sudo chown root:"$(id -gn)" /dev/kvm
+          sudo chmod 660 /dev/kvm
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          tools="$sdk_root/cmdline-tools/latest/bin"
+          if [[ ! -x "$tools/sdkmanager" || ! -x "$tools/avdmanager" ]]; then
+            echo "::error::Standard runner has no Android SDK command-line tools at $tools."
+            exit 1
+          fi
+          export ANDROID_HOME="$sdk_root"
+          printf 'ANDROID_HOME=%s\n' "$sdk_root" >> "$GITHUB_ENV"
+          "$tools/sdkmanager" --sdk_root="$sdk_root" --install "emulator" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android-user"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          printf 'ANDROID_USER_HOME=%s\nANDROID_AVD_HOME=%s\n' "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          "$tools/avdmanager" create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --device pixel --path "$ANDROID_AVD_HOME/wall-smoke.avd" --force
+          if [[ ! -s "$ANDROID_AVD_HOME/wall-smoke.ini" ]]; then
+            echo "::error::Android SDK did not create wall-smoke.ini in its explicit AVD location."
+            "$tools/avdmanager" list avd
+            exit 1
+          fi
+          "$sdk_root/emulator/emulator" -list-avds | grep -Fx wall-smoke
+          printf '%s\n' "$sdk_root/emulator" "$sdk_root/platform-tools" >> "$GITHUB_PATH"
+      - name: Verify emulator boot before compiling the app
+        shell: bash
+        run: |
+          emulator -accel-check
+          adb start-server
+          log="$RUNNER_TEMP/android-emulator.log"
+          emulator -avd wall-smoke -port 5554 -no-window -no-snapshot -no-audio -no-boot-anim -gpu software >"$log" 2>&1 &
+          emulator_pid=$!
+          printf '%s\n' "$emulator_pid" > "$RUNNER_TEMP/android-emulator.pid"
+          for attempt in {1..70}; do
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then
+              echo "::error::Android emulator exited before boot."
+              exit 1
+            fi
+            if [[ "$(timeout 5 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == 1 ]]; then
+              echo "Android emulator boot completed."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Android emulator did not report a completed boot."
+          adb devices -l
+          exit 1
+      - name: Build exact source with test-only signing and no backend
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = 8d7032e4d7902ca2bcefdea9d4283007bc7e22bb
+          test -z "$(git status --porcelain)"
+          test -z "$EXPO_PUBLIC_SUPABASE_URL"
+          test -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          npm ci --no-audit --no-fund
+          npx expo prebuild --non-interactive --platform android --no-install
+          test -n "$JAVA_HOME_17_X64"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          cd android
+          ./gradlew --no-daemon :app:assembleRelease -PreactNativeArchitectures=x86_64
+      - name: Boot and verify Welcome to sign-in without submitting anything
+        shell: bash
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          adb shell input keyevent 82
+          adb shell svc wifi disable
+          adb shell svc data disable
+          adb install "$apk"
+          adb shell am start -W -n com.thewall.app/.MainActivity
+          python3 - <<'PY'
+          import re
+          import subprocess
+          import time
+          import xml.etree.ElementTree as ET
+
+          def adb(*args):
+              return subprocess.check_output(["adb", *args], text=True, timeout=15)
+
+          def find(label):
+              deadline = time.monotonic() + 120
+              while time.monotonic() < deadline:
+                  try:
+                      adb("shell", "rm", "-f", "/sdcard/wall-smoke.xml")
+                      adb("shell", "uiautomator", "dump", "/sdcard/wall-smoke.xml")
+                      xml = adb("exec-out", "cat", "/sdcard/wall-smoke.xml")
+                      for item in ET.fromstring(xml).iter("node"):
+                          if label in (item.get("text"), item.get("content-desc")):
+                              bounds = re.fullmatch(
+                                  r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", item.get("bounds", "")
+                              )
+                              if bounds:
+                                  x1, y1, x2, y2 = (int(value) for value in bounds.groups())
+                                  if x1 < x2 and y1 < y2:
+                                      return (x1 + x2) // 2, (y1 + y2) // 2
+                  except (subprocess.SubprocessError, ET.ParseError):
+                      pass
+                  time.sleep(2)
+              raise SystemExit(f"Could not find the expected Android UI label: {label}")
+
+          x, y = find("Get started")
+          print("Welcome is visible.")
+          adb("shell", "input", "tap", str(x), str(y))
+          find("Email me a code")
+          print("Sign-in is visible. No auth request was submitted.")
+          PY
+      - name: Report emulator diagnostics and stop the temporary device
+        if: always()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/android-emulator.log"
+          if [[ -f "$log" ]]; then tail -100 "$log"; fi
+          pid_file="$RUNNER_TEMP/android-emulator.pid"
+          if [[ -f "$pid_file" ]]; then kill "$(cat "$pid_file")" 2>/dev/null || true; fi
