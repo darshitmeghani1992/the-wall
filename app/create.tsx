@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, TextInput, View } from "react-native";
 import { Audio, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
@@ -20,7 +20,7 @@ import {
   type PreparedTextMarkSubmission,
 } from "@/lib/mark-writer-contract";
 import { createTextMark, protectedMediaWriterRpc, type MarkWithAuthor } from "@/lib/marks";
-import { ComposerScopeLease, composerScopeKey } from "@/lib/composer-scope";
+import { ComposerScopeLease, composerScopeKey, resolveComposerTarget } from "@/lib/composer-scope";
 import { getPersonalWall } from "@/lib/profiles";
 import { formatDuration, MAX_VIDEO_MS, useVoiceRecorder } from "@/lib/recording";
 import {
@@ -127,7 +127,8 @@ export default function Composer() {
   const lease = useRef(new ComposerScopeLease()).current;
   const revision = lease.capture(scopeKey);
   useEffect(() => () => lease.invalidate(), [lease]);
-  return <ComposerSession key={scopeKey} isCurrentScope={() => lease.isCurrent(revision)} />;
+  const isCurrentScope = useCallback(() => lease.isCurrent(revision), [lease, revision]);
+  return <ComposerSession key={scopeKey} isCurrentScope={isCurrentScope} />;
 }
 
 function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) {
@@ -148,7 +149,8 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const [media, setMedia] = useState<MediaWriterDraft[]>([]);
   const [wallId, setWallId] = useState<string | null>(null);
   const [allowAnonymous, setAllowAnonymous] = useState(true);
-  const [targetError, setTargetError] = useState<string | null>(null);
+  const [targetError, setTargetError] = useState<{ status: "unavailable" | "retryable"; message: string } | null>(null);
+  const [targetLookupAttempt, setTargetLookupAttempt] = useState(0);
   const [phase, setPhase] = useState<"idle" | "uploading" | "posting">("idle");
   const [submissionLocked, setSubmissionLocked] = useState(false);
   const [confirmedMarkId, setConfirmedMarkId] = useState<string | null>(null);
@@ -233,30 +235,21 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
 
   useEffect(() => {
     let active = true;
-    (async () => {
-      if (sharedMode) {
-        if (!sharedWallId) return;
-        const target = await getWall(sharedWallId);
-        if (!active) return;
-        if (!target || target.type !== "shared") return setTargetError("That Shared Wall is no longer available.");
-        setAllowAnonymous(target.allow_anonymous);
-        if (!target.allow_anonymous) setAnonymous(false);
-        setWallId(target.id);
+    setTargetError(null);
+    void resolveComposerTarget(
+      currentUserId, { sharedWallId, recipientId, wallId: targetWallId }, getWall, getPersonalWall,
+    ).then((result) => {
+      if (!active || !isCurrentScope()) return;
+      if (result.status !== "ready") {
+        setTargetError(result);
         return;
       }
-      if (!currentUserId || !recipientId || !targetWallId || recipientId === currentUserId) {
-        if (active) setTargetError("Choose another person's Wall before writing a Mark.");
-        return;
-      }
-      const target = await getPersonalWall(recipientId);
-      if (!active) return;
-      if (!target || target.id !== targetWallId) return setTargetError("That recipient and Wall no longer match.");
-      setAllowAnonymous(target.allow_anonymous);
-      if (!target.allow_anonymous) setAnonymous(false);
-      setWallId(target.id);
-    })().catch(() => { if (active) setTargetError("Couldn't verify this Wall."); });
+      setAllowAnonymous(result.wall.allow_anonymous);
+      if (!result.wall.allow_anonymous) setAnonymous(false);
+      setWallId(result.wall.id);
+    });
     return () => { active = false; };
-  }, [currentUserId, recipientId, sharedMode, sharedWallId, targetWallId]);
+  }, [currentUserId, isCurrentScope, recipientId, sharedWallId, targetLookupAttempt, targetWallId]);
 
   const overLimit = text.length > MAX_TEXT;
   const markType: MarkType = media[0]?.kind ?? "text";
@@ -516,9 +509,14 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
 
   if (targetError) return <Screen scroll={false} dockInset={false}>
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
-      <Text variant="headline">This Mark needs a recipient</Text>
-      <Text variant="body" color={colors.error} style={{ textAlign: "center" }}>{targetError}</Text>
-      <Button label="Choose a person" onPress={() => router.replace("/people-picker")} />
+      <Text accessibilityRole="alert" variant="headline">{targetError.status === "retryable" ? "Couldn’t open this Wall" : "This Wall is unavailable"}</Text>
+      <Text variant="body" color={colors.error} style={{ textAlign: "center" }}>{targetError.message}</Text>
+      {targetError.status === "retryable" ? <Button label="Try again" onPress={() => {
+        setTargetError(null);
+        setTargetLookupAttempt((attempt) => attempt + 1);
+      }} /> : null}
+      {sharedMode ? <Button label="Back to Walls" onPress={() => router.replace("/(tabs)/walls")} /> :
+        <Button label="Choose a person" onPress={() => router.replace("/people-picker")} />}
     </View>
   </Screen>;
 

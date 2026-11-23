@@ -115,6 +115,59 @@ test("truncated signed source response fails before processing or success", asyn
   assert.equal(failed, 1, "redeemed failures use the existing safe callback");
 });
 
+test("Storage downloads request identity and reject encoded or partial responses before processing", async () => {
+  for (const [status, headers, message] of [
+    [200, { "content-encoding": "gzip" }, "source response encoding invalid"],
+    [206, {}, "source response was not a whole object"],
+    [200, { "content-range": "bytes 0-2/3" }, "source response was not a whole object"],
+  ] as const) {
+    let canceled = 0;
+    let failed = 0;
+    const body = new ReadableStream<Uint8Array>({ cancel: () => { canceled += 1; } });
+    await assert.rejects(processEnvelope("signed", dependencies({
+      nonceRedeemer: { redeem: async () => true },
+      fetchImpl: async (_input, init) => {
+        assert.equal(new Headers(init?.headers).get("accept-encoding"), "identity");
+        return new Response(body, { status, headers });
+      },
+      completionReporter: {
+        complete: async () => assert.fail("no partial or encoded source may succeed"),
+        fail: async () => { failed += 1; },
+      },
+    })), { message });
+    assert.equal(canceled, 1);
+    assert.equal(body.locked, false);
+    assert.equal(failed, 1);
+  }
+});
+
+test("early failures release the stream without awaiting stalled or rejected cancellation", { timeout: 1_000 }, async () => {
+  for (const cancel of [
+    () => new Promise<void>(() => undefined),
+    () => Promise.reject(new Error("transport closed")),
+  ]) {
+    let canceled = 0;
+    let failed = 0;
+    const body = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        canceled += 1;
+        return cancel();
+      },
+    });
+    await assert.rejects(processEnvelope("signed", dependencies({
+      nonceRedeemer: { redeem: async () => true },
+      fetchImpl: async () => new Response(body, { headers: { "content-length": "invalid" } }),
+      completionReporter: {
+        complete: async () => assert.fail("a malformed source may not succeed"),
+        fail: async () => { failed += 1; },
+      },
+    })), { message: "source response length invalid" });
+    assert.equal(canceled, 1);
+    assert.equal(body.locked, false);
+    assert.equal(failed, 1);
+  }
+});
+
 test("lost completion response never changes the consumed token to a failure outcome", async () => {
   const directory = await mkdtemp(join(tmpdir(), "media-server-test-"));
   try {
@@ -127,7 +180,7 @@ test("lost completion response never changes the consumed token to a failure out
     const fetchImpl = (async () => {
       fetches += 1;
       return fetches === 1
-        ? new Response(bytes, { status: 200, headers: { "content-length": String(bytes.byteLength) } })
+        ? new Response(bytes, { status: 200, headers: { "content-length": String(bytes.byteLength), "content-encoding": "identity" } })
         : new Response(null, { status: 200 });
     }) as typeof fetch;
     await assert.rejects(processEnvelope("signed", dependencies({

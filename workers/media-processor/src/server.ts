@@ -122,40 +122,63 @@ async function downloadSource(
   const expected = assertStorageObjectUrl(claims.source.url, claims.source.path, "download", policy);
   let response: Response;
   try {
-    response = await fetchImpl(expected, { method: "GET", redirect: "error", cache: "no-store", signal: deadlineSignal(deadlineMs) });
+    response = await fetchImpl(expected, {
+      method: "GET",
+      redirect: "error",
+      cache: "no-store",
+      headers: { "Accept-Encoding": "identity" },
+      signal: deadlineSignal(deadlineMs),
+    });
   } catch {
     throw new MediaProcessingError("PROCESSING_FAILED", "source download failed");
   }
-  if (!response.ok || !response.body) throw new MediaProcessingError("PROCESSING_FAILED", "source download failed");
-  if (response.url) assertFinalResponseOrigin(response.url, expected);
-  const announcedLength = response.headers.get("content-length");
-  const expectedLength = announcedLength === null ? null : Number(announcedLength);
-  const maximum = INPUT_BYTES[claims.kind];
-  if (announcedLength !== null && (!/^\d+$/.test(announcedLength) || !Number.isSafeInteger(expectedLength))) {
-    throw new MediaProcessingError("PROCESSING_FAILED", "source response length invalid");
-  }
-  if (expectedLength !== null && expectedLength > maximum) throw new MediaProcessingError("TOO_LARGE", "source is too large");
+  if (!response.body) throw new MediaProcessingError("PROCESSING_FAILED", "source download failed");
 
-  const handle = await open(destinationPath, "wx", 0o600);
-  let received = 0;
+  const reader = response.body.getReader();
+  let streamComplete = false;
   try {
-    const reader = response.body.getReader();
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      received += chunk.value.byteLength;
-      if (received > maximum) {
-        await reader.cancel();
-        throw new MediaProcessingError("TOO_LARGE", "source stream exceeded its byte limit");
+    if (response.status !== 200 || response.headers.has("content-range")) {
+      throw new MediaProcessingError("PROCESSING_FAILED", "source response was not a whole object");
+    }
+    if (response.url) assertFinalResponseOrigin(response.url, expected);
+    const encoding = response.headers.get("content-encoding");
+    if (encoding !== null && encoding.toLowerCase() !== "identity") {
+      throw new MediaProcessingError("PROCESSING_FAILED", "source response encoding invalid");
+    }
+    const announcedLength = response.headers.get("content-length");
+    const expectedLength = announcedLength === null ? null : Number(announcedLength);
+    const maximum = INPUT_BYTES[claims.kind];
+    if (announcedLength !== null && (!/^\d+$/.test(announcedLength) || !Number.isSafeInteger(expectedLength))) {
+      throw new MediaProcessingError("PROCESSING_FAILED", "source response length invalid");
+    }
+    if (expectedLength !== null && expectedLength > maximum) throw new MediaProcessingError("TOO_LARGE", "source is too large");
+
+    const handle = await open(destinationPath, "wx", 0o600);
+    let received = 0;
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) {
+          streamComplete = true;
+          break;
+        }
+        received += chunk.value.byteLength;
+        if (received > maximum) throw new MediaProcessingError("TOO_LARGE", "source stream exceeded its byte limit");
+        await writeCompleteChunk(handle, chunk.value);
       }
-      await writeCompleteChunk(handle, chunk.value);
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      throw error;
+    }
+    await handle.close();
+    if (received === 0) throw new MediaProcessingError("INVALID_MEDIA", "source is empty");
+    if (expectedLength !== null && received !== expectedLength) {
+      throw new MediaProcessingError("PROCESSING_FAILED", "source response length mismatch");
     }
   } finally {
-    await handle.close();
-  }
-  if (received === 0) throw new MediaProcessingError("INVALID_MEDIA", "source is empty");
-  if (expectedLength !== null && received !== expectedLength) {
-    throw new MediaProcessingError("PROCESSING_FAILED", "source response length mismatch");
+    // A body cancellation may stall or fail. Let the fetch deadline remain the backstop.
+    if (!streamComplete) void reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 
