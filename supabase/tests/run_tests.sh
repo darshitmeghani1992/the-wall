@@ -180,7 +180,15 @@ echo ""
 echo "══════════════════════════════════════════════════════════════════════"
 echo " ASSERTIONS"
 echo "══════════════════════════════════════════════════════════════════════"
-for area in 05_excluded_surfaces 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
+# Materialize a genuinely pre-0035 retired poll for upgrade and v1-isolation checks.
+psql_test -f "$HERE/05_excluded_surfaces.sql"
+psql_test -c "insert into public.marks(id,wall_id,author_id,type,text) values ('82000000-0000-4000-8000-000000000000','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','poll','legacy poll fixture');" >/dev/null
+echo "── load: 0035_standard_poll_create_read.sql"
+psql_test -f "$MIG/0035_standard_poll_create_read.sql" >/dev/null
+psql_test -f "$HERE/82_standard_poll_create_read.sql"
+psql_test -c "delete from public.marks where id='82000000-0000-4000-8000-000000000000';" >/dev/null
+
+for area in 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             58_activation_foundation \
             60_secret_marks 61_secret_reveal 61_secret_expiry_acl 71_shared_wall_lifecycle 73_shared_wall_owner_returning 74_wall_member_definer_grants 75_shared_wall_removed_roster_privacy 76_definer_anonymous_catalog_guard 77_trusted_schema_create_grants 78_definer_path_trust 79_sensitive_trigger_bindings 80_notifications 81_private_server_table_acl 85_moderation 90_profile_links \
