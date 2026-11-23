@@ -118,18 +118,21 @@ await_success deactivate "$BLOCKER_PID"
 BLOCKER_PID=
 CONTENDER_PID=
 
-# The safety remove path can hold parent Mark then owner profile. Close must
-# decline the contested parent without waiting on a reversed row lock order.
+# Rehearse 0027's parent-then-profile lock order without changing the Poll.
+# The legacy invoker moderation RPC cannot see a Poll parent through v1 RLS.
 psql_test -c "update public.profiles set account_status='active',deactivated_at=null where id='$AUTHOR';" >/dev/null
-launch remove "$OWNER" "select public.remove_mark('$OWNER','$POLL','safety'); select pg_sleep(4);"
+launch parent_lock "$OWNER" "reset role;
+ select 1 from public.marks where id='$POLL' for no key update;
+ select pg_sleep(4);
+ select 1 from public.profiles where id='$OWNER' for update;"
 BLOCKER_PID=$SESSION_PID
-await_state remove wait_event PgSleep
-launch close_removed "$AUTHOR" "select public.close_poll_mark('$AUTHOR','84000000-0000-4000-8000-000000000008',
+await_state parent_lock wait_event PgSleep
+launch close_contested "$AUTHOR" "select public.close_poll_mark('$AUTHOR','84000000-0000-4000-8000-000000000008',
  '$WALL','$POLL',1)->>'status';"
 CONTENDER_PID=$SESSION_PID
-await_success close_removed "$CONTENDER_PID"
-assert_unavailable close_removed
-await_success remove "$BLOCKER_PID"
+await_success close_contested "$CONTENDER_PID"
+assert_unavailable close_contested
+await_success parent_lock "$BLOCKER_PID"
 BLOCKER_PID=
 CONTENDER_PID=
 
@@ -137,7 +140,7 @@ RESULT="$(psql_test -Atc "select (
   not exists (select 1 from public.mark_poll_ballots where mark_id='$POLL')
   and not exists (select 1 from public.mark_poll_mutation_requests where mark_id='$POLL')
   and exists (select 1 from public.mark_polls where mark_id='$POLL' and revision=1 and closed_at is null)
-  and exists (select 1 from public.marks where id='$POLL' and status='removed')
+  and exists (select 1 from public.marks where id='$POLL' and status='active')
 );")"
 [[ "$RESULT" == t ]]
 echo '84 (poll authorization: pair, lifecycle and parent races) : PASS'
