@@ -62,6 +62,26 @@ BEGIN
             v_role, v_privilege, v_name;
         END IF;
       END LOOP;
+
+      -- All protected tables except mark_secrets currently deny ancillary
+      -- table privileges too. Keep the observed mark_secrets exception explicit
+      -- until its separate security/schema approval (issue #186); never imply
+      -- that SQL grants are equivalent to a public PostgREST attack surface.
+      IF v_name <> 'mark_secrets' THEN
+        FOREACH v_privilege IN ARRAY ARRAY['TRUNCATE', 'REFERENCES', 'TRIGGER'] LOOP
+          IF has_table_privilege(v_role, v_oid, v_privilege) THEN
+            RAISE EXCEPTION '81 FAIL: client role % has % on service-only table public.%',
+              v_role, v_privilege, v_name;
+          END IF;
+          -- REFERENCES may also be granted only on individual columns, even
+          -- when the table-wide permission is denied (same trap as CRUD).
+          IF v_privilege = 'REFERENCES'
+             AND has_any_column_privilege(v_role, v_oid, 'REFERENCES') THEN
+            RAISE EXCEPTION '81 FAIL: client role % has column REFERENCES on service-only table public.%',
+              v_role, v_name;
+          END IF;
+        END LOOP;
+      END IF;
     END LOOP;
   END LOOP;
 
