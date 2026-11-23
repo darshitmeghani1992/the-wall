@@ -1,3 +1,7 @@
+## D-52 · 24 Nov 2026 · Native picker scope rather than foreground-only cancellation (held)
+- **ARCHITECT → FRONTEND:** A native camera/gallery or permission UI may temporarily leave active AppState. Unlike protected network operations, local attachment selection must tolerate that legitimate transition while staying bound to the current composer actor/destination, discard intent and submission lock. Reserve one synchronous picker slot, check scope after each asynchronous result, block competing post/type intents, and release in finally. Do not overwrite existing different-kind media. No API, schema, rollout or product scope change.
+- **Evidence:** draft #266, source regressions and exact CI pending; physical iPhone camera/gallery, cancellation, account/destination change and protected upload acceptance remain independent. No hosted operations authorized.
+
 ## D-51 · 24 Nov 2026 · Native Voice recorder startup must be a visible, guarded composer state (held)
 
 - **Finding:** The existing synchronous microphone lease protected against duplicate starts and stale permission callbacks, but until native `startAsync()` resolved, the hook still exposed `idle`. The composer allowed an unrelated Mark submission or navigation in that permission window and did not catch native start rejection from the Voice tap.
