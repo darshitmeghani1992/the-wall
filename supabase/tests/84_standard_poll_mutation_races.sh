@@ -118,11 +118,11 @@ await_success deactivate "$BLOCKER_PID"
 BLOCKER_PID=
 CONTENDER_PID=
 
-# Rehearse 0027's parent-then-profile lock order without changing the Poll.
-# The legacy invoker moderation RPC cannot see a Poll parent through v1 RLS.
+# Rehearse an existing private-parent row lock, then a profile lock, in the
+# disposable harness. Legacy Mark moderation cannot see or mutate this parent.
 psql_test -c "update public.profiles set account_status='active',deactivated_at=null where id='$AUTHOR';" >/dev/null
 launch parent_lock "$OWNER" "reset role;
- select 1 from public.marks where id='$POLL' for no key update;
+ select 1 from public.mark_polls where mark_id='$POLL' for no key update;
  select pg_sleep(4);
  select 1 from public.profiles where id='$OWNER' for update;"
 BLOCKER_PID=$SESSION_PID
@@ -139,8 +139,8 @@ CONTENDER_PID=
 RESULT="$(psql_test -Atc "select (
   not exists (select 1 from public.mark_poll_ballots where mark_id='$POLL')
   and not exists (select 1 from public.mark_poll_mutation_requests where mark_id='$POLL')
-  and exists (select 1 from public.mark_polls where mark_id='$POLL' and revision=1 and closed_at is null)
-  and exists (select 1 from public.marks where id='$POLL' and status='active')
+  and exists (select 1 from public.mark_polls where mark_id='$POLL' and revision=1 and closed_at is null and status='active')
+  and not exists (select 1 from public.marks where id='$POLL')
 );")"
 [[ "$RESULT" == t ]]
 echo '84 (poll authorization: pair, lifecycle and parent races) : PASS'

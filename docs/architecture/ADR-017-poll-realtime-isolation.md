@@ -30,3 +30,12 @@ Status: proposed architecture for review. Release candidate [#228](https://githu
 | Disable and rollback | Disable Poll creation, ballot changes and close first; keep old Mark events running. Preserve private state with authorized reads, or gate Poll reads if its ACL evidence is withdrawn. Do not republish or copy the private Poll parent into `marks` as rollback. Rehearse recovery on a disposable copy and verify exact config and old subscriber parity. |
 
 [Prior release hold and Poll API plan](FP-MARK-002-poll-persistence-api.md). The privacy boundary is source-side table separation plus verified authorization, not a client event filter.
+
+## Draft implementation on the pre-Poll baseline
+
+The draft rewrites the unapplied 0035 and 0036 migrations. `public.mark_polls` owns the Poll ID, Wall, author and status. The options, ballots and receipts reference it. The migrations abort if an effective publication contains a private Poll relation. Neither migration changes the ordinary Mark table, its publication membership, the legacy retired-kind rules or generic moderation and deletion functions.
+
+- The create RPC keeps its existing request and receipt. The bounded batch reader returns only the authorized Poll projection. The existing untyped focused RPC rejects an ambiguous ID when both resources are readable.
+- `get_wall_mark_item_v2` adds exact `p_kind` selection for new clients, with `mark` or `poll` and no fallback to the other kind. `list_wall_marks_v2` accepts the full `p_after_pinned`, `p_after_created_at`, `p_after_mark_id`, `p_after_kind` cursor or four nulls. The returned cursor adds `kind`. The sort is descending by pin, time, ID and then kind, and a Poll is distinguishable from an ordinary Mark even when the other three keys tie.
+- Vote replacement and author close lock the same private parent and recheck current actor, Wall and block authorization. Auth identity removal subtracts the synthetic voter's ballot from closed totals in disposable tests. The account purge prepare/finalize flow and Poll-aware moderation still require their own review before activation.
+- Both server write gates and the app gates remain off. Test suites 82–84 cover private storage, typed focus, pagination, vote/close, Auth cascade and concurrent authorization. The suite snapshots the ordinary Mark catalog before and after both migrations. Environments holding the old drafts require a separate reset or conversion plan.

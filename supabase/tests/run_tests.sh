@@ -183,12 +183,34 @@ echo "════════════════════════�
 # Materialize a genuinely pre-0035 retired poll for upgrade and v1-isolation checks.
 psql_test -f "$HERE/05_excluded_surfaces.sql"
 psql_test -c "insert into public.marks(id,wall_id,author_id,type,text) values ('82000000-0000-4000-8000-000000000000','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','11111111-1111-1111-1111-111111111111','poll','legacy poll fixture');" >/dev/null
+# Snapshot the legacy contract before the private Poll migrations.
+ordinary_mark_catalog() {
+  psql_test -At <<'SQL'
+select pg_catalog.jsonb_build_object(
+  'acl', c.relacl, 'replica_identity', c.relreplident,
+  'policies', (select jsonb_agg(to_jsonb(p) order by p.polname) from pg_policy p where p.polrelid=c.oid),
+  'constraints', (select jsonb_agg(pg_get_constraintdef(f.oid) order by f.conname)
+    from pg_constraint f where f.conrelid=c.oid),
+  'triggers', (select jsonb_agg(pg_get_triggerdef(t.oid) order by t.tgname)
+    from pg_trigger t where t.tgrelid=c.oid),
+  'publication', (select jsonb_agg(to_jsonb(t) order by t.pubname)
+    from pg_publication_tables t where t.schemaname='public' and t.tablename='marks')
+)
+from pg_class c where c.oid='public.marks'::regclass;
+SQL
+}
+ORDINARY_MARK_CATALOG="$(ordinary_mark_catalog)"
 echo "── load: 0035_standard_poll_create_read.sql"
 psql_test -f "$MIG/0035_standard_poll_create_read.sql" >/dev/null
 psql_test -f "$HERE/82_standard_poll_create_read.sql"
 psql_test -c "delete from public.marks where id='82000000-0000-4000-8000-000000000000';" >/dev/null
 echo "── load: 0036_standard_poll_ballots_close.sql"
 psql_test -f "$MIG/0036_standard_poll_ballots_close.sql" >/dev/null
+if [[ "$(ordinary_mark_catalog)" != "$ORDINARY_MARK_CATALOG" ]]; then
+  echo "Poll migrations changed the legacy ordinary Mark catalog" >&2
+  exit 1
+fi
+echo "── Poll migrations preserve the legacy ordinary Mark catalog"
 psql_test -f "$HERE/83_standard_poll_ballots_close.sql"
 PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" TEST_DB="$TEST_DB" bash "$HERE/84_standard_poll_mutation_races.sh"
 
