@@ -1,4 +1,3 @@
-import { createRequestId } from "./mark-writer-contract";
 
 /**
  * ROLE: FRONTEND. Standard Poll creation adapter for the 0035 actor-bound RPC.
@@ -38,7 +37,7 @@ export type CreateStandardPollOutcome =
 
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 /** Match SQL btrim(text, E' \\t\\r\\n') exactly, not broader JS Unicode trim. */
-const trimSqlWhitespace = (value: string) => value.replace(/^[ \\t\\r\\n]+|[ \\t\\r\\n]+$/g, "");
+const trimSqlWhitespace = (value: string) => value.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
 const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).sort().join("|") === [...keys].sort().join("|");
 
@@ -53,7 +52,7 @@ export class PollDraftInvalid extends Error {
 export function prepareStandardPoll(
   draft: StandardPollDraft,
   previous: PreparedStandardPoll | null,
-  newRequestId: () => string = createRequestId,
+  newRequestId: () => string,
 ): PreparedStandardPoll {
   if (!draft || !UUID.test(draft.actorId) || !UUID.test(draft.wallId)
     || draft.anonymous !== false || draft.secret !== false
