@@ -92,7 +92,8 @@ test("fail closed on cross-Wall rows, duplicate identities, missing media metada
   assert.throws(() => parseMixedWallHistoryPage(page([badWall]), wall));
   assert.throws(() => parseMixedWallHistoryPage(page([ordinary(), ordinary()]), wall));
   const ordinaryMark = ordinary();
-  const { payload: _ignoredPayload, ...metadataMissing } = ordinaryMark.mark;
+  const metadataMissing: Record<string, unknown> = { ...ordinaryMark.mark };
+  delete metadataMissing.payload;
   assert.throws(() => parseMixedWallHistoryPage(page([{ ...ordinaryMark, mark: metadataMissing }]), wall));
   assert.throws(() => parseMixedWallHistoryPage(page([ordinary()], {
     pinned: false, created_at: created, mark_id: mark, kind: "mark",
