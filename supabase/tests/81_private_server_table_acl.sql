@@ -51,6 +51,16 @@ BEGIN
           RAISE EXCEPTION '81 FAIL: client role % has % on protected table public.%',
             v_role, v_privilege, v_name;
         END IF;
+
+        -- PostgreSQL permits SELECT/INSERT/UPDATE grants on individual columns
+        -- without granting the table-wide privilege. A table ACL-only check
+        -- would miss that direct PostgREST access path; DELETE has no
+        -- column-level privilege and is covered by has_table_privilege above.
+        IF v_privilege IN ('SELECT', 'INSERT', 'UPDATE')
+           AND has_any_column_privilege(v_role, v_oid, v_privilege) THEN
+          RAISE EXCEPTION '81 FAIL: client role % has % on a column of protected table public.%',
+            v_role, v_privilege, v_name;
+        END IF;
       END LOOP;
     END LOOP;
   END LOOP;
