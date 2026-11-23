@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Audio } from "expo-av";
+import { finishVoiceCapture, MAX_VOICE_MS, type VoiceResult } from "./voice-recording-result";
 
-/** Voice Marks are capped at 60 seconds (Master Spec §24). */
-export const MAX_VOICE_MS = 60_000;
+export { MAX_VOICE_MS, type VoiceResult } from "./voice-recording-result";
 /** Video Marks are capped at 30 seconds (Master Spec §25). */
 export const MAX_VIDEO_MS = 30_000;
-
-export type VoiceResult = { uri: string; mime: string; durationMs: number };
 
 export type VoiceRecorder = {
   /** "idle" before first record, "recording" while capturing, "stopped" after. */
@@ -16,8 +14,8 @@ export type VoiceRecorder = {
   /** Permission was denied — surface a settings hint instead of recording. */
   denied: boolean;
   start: () => Promise<void>;
-  /** Stops and returns the recorded clip (or null if nothing usable). */
-  stop: () => Promise<VoiceResult | null>;
+  /** Stops and delivers a recorded clip through the same callback as the time limit. */
+  stop: () => Promise<void>;
   /** Discard any in-progress/finished recording and return to idle. */
   reset: () => Promise<void>;
 };
@@ -31,11 +29,15 @@ export type VoiceRecorder = {
  * pending — see docs/BUILD_STATUS.md); this hook is written to the documented
  * expo-av contract and typechecks/lints in CI.
  */
-export function useVoiceRecorder(): VoiceRecorder {
+export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<void>): VoiceRecorder {
   const [phase, setPhase] = useState<VoiceRecorder["phase"]>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [denied, setDenied] = useState(false);
   const recRef = useRef<Audio.Recording | null>(null);
+  const clipReady = useRef(onClipReady);
+  const captureGeneration = useRef(0);
+  const latestDurationMs = useRef(0);
+  clipReady.current = onClipReady;
 
   async function unload() {
     const rec = recRef.current;
@@ -52,6 +54,7 @@ export function useVoiceRecorder(): VoiceRecorder {
   // Safety net: unload if the component using the recorder unmounts mid-capture.
   useEffect(() => {
     return () => {
+      captureGeneration.current += 1;
       void unload();
     };
   }, []);
@@ -70,33 +73,33 @@ export function useVoiceRecorder(): VoiceRecorder {
     rec.setOnRecordingStatusUpdate((status) => {
       if (!status.isRecording) return;
       const ms = status.durationMillis ?? 0;
+      latestDurationMs.current = ms;
       setElapsedMs(ms);
       if (ms >= MAX_VOICE_MS) void stop(); // hard cap at 60s
     });
     recRef.current = rec;
+    latestDurationMs.current = 0;
     setElapsedMs(0);
     setPhase("recording");
     await rec.startAsync();
   }
 
-  async function stop(): Promise<VoiceResult | null> {
+  async function stop() {
     const rec = recRef.current;
-    if (!rec) return null;
+    if (!rec) return;
     recRef.current = null;
-    let durationMs = elapsedMs;
+    rec.setOnRecordingStatusUpdate(null);
+    const generation = captureGeneration.current;
+    const isCurrent = () => captureGeneration.current === generation;
     try {
-      const status = await rec.stopAndUnloadAsync();
-      if (typeof status.durationMillis === "number") durationMs = status.durationMillis;
-    } catch {
-      // fall through with the last elapsed value
+      await finishVoiceCapture(rec, latestDurationMs.current, isCurrent, clipReady.current);
+    } finally {
+      if (isCurrent()) setPhase("stopped");
     }
-    const uri = rec.getURI();
-    setPhase("stopped");
-    if (!uri) return null;
-    return { uri, mime: "audio/m4a", durationMs: Math.min(durationMs, MAX_VOICE_MS) };
   }
 
   async function reset() {
+    captureGeneration.current += 1;
     await unload();
     setElapsedMs(0);
     setPhase("idle");
