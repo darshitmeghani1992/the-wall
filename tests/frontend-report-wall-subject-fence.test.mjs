@@ -21,9 +21,10 @@ test("Shared Wall reporting UI is scoped to current actor AND target before focu
 
 test("read success, no-permission, not-found, failure and retry settle only current subject", () => {
   assert.match(screen, /setLoadedSubject\(null\);\s+setWallName\(null\);\s+setLoading\(true\)/);
-  assert.match(screen, /if \(!wall \|\| wall\.type !== "shared"/);
-  assert.match(screen, /capabilities\.joinState === "owner"/);
-  assert.equal((screen.match(/setLoadedSubject\(`\$\{subjectToken\.userId\}:\$\{targetToken\.targetId\}`\)/g) ?? []).length, 4);
+  assert.match(screen, /await loadSharedWallReportTarget\(targetToken\.targetId, getWall, getWallCapabilities\)[^]*?if \(!subjectFence\.current\.isCurrent[^]*?\|\| !targetFence\.current\.isCurrent[^]*?setLoadedSubject/);
+  assert.match(screen, /result\.status === "ready"\) setWallName\(result\.wallName\)/);
+  assert.match(screen, /visibleError\?\.status === "retryable" \? <Button label="Try again"/);
+  assert.match(screen, /label="Back to Walls"/);
   assert.match(screen, /setLoadedSubject\(null\);\s+setWallName\(null\);\s+setReason\(null\)/);
   assert.match(screen, /subjectFence\.current\.blur\(\);\s+targetFence\.current\.blur\(\);\s+setLoadedSubject\(null\)/);
   assert.match(screen, /currentActorId\.current !== actorId[\s\S]*currentWallId\.current !== wallId[\s\S]*!currentSubjectLoaded/);
