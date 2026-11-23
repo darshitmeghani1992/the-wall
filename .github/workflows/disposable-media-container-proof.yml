@@ -1,0 +1,101 @@
+name: Disposable ARM64 media container proof
+
+on:
+  pull_request:
+    branches:
+      - codex/public-beta-media-worker-toolchain-20261123
+    paths:
+      - .github/workflows/disposable-media-container-proof.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/media-container-proof-20261123'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: d8cfedabdd7a77531b3828904d751b8ea5dbdd4c
+
+      - name: Build with exact disposable test pins and smoke the image
+        shell: bash
+        working-directory: workers/media-processor
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = d8cfedabdd7a77531b3828904d751b8ea5dbdd4c
+          printf 'Exact release candidate source: %s\n' "$(git rev-parse HEAD)"
+          test "$(uname -m)" = aarch64
+          base_tag=node:22-bookworm-slim
+          docker pull "$base_tag"
+          base_image=$(docker image inspect --format '{{index .RepoDigests 0}}' "$base_tag")
+          [[ "$base_image" =~ @sha256:[a-f0-9]{64}$ ]]
+          ffmpeg_version=$(docker run --rm "$base_image" sh -ec \
+            'apt-get update >&2; apt-cache policy ffmpeg | sed -n "s/^[[:space:]]*Candidate: //p"')
+          [[ "$ffmpeg_version" =~ ^[a-zA-Z0-9.+:~_-]+$ ]]
+          printf 'Disposable test base: %s\nDisposable FFmpeg package: %s\n' "$base_image" "$ffmpeg_version"
+
+          docker build \
+            --build-arg "BASE_IMAGE=$base_image" \
+            --build-arg "FFMPEG_PACKAGE_VERSION=$ffmpeg_version" \
+            --tag the-wall-media-proof:local .
+          test "$(docker image inspect --format '{{.Architecture}}' the-wall-media-proof:local)" = arm64
+          test "$(docker image inspect --format '{{.Config.User}}' the-wall-media-proof:local)" = 10001:10001
+          docker run --rm --network none --read-only --entrypoint ffmpeg the-wall-media-proof:local -version
+          docker run --rm --network none --read-only --entrypoint ffprobe the-wall-media-proof:local -version
+
+          runtime_limits=(
+            --network none --read-only
+            --security-opt no-new-privileges:true --security-opt seccomp=deploy/seccomp.json
+            --cap-drop ALL --cpus 2 --memory 1g --pids-limit 64
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=512m,mode=0700,uid=10001,gid=10001
+          )
+          printf 'Running compiled worker tests inside the final image under runtime limits\n'
+          timeout 120s docker run --rm "${runtime_limits[@]}" --entrypoint sh the-wall-media-proof:local \
+            -ec 'node --test --test-concurrency=1 dist/test/*.test.js'
+          timeout 20s docker run --rm -i "${runtime_limits[@]}" \
+            --entrypoint node the-wall-media-proof:local --input-type=module - <<'SMOKE'
+          import assert from 'node:assert/strict';
+          import { generateKeyPairSync, randomBytes } from 'node:crypto';
+          import { startWorkerRuntime } from './dist/src/runtime.js';
+
+          const { publicKey } = generateKeyPairSync('ed25519');
+          const config = {
+            MARK_MEDIA_RUNTIME_ENABLED: 'true',
+            MARK_MEDIA_PROJECT_URL: 'https://ewintxgdxdvschiqodkq.supabase.co',
+            MARK_MEDIA_WORKER_GATEWAY_SECRET: randomBytes(32).toString('base64url'),
+            MARK_MEDIA_WORKER_PUBLIC_KEYS: JSON.stringify({ disposable: publicKey.export({ format: 'jwk' }).x }),
+          };
+          assert.equal(process.getuid(), 10001);
+          await assert.rejects(startWorkerRuntime({}), { message: 'media processor runtime disabled' });
+          await assert.rejects(
+            startWorkerRuntime({ ...config, MARK_MEDIA_PROJECT_URL: 'https://unapproved.example.invalid' }),
+            { message: 'unapproved media worker Supabase project origin' },
+          );
+          const server = await startWorkerRuntime(config);
+          try {
+            assert.equal(server.address().address, '127.0.0.1');
+            const response = await fetch('http://127.0.0.1:8080/v1/media-jobs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/jose' },
+              body: 'invalid-synthetic-job',
+              signal: AbortSignal.timeout(5000),
+            });
+            assert.equal(response.status, 404);
+            assert.equal(await response.text(), '');
+            assert.equal(response.headers.get('cache-control'), 'no-store');
+            console.log('Constrained runtime booted and rejected an unsigned loopback request.');
+          } finally {
+            await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
+          }
+          SMOKE
+
+          set +e
+          startup_output=$(timeout 20s docker run --rm --network none --read-only the-wall-media-proof:local 2>&1)
+          startup_status=$?
+          set -e
+          test "$startup_status" -eq 1
+          grep -Fxq 'media runtime unavailable; check approved deployment configuration' <<< "$startup_output"
