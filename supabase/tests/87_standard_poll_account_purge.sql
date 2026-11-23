@@ -71,12 +71,14 @@ begin
     raise exception '87 FAIL: schedule %',v_result; end if;
 end $$;
 reset role;
+select set_config('tw.poll_purge_requested_at',requested_at::text,true)
+  from public.account_deletion_requests
+  where user_id='87000000-0000-4000-8000-000000000001';
 set local role service_role;
 do $$
 declare v_req timestamptz;
 begin
-  select requested_at into v_req from public.account_deletion_requests
-    where user_id='87000000-0000-4000-8000-000000000001';
+  v_req := current_setting('tw.poll_purge_requested_at')::timestamptz;
   if public.prepare_account_deletion_for_purge_with_polls(
       '87000000-0000-4000-8000-000000000001',v_req) then
     raise exception '87 FAIL: premature purge accepted';
@@ -90,12 +92,14 @@ update public.account_deletion_requests
       purge_after='2026-10-01 00:00:00+00'::timestamptz
   where user_id='87000000-0000-4000-8000-000000000001';
 
+select set_config('tw.poll_purge_requested_at',requested_at::text,true)
+  from public.account_deletion_requests
+  where user_id='87000000-0000-4000-8000-000000000001';
 set local role service_role;
 do $$
 declare v_req timestamptz;
 begin
-  select requested_at into v_req from public.account_deletion_requests
-    where user_id='87000000-0000-4000-8000-000000000001';
+  v_req := current_setting('tw.poll_purge_requested_at')::timestamptz;
   if not public.prepare_account_deletion_for_purge_with_polls(
       '87000000-0000-4000-8000-000000000001',v_req)
      or not public.prepare_account_deletion_for_purge_with_polls(
