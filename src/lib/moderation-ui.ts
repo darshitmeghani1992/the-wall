@@ -52,8 +52,9 @@ export function groupModerationReports(reports: readonly ReportRow[]): {
   };
 }
 
-export function moderationReportTarget(report: Pick<ReportRow, "mark_id" | "reported_user_id">): string {
+export function moderationReportTarget(report: Pick<ReportRow, "mark_id" | "reported_user_id" | "reported_poll_id">): string {
   if (report.mark_id) return "MARK";
+  if (report.reported_poll_id) return "POLL";
   if (report.reported_user_id) return "ACCOUNT";
   return "SHARED WALL";
 }
@@ -61,6 +62,7 @@ export function moderationReportTarget(report: Pick<ReportRow, "mark_id" | "repo
 export function moderationActionLabel(action: ModerationAction["action"]): string {
   switch (action) {
     case "remove_mark": return "Mark removed";
+    case "remove_poll": return "Poll removed";
     case "suspend_account": return "Account suspended";
     case "resolve_report": return "Report resolved";
     case "dismiss_report": return "Report dismissed";
@@ -69,6 +71,7 @@ export function moderationActionLabel(action: ModerationAction["action"]): strin
 
 export function moderationActionTarget(action: ModerationAction): string {
   if (action.target_mark_id) return `MARK ${action.target_mark_id.slice(0, 8)}`;
+  if (action.target_poll_id) return `POLL ${action.target_poll_id.slice(0, 8)}`;
   if (action.target_user_id) return `ACCOUNT ${action.target_user_id.slice(0, 8)}`;
   if (action.report_id) return `REPORT ${action.report_id.slice(0, 8)}`;
   return "TARGET UNAVAILABLE";

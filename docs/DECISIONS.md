@@ -1,3 +1,11 @@
+## D-45 · 23 Nov 2026 · Give private standard Polls a first-class moderation target (draft only)
+
+- **Problem:** Standard Poll parents are held in private `mark_polls`, not legacy `marks`. Existing Mark reports and admin removal cannot safely target them; storing a Poll UUID in `reports.mark_id` would violate FK isolation and risk bypassing moderation.
+- **Decision (ARCHITECT → BACKEND/FRONTEND):** Draft migration `0037_standard_poll_moderation.sql`: additive `reports.reported_poll_id` and exclusive-target check; actor-bound SECURITY DEFINER helper for report eligibility so client RLS does not require private-table SELECT; actor-bound audited `admin_remove_poll`, idempotent on already-removed Polls; add `moderation_actions.target_poll_id`. The client reports a Poll by its dedicated target, with a fenced Poll report form and moderator action; no Poll data is passed through legacy Mark interfaces.
+- **Alternatives rejected:** Reinterpret Poll IDs as ordinary Mark IDs, grant clients private Poll-table reads, or silently resolve Poll reports without taking the requested content action.
+- **Verification and gate:** Draft [PR #247](https://github.com/darshitmeghani1992/the-wall/pull/247). Disposable Postgres migration/test suite and exact-tree CI must pass, followed by independent Reviewer/QA and live three-user/device checks on separately authorized staging. **No hosted migration, feature activation, merge, deployment or production contact.** Existing Apple/OTP/media/Secret/deletion and public-release gates remain NO-GO.
+- **Rollback:** Before hosted apply, discard draft branch. After future approved deployment, require a reviewed forward migration/rollback that preserves existing report and moderation audit history.
+
 ## D-44 · 23 Nov 2026 · Lock prepared irreversible deletion worker to approved staging origin
 
 - **Risk (ARCHITECT → BACKEND):** The account-deletion adapter's former HTTPS-only URL check accepted any Supabase project root. A future privileged scheduler configured with the wrong project URL/credential could address an unapproved environment, including the protected original; no deployed deletion worker or observed incident is claimed.

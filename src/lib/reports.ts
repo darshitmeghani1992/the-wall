@@ -33,9 +33,10 @@ export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
 };
 
 type ReportTarget =
-  | { markId: string; userId?: never; wallId?: never }
-  | { userId: string; markId?: never; wallId?: never }
-  | { wallId: string; markId?: never; userId?: never };
+  | { markId: string; userId?: never; wallId?: never; pollId?: never }
+  | { userId: string; markId?: never; wallId?: never; pollId?: never }
+  | { wallId: string; markId?: never; userId?: never; pollId?: never }
+  | { pollId: string; markId?: never; userId?: never; wallId?: never };
 
 /** File a report against exactly one target. Throws if not signed in / invalid. */
 export async function createReport(
@@ -53,6 +54,7 @@ export async function createReport(
   const { error } = await supabase.from("reports").insert({
     reporter_id: uid,
     mark_id: input.markId ?? null,
+    reported_poll_id: input.pollId ?? null,
     reported_user_id: input.userId ?? null,
     reported_wall_id: input.wallId ?? null,
     reason: input.reason,
@@ -62,6 +64,6 @@ export async function createReport(
 
   track("Report Submitted", {
     reason: input.reason,
-    target: input.markId ? "mark" : input.userId ? "user" : "wall",
+    target: input.pollId ? "poll" : input.markId ? "mark" : input.userId ? "user" : "wall",
   });
 }
