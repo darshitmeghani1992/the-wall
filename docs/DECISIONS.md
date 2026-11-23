@@ -1,3 +1,9 @@
+## D-44 · 23 Nov 2026 · Lock prepared irreversible deletion worker to approved staging origin
+
+- **Risk (ARCHITECT → BACKEND):** The account-deletion adapter's former HTTPS-only URL check accepted any Supabase project root. A future privileged scheduler configured with the wrong project URL/credential could address an unapproved environment, including the protected original; no deployed deletion worker or observed incident is claimed.
+- **Technical decision:** In the unactivated staging candidate, permit only exact `https://ewintxgdxdvschiqodkq.supabase.co` with optional trailing slash before constructing the privileged adapter. Fail closed on foreign/ambiguous origins regardless of credentials; no feature toggle or secret can override. The separately approved public beta environment will require its own reviewed source/origin binding and release authorization rather than silently reusing this staging-only implementation.
+- **Gate:** [Draft #210](https://github.com/darshitmeghani1992/the-wall/pull/210), source `edb1a74999927c4f568ecf5e1d19484dd5828ffe`. Disallow original production access. Migration 0031, retention/legal decisions, deployed purge worker, irreversible deletion, independent Reviewer/QA, runtime rollback and Founder approval all remain pending. No SQL/hosted write, merged implementation or deletion activation occurred. **NO-GO.**
+
 ## D-43 · 23 Nov 2026 · C3 worker executable is staging-only until separately approved release origin
 
 - **Risk (ARCHITECT → BACKEND):** Media gateway adapters validate the Supabase hostname shape and signed dispatch, but the container entrypoint accepted any well-formed Supabase project origin. With media ever enabled, a misdirected worker could attempt privileged processing against the historic production or an unapproved project; this is a deployment-misbinding risk, not evidence of prior exploitation.

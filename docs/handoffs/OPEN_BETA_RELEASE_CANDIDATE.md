@@ -1,3 +1,9 @@
+## 23 Nov 2026 · Unactivated deletion worker origin fence (#210)
+
+Source-only risk reduction in isolated draft [#210](https://github.com/darshitmeghani1992/the-wall/pull/210), BACKEND implementation under ARCHITECT sequencing, child of integrated [#209](https://github.com/darshitmeghani1992/the-wall/pull/209). The prepared service-role deletion worker now rejects any Supabase origin except approved staging before adapter use; test matrix rejects original production, foreign/suffixed hosts, scheme/port/path/query/user-info, and preserves positive exact Storage/RPC/Auth Admin requests. Source/test commit `edb1a74999927c4f568ecf5e1d19484dd5828ffe`; check final docs-head, independent CI, Reviewer and QA separately. Staging migration 0031 and irreversible purge remain fully **HELD**. No external deployment or invocation. Different public environment requires independent new approved source+runtime fence; do not promote staging-only deletion code merely by changing an environment variable. Existing beta **NO-GO**.
+
+---
+
 ## 23 Nov 2026 · Integrated staging source candidate / independent acceptance handoff (ENG-05/06)
 
 **ROLE: ARCHITECT** integration and sequencing; implementation ownership remains **FRONTEND** (#204, #207, #208) and **BACKEND** (#205), with independently assigned **REVIEWER** and **QA** not self-certified.

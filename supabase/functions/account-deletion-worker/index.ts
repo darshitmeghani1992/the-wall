@@ -3,6 +3,10 @@ const RUN_PATH = "/functions/v1/account-deletion-worker/run";
 const MAX_BODY_BYTES = 256;
 const MAX_AVATAR_BATCHES = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Account deletion can irreversibly remove identities. This candidate is
+// staging-only; a future public release origin requires a separately reviewed
+// source and deployment authorization, not just an environment override.
+const APPROVED_DELETION_STAGING_ORIGIN = "https://ewintxgdxdvschiqodkq.supabase.co";
 
 export interface DueDeletion {
   user_id: string;
@@ -97,11 +101,14 @@ export function createSupabaseAccountDeletionAdapter(input: Readonly<{
   serviceRoleKey: string;
   fetch: typeof fetch;
 }>): AccountDeletionAdapter {
-  const origin = new URL(input.supabaseUrl);
-  if (origin.protocol !== "https:" || origin.username || origin.password
-    || origin.search || origin.hash || origin.pathname !== "/") {
-    throw new Error("invalid Supabase URL");
+  // Check the exact configured string before parsing or creating an adapter.
+  // A different valid Supabase host, including the protected original project,
+  // must fail closed even if a service credential was accidentally supplied.
+  if (input.supabaseUrl !== APPROVED_DELETION_STAGING_ORIGIN
+    && input.supabaseUrl !== APPROVED_DELETION_STAGING_ORIGIN + "/") {
+    throw new Error("unapproved account deletion backend");
   }
+  const origin = new URL(input.supabaseUrl);
   if (input.serviceRoleKey.length < 32) throw new Error("invalid service credential");
   const headers = {
     Authorization: `Bearer ${input.serviceRoleKey}`,
