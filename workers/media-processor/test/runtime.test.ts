@@ -87,6 +87,72 @@ test('bounded queue returns 503 while one verified job is still active', async (
   }
 });
 
+test('an unverified slow dispatch cannot bypass the capacity bound during signature verification', async () => {
+  let releaseVerification!: () => void;
+  const holdVerification = new Promise<void>((resolve) => { releaseVerification = resolve; });
+  let enteredVerification!: () => void;
+  const started = new Promise<void>((resolve) => { enteredVerification = resolve; });
+  let verificationCalls = 0;
+  let processed = 0;
+  const server = createWorkerIngressServer({
+    maxPending: 1,
+    verifier: {
+      verify: async () => {
+        verificationCalls++;
+        enteredVerification();
+        await holdVerification;
+        return {} as VerifiedWorkerDispatch;
+      },
+    },
+    process: async () => { processed++; },
+  });
+  const origin = await host(server);
+  const send = () => fetch(origin + '/v1/media-jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/jose' },
+    body: 'signed.claim.signature',
+  });
+  try {
+    const first = send();
+    await started;
+    const second = await send();
+    assert.equal(second.status, 503, 'deny before a second expensive verifier starts');
+    assert.equal(verificationCalls, 1);
+    releaseVerification();
+    assert.equal((await first).status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    assert.equal(processed, 1);
+  } finally {
+    releaseVerification();
+    await stop(server);
+  }
+});
+
+test('failed JWS verification releases the reserved admission slot for a valid retry', async () => {
+  let verificationCalls = 0;
+  const server = createWorkerIngressServer({
+    verifier: {
+      verify: async () => {
+        verificationCalls++;
+        if (verificationCalls === 1) throw new Error('invalid signature');
+        return {} as VerifiedWorkerDispatch;
+      },
+    },
+    process: async () => {},
+  });
+  const origin = await host(server);
+  try {
+    const send = () => fetch(origin + '/v1/media-jobs', {
+      method: 'POST', headers: { 'Content-Type': 'application/jose' },
+      body: 'signed.claim.signature',
+    });
+    assert.equal((await send()).status, 404);
+    assert.equal((await send()).status, 202);
+    assert.equal(verificationCalls, 2);
+  } finally {
+    await stop(server);
+  }
+});
+
 test('runtime fails closed when enablement or security configuration is missing', async () => {
   await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'false' }), /disabled/);
   await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', PORT: '8080' }));
