@@ -42,3 +42,38 @@ export function composerScopeKey(actorId: string | null, target: ComposerTarget)
     target.wallName ?? null,
   ]);
 }
+
+type ComposerWall = Readonly<{ id: string; type: "personal" | "shared"; allow_anonymous: boolean }>;
+
+type ResolvedComposerTarget =
+  | { status: "ready"; wall: ComposerWall }
+  | { status: "unavailable" | "retryable"; message: string };
+
+export async function resolveComposerTarget(
+  actorId: string | null | undefined,
+  { sharedWallId, recipientId, wallId }: ComposerTarget,
+  getSharedWall: (wallId: string) => Promise<ComposerWall | null>,
+  getPersonalWall: (recipientId: string) => Promise<ComposerWall | null>,
+): Promise<ResolvedComposerTarget> {
+  if (!actorId) {
+    return { status: "unavailable", message: "Choose another person's Wall before writing a Mark." };
+  }
+
+  try {
+    if (sharedWallId) {
+      const wall = await getSharedWall(sharedWallId);
+      return wall?.type === "shared" && wall.id === sharedWallId
+        ? { status: "ready", wall }
+        : { status: "unavailable", message: "That Shared Wall is no longer available." };
+    }
+    if (!recipientId || !wallId || recipientId === actorId) {
+      return { status: "unavailable", message: "Choose another person's Wall before writing a Mark." };
+    }
+    const wall = await getPersonalWall(recipientId);
+    return wall?.type === "personal" && wall.id === wallId
+      ? { status: "ready", wall }
+      : { status: "unavailable", message: "That recipient and Wall no longer match." };
+  } catch {
+    return { status: "retryable", message: "Couldn't verify this Wall. Check your connection and try again." };
+  }
+}
