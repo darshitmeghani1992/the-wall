@@ -225,11 +225,15 @@ psql_test -f "$HERE/../rollbacks/0038_standard_poll_account_purge_preapply.sql" 
 psql_test -f "$HERE/87_standard_poll_account_purge_rollback.sql"
 psql_test -f "$MIG/0038_standard_poll_account_purge.sql" >/dev/null
 psql_test -f "$HERE/87_standard_poll_account_purge.sql"
+echo "── load: 0039_secret_removed_payload_guard.sql (draft, disposable only)"
+psql_test -f "$MIG/0039_secret_removed_payload_guard.sql" >/dev/null
+echo "── replay: 0039_secret_removed_payload_guard.sql (idempotence)"
+psql_test -f "$MIG/0039_secret_removed_payload_guard.sql" >/dev/null
 
 for area in 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
             58_activation_foundation \
-            60_secret_marks 61_secret_reveal 61_secret_expiry_acl 71_shared_wall_lifecycle 73_shared_wall_owner_returning 74_wall_member_definer_grants 75_shared_wall_removed_roster_privacy 76_definer_anonymous_catalog_guard 77_trusted_schema_create_grants 78_definer_path_trust 79_sensitive_trigger_bindings 80_notifications 81_private_server_table_acl 85_moderation 90_profile_links \
+            60_secret_marks 61_secret_reveal 61_secret_expiry_acl 63_secret_removed_reveal 71_shared_wall_lifecycle 73_shared_wall_owner_returning 74_wall_member_definer_grants 75_shared_wall_removed_roster_privacy 76_definer_anonymous_catalog_guard 77_trusted_schema_create_grants 78_definer_path_trust 79_sensitive_trigger_bindings 80_notifications 81_private_server_table_acl 85_moderation 90_profile_links \
             95_account_lifecycle 96_actor_bound_safety_mutations 97_actor_bound_account_reactivation 98_actor_bound_admin_moderation \
             99_recoverable_account_deletion; do
   psql_test -f "$HERE/$area.sql"
