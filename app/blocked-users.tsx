@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { PersonRow, type PersonRowIdentity } from "@/components/PersonRow";
 import { Screen } from "@/components/Screen";
@@ -19,7 +19,7 @@ import { colors, markColors, spacing } from "@/theme";
 
 export default function BlockedUsersScreen() {
   const router = useRouter();
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const actorId = session?.user.id ?? null;
   const currentActorId = useRef(actorId);
   currentActorId.current = actorId;
@@ -144,6 +144,8 @@ export default function BlockedUsersScreen() {
 
   // Never render the previous account's blocked identities before focus cleanup.
   const currentActorLoaded = actorId !== null && loadedActorId === actorId;
+
+  if (!authLoading && !actorId) return <Redirect href="/" />;
 
   return (
     <Screen dockInset={false}>

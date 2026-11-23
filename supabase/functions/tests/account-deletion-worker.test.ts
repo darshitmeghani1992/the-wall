@@ -14,7 +14,7 @@ function equal(actual: unknown, expected: unknown, message: string): void {
   if (actual !== expected) throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
 }
 function request(secret = SECRET): Request {
-  return new Request("https://project.supabase.co/functions/v1/account-deletion-worker/run", {
+  return new Request("https://ewintxgdxdvschiqodkq.supabase.co/functions/v1/account-deletion-worker/run", {
     method: "POST", headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
     body: JSON.stringify({ limit: 10 }),
   });
@@ -95,6 +95,37 @@ test("one failed account does not starve later due deletions", async () => {
   equal(deleted.join(","), secondUser, "later row completed");
 });
 
+test("account deletion adapter fails closed on every non-staging origin before any HTTP", () => {
+  let requests = 0;
+  const forbidden = [
+    "https://wfsfafmgvxevpzrurofz.supabase.co",
+    "https://otherproject.supabase.co",
+    "https://ewintxgdxdvschiqodkq.supabase.co.evil.test",
+    "http://ewintxgdxdvschiqodkq.supabase.co",
+    "https://ewintxgdxdvschiqodkq.supabase.co:8443",
+    "https://ewintxgdxdvschiqodkq.supabase.co/rest/v1/",
+    "https://ewintxgdxdvschiqodkq.supabase.co/?token=bad",
+    "https://user@ewintxgdxdvschiqodkq.supabase.co",
+    "",
+  ];
+  const fakeFetch = async (): Promise<Response> => {
+    requests += 1;
+    throw new Error("must never make HTTP requests");
+  };
+  for (const supabaseUrl of forbidden) {
+    let rejected = false;
+    try {
+      createSupabaseAccountDeletionAdapter({
+        supabaseUrl, serviceRoleKey: "k".repeat(32), fetch: fakeFetch as typeof fetch,
+      });
+    } catch (error) {
+      rejected = error instanceof Error && error.message === "unapproved account deletion backend";
+    }
+    equal(rejected, true, "non-staging origin rejected without leaking backend details");
+  }
+  equal(requests, 0, "no network requests to any unapproved project");
+});
+
 test("Supabase adapter sends exact storage, RPC, and Auth Admin requests", async () => {
   const calls: { url: string; method: string; body: unknown }[] = [];
   const responses: unknown[] = [
@@ -116,7 +147,7 @@ test("Supabase adapter sends exact storage, RPC, and Auth Admin requests", async
     });
   };
   const value = createSupabaseAccountDeletionAdapter({
-    supabaseUrl: "https://project.supabase.co/",
+    supabaseUrl: "https://ewintxgdxdvschiqodkq.supabase.co/",
     serviceRoleKey: "k".repeat(32),
     fetch: fakeFetch as typeof fetch,
   });
@@ -126,23 +157,23 @@ test("Supabase adapter sends exact storage, RPC, and Auth Admin requests", async
   equal(await value.prepare(USER, DUE.requested_at), true, "preparation response");
   await value.deleteIdentity(USER);
   equal(calls.length, 5, "request count");
-  equal(calls[0].url, "https://project.supabase.co/rest/v1/rpc/list_due_account_deletions", "due RPC URL");
+  equal(calls[0].url, "https://ewintxgdxdvschiqodkq.supabase.co/rest/v1/rpc/list_due_account_deletions", "due RPC URL");
   equal(calls[0].method, "POST", "due RPC method");
   equal(JSON.stringify(calls[0].body), JSON.stringify({ p_limit: 10 }), "due RPC body");
-  equal(calls[1].url, "https://project.supabase.co/storage/v1/object/list/attachments", "list URL");
+  equal(calls[1].url, "https://ewintxgdxdvschiqodkq.supabase.co/storage/v1/object/list/attachments", "list URL");
   equal(JSON.stringify(calls[1].body), JSON.stringify({
     prefix: `avatars/${USER}/`, limit: 100, offset: 0, sortBy: { column: "name", order: "asc" },
   }), "list body");
   equal(calls[1].method, "POST", "list method");
-  equal(calls[2].url, "https://project.supabase.co/storage/v1/object/attachments", "delete URL");
+  equal(calls[2].url, "https://ewintxgdxdvschiqodkq.supabase.co/storage/v1/object/attachments", "delete URL");
   equal(calls[2].method, "DELETE", "delete method");
   equal(JSON.stringify(calls[2].body), JSON.stringify({ prefixes: [`avatars/${USER}/avatar.jpg`] }), "delete body");
-  equal(calls[3].url, "https://project.supabase.co/rest/v1/rpc/prepare_account_deletion_for_purge", "prepare URL");
+  equal(calls[3].url, "https://ewintxgdxdvschiqodkq.supabase.co/rest/v1/rpc/prepare_account_deletion_for_purge", "prepare URL");
   equal(calls[3].method, "POST", "prepare method");
   equal(JSON.stringify(calls[3].body), JSON.stringify({
     p_user_id: USER, p_expected_requested_at: DUE.requested_at,
   }), "prepare body");
-  equal(calls[4].url, `https://project.supabase.co/auth/v1/admin/users/${USER}`, "Auth Admin URL");
+  equal(calls[4].url, `https://ewintxgdxdvschiqodkq.supabase.co/auth/v1/admin/users/${USER}`, "Auth Admin URL");
   equal(calls[4].method, "DELETE", "Auth Admin method");
 });
 
