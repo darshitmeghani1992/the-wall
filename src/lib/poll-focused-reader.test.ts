@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-ignore Dependency-free contract tests load source directly.
 import { isFocusedPollReaderEnabled, readFocusedWallCard } from "./poll-focused-reader.ts";
+// @ts-ignore Dependency-free contract tests load source directly.
+import { resolveDeferredDestination } from "./deferred-destination-resolver.ts";
+import type { DeferredDestination } from "./deferred-destination-contract";
 
 const actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const wall = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -71,5 +74,26 @@ test("selector rejects a foreign Wall, wrong identity, duplicate options and mis
   const wrongBallot = { ...sample, item: { ...sample.item, poll: { ...sample.item.poll, ballot: { revision: 1, option_ids: [other] } } } };
   for (const response of [wrongWall, wrongPoll, duplicate, invalidTotal, wrongBallot]) {
     await assert.rejects(readFocusedWallCard(actor, wall, mark, noLegacyMark, async () => response, true), /verify this Poll/);
+  }
+});
+
+test("focused Poll arrival keeps its exact Personal or Shared destination and honors the reader hold", async () => {
+  const routes: [DeferredDestination, string][] = [
+    [{ kind: "mark", markId: mark, container: { kind: "personal", ownerId: actor } }, "/(tabs)/home"],
+    [{ kind: "mark", markId: mark, container: { kind: "personal", ownerId: other } }, `/person/${other}`],
+    [{ kind: "mark", markId: mark, container: { kind: "shared", wallId: wall } }, `/shared/${wall}`],
+  ];
+
+  for (const [destination, route] of routes) {
+    const resolve = (enabled: boolean) => resolveDeferredDestination(destination, actor, {
+      personalWall: async () => ({ id: wall }),
+      sharedWall: async () => ({ id: wall }),
+      wallMark: (wallId, markId) => readFocusedWallCard(actor, wallId, markId, noLegacyMark, async () => fixture(), enabled),
+    });
+    assert.deepEqual(await resolve(isFocusedPollReaderEnabled), { status: "terminal_unavailable" });
+    const available = await resolve(true);
+    assert.equal(available.status, "available");
+    if (available.status !== "available") assert.fail("expected focused destination");
+    assert.equal(available.href, `${route}?focusMark=${mark}`);
   }
 });

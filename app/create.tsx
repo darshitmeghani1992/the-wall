@@ -163,7 +163,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const [targetLookupAttempt, setTargetLookupAttempt] = useState(0);
   const [phase, setPhase] = useState<"idle" | "uploading" | "posting">("idle");
   const [submissionLocked, setSubmissionLocked] = useState(false);
-  const [confirmedMarkId, setConfirmedMarkId] = useState<string | null>(null);
+  const [confirmedMark, setConfirmedMark] = useState<{ id: string; preview: "focusMark" | "justCreated" } | null>(null);
   const textSubmissionRef = useRef<PreparedTextMarkSubmission | null>(null);
   const mediaRequestRef = useRef<PreparedMediaMarkRequest | null>(null);
   const lockRef = useRef(new TextSubmissionLock());
@@ -236,13 +236,13 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   });
 
   useEffect(() => {
-    if (!isCurrentScope() || submissionLocked || !confirmedMarkId) return;
-    const markId = confirmedMarkId;
-    setConfirmedMarkId(null);
+    if (!isCurrentScope() || submissionLocked || !confirmedMark) return;
+    const { id: markId, preview } = confirmedMark;
+    setConfirmedMark(null);
     discardConfirmedRef.current = true;
     if (router.canDismiss()) router.dismissAll();
-    router.push(sharedMode ? `/shared/${sharedWallId}?justCreated=${markId}` : `/person/${recipientId}?justCreated=${markId}`);
-  }, [confirmedMarkId, isCurrentScope, recipientId, router, sharedMode, sharedWallId, submissionLocked]);
+    router.push(sharedMode ? `/shared/${sharedWallId}?${preview}=${markId}` : `/person/${recipientId}?${preview}=${markId}`);
+  }, [confirmedMark, isCurrentScope, recipientId, router, sharedMode, sharedWallId, submissionLocked]);
 
   useEffect(() => {
     let active = true;
@@ -486,7 +486,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
               },
             }]);
           } else {
-            setConfirmedMarkId(result.markId);
+            setConfirmedMark({ id: result.markId, preview: "focusMark" });
           }
           return;
         }
@@ -514,7 +514,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
           trackedRequestsRef.current.add(submission.requestId);
           track("Mark Created", { mark_type: "text", is_anonymous: anonymous, is_secret: secret });
         }
-        setConfirmedMarkId(result.markId);
+        setConfirmedMark({ id: result.markId, preview: "justCreated" });
         return;
       }
 
@@ -546,7 +546,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
         track("Mark Created", { mark_type: markType, is_anonymous: anonymous, is_secret: false });
         if (sharedMode) track("Shared Wall Mark Created", { mark_type: markType });
       }
-      setConfirmedMarkId(result.markId);
+      setConfirmedMark({ id: result.markId, preview: "justCreated" });
     } catch (cause) {
       if (isCurrentScope() && (!(cause instanceof MediaWriterError) || cause.code !== "stale")) {
         Alert.alert(pollMode ? "Couldn’t post your Poll" : "Couldn't post that", safeMediaMessage(cause));

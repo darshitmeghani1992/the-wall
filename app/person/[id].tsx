@@ -8,6 +8,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
+import { FocusedPollCard } from "@/components/FocusedPollCard";
 import { WallStatus } from "@/components/WallStatus";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useAuth } from "@/lib/auth";
@@ -22,7 +23,9 @@ import {
   type RelationshipState,
 } from "@/lib/friendships";
 import { getFollowCounts, isFollowing, followUser, unfollowUser } from "@/lib/follows";
-import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { getFocusedWallMark, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import type { FocusedPoll } from "@/lib/poll-focused-reader";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { useStaggeredArrivals } from "@/hooks/useStaggeredArrivals";
 import { useWallReactions } from "@/hooks/useWallReactions";
@@ -79,6 +82,7 @@ export default function PersonWall() {
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const [focusedMark, setFocusedMark] = useState<MarkWithAuthor | null>(null);
+  const [focusedPoll, setFocusedPoll] = useState<FocusedPoll | null>(null);
   const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
   const pageGeneration = useRef(0);
   const [relationship, setRelationship] = useState<RelationshipState>("none");
@@ -95,6 +99,8 @@ export default function PersonWall() {
   const [error, setError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const [focusedMarkUnavailable, setFocusedMarkUnavailable] = useState(false);
+  const currentFocusMarkId = useRef(focusMarkId);
+  currentFocusMarkId.current = focusMarkId;
   const currentUserId = useRef<string | null>(session?.user.id ?? null);
   const currentPersonId = useRef<string | null>(typeof id === "string" ? id : null);
   const loadFence = useRef(new SessionFocusFence());
@@ -150,7 +156,7 @@ export default function PersonWall() {
     setSelectedMark(null);
     setWall(null);
     setMarks([]);
-    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
     setLoadedIdentity(null);
     setCapabilities(null);
     try {
@@ -171,7 +177,8 @@ export default function PersonWall() {
       const personPromise = getProfile(personId);
       const personalWallPromise = getReadablePersonalWall(personId);
       let capabilitiesPromise: Promise<WallCapabilities | null> | null = null;
-      let markPromise: Promise<MarkWithAuthor | null> | null = null;
+      const readExact = (wallId: string, markId: string) => getFocusedWallMark(token.userId, wallId, markId);
+      let markPromise: ReturnType<typeof readExact> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
           ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "personal" as const, ownerId: personId } }
@@ -185,7 +192,7 @@ export default function PersonWall() {
             return wallCapabilities ? personalWall : null;
           },
           wallMark: async (wallId, markId) => {
-            markPromise ??= getWallMark(wallId, markId);
+            markPromise ??= readExact(wallId, markId);
             return markPromise;
           },
         });
@@ -231,9 +238,9 @@ export default function PersonWall() {
         if (!wallCapabilities) {
           return;
         }
-        const [page, exactMark, followState] = await Promise.all([
+        const [page, exactContent, followState] = await Promise.all([
           listWallMarks(personalWall.id),
-          focusMarkId ? (markPromise ?? getWallMark(personalWall.id, focusMarkId)) : Promise.resolve(null),
+          focusMarkId ? (markPromise ?? readExact(personalWall.id, focusMarkId)) : Promise.resolve(null),
           settleOptional(personalWall.visibility === "public" ? isFollowing(token.userId, personId) : Promise.resolve(false)),
         ]);
         if (!loadFence.current.isCurrent(token, currentUserId.current) || generation !== pageGeneration.current) return;
@@ -243,9 +250,11 @@ export default function PersonWall() {
         setFollowing(followState.available ? followState.value : false);
         setFollowStateAvailable(followState.available);
         if (focusMarkId) {
+          const exactMark = exactContent?.kind === "mark" ? exactContent.mark : null;
           setFocusedMark(exactMark);
           setSelectedMark(exactMark?.secret ? null : exactMark);
-          setFocusedMarkUnavailable(!exactMark);
+          setFocusedPoll(exactContent?.kind === "poll" ? exactContent.poll : null);
+          setFocusedMarkUnavailable(!exactContent);
         }
         if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
       }
@@ -520,6 +529,13 @@ export default function PersonWall() {
   if (reference && deferredAttempt?.reference === reference && !deferredAttempt.token) return <Redirect href="/(tabs)/home" />;
   if (loading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 60 }} /></Screen>;
 
+  const pollActorId = session.user.id;
+  const pollWallId = wall?.id;
+  const pollPersonId = String(id ?? "");
+  const pollGeneration = pageGeneration.current;
+  const visibleFocusedPoll = loadedIdentity === `${pollActorId}:${pollPersonId}:${focusMarkId ?? ""}` ? focusedPoll : null;
+  const visibleMarkCount = marks.length + (visibleFocusedPoll ? 1 : 0);
+
   return (
     <Screen>
       <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} hitSlop={10} style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}>
@@ -605,7 +621,15 @@ export default function PersonWall() {
                 </Pressable>
               ) : null}
               {!canLeaveMark ? <Text variant="body" color={colors.outline} style={{ marginBottom: 24 }}>{contributionUnavailableCopy(wall.contribution_policy, relationship)}</Text> : null}
-              <Text variant="label" color={colors.outlineVariant}>{marks.length} {nextCursor ? "LOADED MARKS" : "MARKS"}</Text>
+              <Text variant="label" color={colors.outlineVariant}>{visibleMarkCount} {nextCursor ? "LOADED MARKS" : "MARKS"}</Text>
+              {visibleFocusedPoll && pollWallId && focusMarkId ? (
+                <FocusedPollCard key={`${pollActorId}:${pollWallId}:${focusMarkId}:${pollGeneration}`}
+                  poll={visibleFocusedPoll} target={{ actorId: pollActorId.toLowerCase(), wallId: pollWallId.toLowerCase(), markId: focusMarkId.toLowerCase() }}
+                  isCurrent={() => currentUserId.current === pollActorId && currentPersonId.current === pollPersonId
+                    && currentFocusMarkId.current === focusMarkId && pageGeneration.current === pollGeneration}
+                  mutate={mutateFocusedPoll}
+                  refresh={() => refreshFocusedPoll({ actorId: pollActorId, wallId: pollWallId, markId: focusMarkId })} />
+              ) : null}
               {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
                 <View style={{ marginBottom: 16 }}>
                   <Text variant="label">LINKED MARK</Text>
@@ -616,7 +640,7 @@ export default function PersonWall() {
                 <Masonry data={gridMarks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
                   <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
                 )} />
-              ) : (
+              ) : visibleFocusedPoll ? null : (
                 <View style={{ paddingVertical: 36, alignItems: "center" }}>
                   <Text variant="headline">No Marks yet</Text>
                   <Text variant="body" color={colors.outline} style={{ marginTop: 6 }}>Their Wall is waiting for its first story.</Text>

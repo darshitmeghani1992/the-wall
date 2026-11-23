@@ -9,11 +9,14 @@ import { Masonry } from "@/components/Masonry";
 import { InviteCrew } from "@/components/InviteCrew";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
+import { FocusedPollCard } from "@/components/FocusedPollCard";
 import { WallStatus } from "@/components/WallStatus";
 import { shareMyWall, inviteFriends } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
-import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { getFocusedWallMark, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import type { FocusedPoll } from "@/lib/poll-focused-reader";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getAccessibleSharedWalls } from "@/lib/walls";
 import { SessionFocusFence } from "@/lib/session-generation";
@@ -67,6 +70,7 @@ export default function MyWall() {
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const [focusedMark, setFocusedMark] = useState<MarkWithAuthor | null>(null);
+  const [focusedPoll, setFocusedPoll] = useState<FocusedPoll | null>(null);
   const [loadedSubject, setLoadedSubject] = useState<string | null>(null);
   const pageGeneration = useRef(0);
   const hasFocused = useRef(false);
@@ -82,6 +86,8 @@ export default function MyWall() {
   const [selectedMark, setSelectedMark] = useState<MarkWithAuthor | null>(null);
   const dropIds = useRef<Set<string>>(new Set(justCreated ? [String(justCreated)] : []));
   const sharedWallsFence = useRef(new SessionFocusFence()).current;
+  const currentFocusMarkId = useRef(focusMarkId);
+  currentFocusMarkId.current = focusMarkId;
   const currentUserId = useRef<string | null>(userId ?? null);
   currentUserId.current = userId ?? null;
 
@@ -145,7 +151,7 @@ export default function MyWall() {
     let active = true;
     const generationGuard = pageGeneration;
     const generation = ++generationGuard.current;
-    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null);
+    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
     // Never render a prior account's friend total while a new Wall loads.
     setFriendCount(null);
     setLoadedSubject(null);
@@ -170,7 +176,8 @@ export default function MyWall() {
       setSelectedMark(null);
 
       const personalWallPromise = getPersonalWall(userId);
-      let markPromise: Promise<MarkWithAuthor | null> | null = null;
+      const readExact = (wallId: string, markId: string) => getFocusedWallMark(userId, wallId, markId);
+      let markPromise: ReturnType<typeof readExact> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
           ? { kind: "mark" as const, markId: focusMarkId, container: { kind: "personal" as const, ownerId: userId } }
@@ -178,7 +185,7 @@ export default function MyWall() {
         const resolution = await resolveDeferredDestination(destination, userId, {
           personalWall: async () => personalWallPromise,
           wallMark: async (wallId, markId) => {
-            markPromise ??= getWallMark(wallId, markId);
+            markPromise ??= readExact(wallId, markId);
             return markPromise;
           },
         });
@@ -211,9 +218,9 @@ export default function MyWall() {
       }
 
       setWall(personalWall);
-      const [page, exactMark, friends] = await Promise.all([
+      const [page, exactContent, friends] = await Promise.all([
         listWallMarks(personalWall.id),
-        focusMarkId ? (markPromise ?? getWallMark(personalWall.id, focusMarkId)) : Promise.resolve(null),
+        focusMarkId ? (markPromise ?? readExact(personalWall.id, focusMarkId)) : Promise.resolve(null),
         settleOptional(supabase
           .from("friendships")
           .select("requester_id", { count: "exact", head: true })
@@ -229,9 +236,11 @@ export default function MyWall() {
       setLoadedSubject(`${userId}:${focusMarkId ?? ""}`);
       setNextCursor(page.nextCursor);
       if (focusMarkId) {
+        const exactMark = exactContent?.kind === "mark" ? exactContent.mark : null;
         setFocusedMark(exactMark);
         setSelectedMark(exactMark?.secret ? null : exactMark);
-        setFocusedMarkUnavailable(!exactMark);
+        setFocusedPoll(exactContent?.kind === "poll" ? exactContent.poll : null);
+        setFocusedMarkUnavailable(!exactContent);
       }
       setFriendCount(friends.available ? friends.value : null);
       if (capturedDeferredToken) setDeferredReadyToken(capturedDeferredToken);
@@ -291,6 +300,12 @@ export default function MyWall() {
   );
   const initial = (actorProfile?.display_name?.[0] ?? "?").toUpperCase();
 
+  const pollActorId = session?.user.id ?? "";
+  const pollWallId = wall?.id;
+  const pollGeneration = pageGeneration.current;
+  const visibleFocusedPoll = loadedSubject === `${userId}:${focusMarkId ?? ""}` ? focusedPoll : null;
+  const visibleMarkCount = marks.length + (visibleFocusedPoll ? 1 : 0);
+
   const Header = useCallback(
     () => (
       <>
@@ -319,7 +334,7 @@ export default function MyWall() {
               {wall?.name ?? `${actorProfile?.display_name ?? "My"}'s Wall`}
             </Text>
             <Text variant="label" color={colors.outline}>
-              {marks.length} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
+              {visibleMarkCount} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
             </Text>
           </View>
         </View>
@@ -415,7 +430,7 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, marks.length, nextCursor, actorProfile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
+    [filter, friendCount, initial, visibleMarkCount, nextCursor, actorProfile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
@@ -454,6 +469,14 @@ export default function MyWall() {
         </View>
       ) : null}
 
+      {visibleFocusedPoll && pollWallId && focusMarkId ? (
+        <FocusedPollCard key={`${pollActorId}:${pollWallId}:${focusMarkId}:${pollGeneration}`}
+          poll={visibleFocusedPoll} target={{ actorId: pollActorId.toLowerCase(), wallId: pollWallId.toLowerCase(), markId: focusMarkId.toLowerCase() }}
+          isCurrent={() => currentUserId.current === pollActorId && wall?.owner_id === pollActorId
+            && currentFocusMarkId.current === focusMarkId && pageGeneration.current === pollGeneration}
+          mutate={mutateFocusedPoll}
+          refresh={() => refreshFocusedPoll({ actorId: pollActorId, wallId: pollWallId, markId: focusMarkId })} />
+      ) : null}
       {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
         <View style={{ marginBottom: 16 }}>
           <Text variant="label">LINKED MARK</Text>
@@ -469,7 +492,7 @@ export default function MyWall() {
         </View>
       ) : loading ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
-      ) : marks.length === 0 ? (
+      ) : visibleFocusedPoll && marks.length === 0 ? null : marks.length === 0 ? (
         <View style={{ marginTop: 8 }}><InviteCrew handle={actorProfile?.handle} /></View>
       ) : visible.length === 0 ? (
         <Text variant="body" color={colors.outline} style={{ marginTop: 24, textAlign: "center" }}>

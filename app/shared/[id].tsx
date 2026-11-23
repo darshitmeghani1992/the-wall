@@ -10,12 +10,11 @@ import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
 import { useAuth } from "@/lib/auth";
 import { getWall, getWallCapabilities, joinSharedWall, leaveSharedWall, type WallCapabilities } from "@/lib/walls";
-import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
+import { listWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getProfile } from "@/lib/profiles";
-import { isFocusedPollReaderEnabled, readFocusedPoll, readFocusedWallCard, type FocusedPoll, type PollReadRequest } from "@/lib/poll-focused-reader";
-import { supabase } from "@/lib/supabase";
-import { isPollInteractionEnabled, type PollMutation } from "@/lib/poll-voting-contract";
+import { getFocusedWallMark, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import type { FocusedPoll } from "@/lib/poll-focused-reader";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { settleOptional } from "@/lib/optional-result";
 import { beginExclusiveMutation, endExclusiveMutation } from "@/lib/mutation-guard";
@@ -35,21 +34,6 @@ import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver"
 import { destinationForAccountRoute } from "@/lib/onboarding-contract";
 
 type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
-
-async function fetchPollDetail(args: PollReadRequest): Promise<unknown> {
-  const { data, error } = await supabase.rpc("get_wall_mark_v2", args);
-  if (error) throw new Error("Couldn’t load this Poll. Please try again.");
-  return data;
-}
-
-async function mutateFocusedPoll(request: PollMutation): Promise<unknown> {
-  if (!isFocusedPollReaderEnabled || !isPollInteractionEnabled) throw new Error("Poll changes are unavailable.");
-  const response = request.kind === "vote"
-    ? await supabase.rpc("replace_poll_ballot", request.args)
-    : await supabase.rpc("close_poll_mark", request.args);
-  if (response.error) throw response.error;
-  return response.data;
-}
 
 export default function SharedWallScreen() {
   const router = useRouter();
@@ -130,9 +114,7 @@ export default function SharedWallScreen() {
     try {
       const wallPromise = getWall(requestedWallId);
       const capabilitiesPromise = getWallCapabilities(requestedWallId);
-      const readExact = (targetWallId: string, markId: string) => readFocusedWallCard(
-        token.userId, targetWallId, markId, getWallMark, fetchPollDetail, isFocusedPollReaderEnabled,
-      );
+      const readExact = (targetWallId: string, markId: string) => getFocusedWallMark(token.userId, targetWallId, markId);
       let markPromise: ReturnType<typeof readExact> | null = null;
       if (capturedDeferredToken) {
         const destination = focusMarkId
@@ -366,7 +348,7 @@ export default function SharedWallScreen() {
           isCurrent={() => currentUserId.current === pollActorId && currentWallId.current === wallId
             && currentFocusMarkId.current === focusMarkId && pageGeneration.current === pollGeneration}
           mutate={mutateFocusedPoll}
-          refresh={() => readFocusedPoll(pollActorId, wallId, focusMarkId, fetchPollDetail, isFocusedPollReaderEnabled)} />
+          refresh={() => refreshFocusedPoll({ actorId: pollActorId, wallId, markId: focusMarkId })} />
       ) : null}
       {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
         <View style={{ marginBottom: 16 }}>
