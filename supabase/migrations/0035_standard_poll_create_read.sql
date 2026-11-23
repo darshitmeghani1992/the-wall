@@ -182,6 +182,11 @@ begin
   v_parent := jsonb_build_object(
     'id',p_mark.id,'wall_id',p_mark.wall_id,'author_id',case when p_mark.anonymous then null else p_mark.author_id end,
     'type',p_mark.type,'text',p_mark.text,'color',p_mark.color,'anonymous',p_mark.anonymous,'secret',p_mark.secret,
+    -- Keep the existing authorized photo/voice/video projection usable when
+    -- callers move from raw Mark history to the mixed v2 Poll history. The
+    -- protected-media URI is still acquired through the signed read endpoint;
+    -- this only preserves the already RLS-readable Mark metadata fields.
+    'media_url',p_mark.media_url,'payload',p_mark.payload,
     'rotation',p_mark.rotation,'pinned',p_mark.pinned,'status',p_mark.status,'created_at',p_mark.created_at
   );
   return jsonb_build_object('kind','mark','mark',v_parent);
