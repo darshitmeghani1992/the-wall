@@ -7,13 +7,16 @@ export type FocusedPoll = {
   state: "open" | "closed";
   options: readonly { id: string; label: string; count: number | null }[];
   ballotTotal: number | null;
+  revision: number;
+  capabilities: { canVote: boolean; canClose: boolean };
+  ballot: { revision: number; optionIds: readonly string[] } | null;
 };
 
 type FocusedWallCard<T> =
   | { id: string; kind: "mark"; mark: T }
   | { id: string; kind: "poll"; poll: FocusedPoll };
 
-type PollReadRequest = {
+export type PollReadRequest = {
   p_expected_actor_id: string;
   p_wall_id: string;
   p_mark_id: string;
@@ -40,10 +43,12 @@ function parsePoll(value: unknown, wallId: string, markId: string): FocusedPoll 
   if (!isRecord(mark) || mark.id !== markId || mark.wall_id !== wallId || mark.status !== "active") return invalidPoll();
   if (item.kind === "mark") return null;
   if (item.kind !== "poll" || mark.type !== "poll" || mark.secret !== false || !isRecord(item.poll)) return invalidPoll();
-  const { mark_id: pollId, question, selection_mode: selectionMode, state, options: rawOptions, results } = item.poll;
+  const { mark_id: pollId, question, selection_mode: selectionMode, state, options: rawOptions, results, revision, capabilities, ballot: rawBallot } = item.poll;
   if (pollId !== markId || typeof question !== "string" || !question.trim() || Array.from(question).length > 500
     || (selectionMode !== "single" && selectionMode !== "multiple") || (state !== "open" && state !== "closed")
-    || !Array.isArray(rawOptions) || rawOptions.length < 2 || rawOptions.length > 6) return invalidPoll();
+    || !Array.isArray(rawOptions) || rawOptions.length < 2 || rawOptions.length > 6
+    || !isCount(revision) || revision < 1 || !isRecord(capabilities)
+    || typeof capabilities.can_vote !== "boolean" || typeof capabilities.can_close !== "boolean") return invalidPoll();
 
   const identifiers = new Set<string>();
   const options = rawOptions.map((option, position) => {
@@ -53,7 +58,18 @@ function parsePoll(value: unknown, wallId: string, markId: string): FocusedPoll 
     identifiers.add(option.option_id);
     return { id: option.option_id, label: option.label, count: null as number | null };
   });
-  if (results === null) return { question, selectionMode, state, options, ballotTotal: null };
+  let ballot: FocusedPoll["ballot"] = null;
+  if (rawBallot !== null) {
+    if (!isRecord(rawBallot) || !isCount(rawBallot.revision) || rawBallot.revision < 1
+      || !Array.isArray(rawBallot.option_ids) || rawBallot.option_ids.length < 1
+      || (selectionMode === "single" && rawBallot.option_ids.length !== 1)
+      || new Set(rawBallot.option_ids).size !== rawBallot.option_ids.length
+      || !rawBallot.option_ids.every((id: unknown) => typeof id === "string" && identifiers.has(id))) return invalidPoll();
+    ballot = { revision: rawBallot.revision, optionIds: rawBallot.option_ids };
+  }
+  const display: Omit<FocusedPoll, "ballotTotal"> = { question, selectionMode, state, options, revision, ballot,
+    capabilities: { canVote: state === "open" && capabilities.can_vote, canClose: state === "open" && capabilities.can_close } };
+  if (results === null) return { ...display, ballotTotal: null };
   if (!isRecord(results) || !isCount(results.ballot_total) || !Array.isArray(results.counts)
     || results.counts.length !== options.length) return invalidPoll();
   const ballotTotal = results.ballot_total;
@@ -65,7 +81,7 @@ function parsePoll(value: unknown, wallId: string, markId: string): FocusedPoll 
     option.count = row.count;
   }
   if (selections < ballotTotal || (selectionMode === "single" && selections !== ballotTotal)) return invalidPoll();
-  return { question, selectionMode, state, options, ballotTotal };
+  return { ...display, ballotTotal };
 }
 
 export async function readFocusedWallCard<T extends { id: string }>(
@@ -78,6 +94,17 @@ export async function readFocusedWallCard<T extends { id: string }>(
 ): Promise<FocusedWallCard<T> | null> {
   const legacy = await readLegacy(wallId, markId);
   if (legacy) return { id: legacy.id, kind: "mark", mark: legacy };
+  const poll = await readFocusedPoll(actorId, wallId, markId, readPollV2, enablePoll);
+  return poll ? { id: markId.toLowerCase(), kind: "poll", poll } : null;
+}
+
+export async function readFocusedPoll(
+  actorId: string,
+  wallId: string,
+  markId: string,
+  readPollV2: (request: PollReadRequest) => Promise<unknown>,
+  enablePoll: boolean,
+): Promise<FocusedPoll | null> {
   if (!enablePoll || !isCanonicalUuid(actorId) || !isCanonicalUuid(wallId) || !isCanonicalUuid(markId)) return null;
   const canonicalWallId = wallId.toLowerCase();
   const canonicalMarkId = markId.toLowerCase();
@@ -86,6 +113,5 @@ export async function readFocusedWallCard<T extends { id: string }>(
     p_wall_id: canonicalWallId,
     p_mark_id: canonicalMarkId,
   });
-  const poll = parsePoll(result, canonicalWallId, canonicalMarkId);
-  return poll ? { id: canonicalMarkId, kind: "poll", poll } : null;
+  return parsePoll(result, canonicalWallId, canonicalMarkId);
 }

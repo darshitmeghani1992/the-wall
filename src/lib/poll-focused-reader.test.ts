@@ -16,7 +16,8 @@ const fixture = () => ({
     kind: "poll",
     mark: { id: mark, wall_id: wall, status: "active", type: "poll", secret: false },
     poll: {
-      mark_id: mark, question: "Where?", selection_mode: "multiple", state: "closed",
+      mark_id: mark, question: "Where?", selection_mode: "multiple", state: "closed", revision: 2,
+      capabilities: { can_vote: true, can_close: true },
       options: [{ option_id: first, position: 0, label: "Home" }, { option_id: second, position: 1, label: "Park" }],
       ballot: { revision: 1, option_ids: [first] },
       results: { ballot_total: 1, counts: [{ option_id: first, count: 1 }, { option_id: second, count: 1 }] },
@@ -43,6 +44,7 @@ test("focused Poll reads send exact actor, Wall and Mark and return only display
   assert.deepEqual(calls, [{ p_expected_actor_id: actor, p_wall_id: wall, p_mark_id: mark }]);
   assert.deepEqual(result, { id: mark, kind: "poll", poll: {
     question: "Where?", selectionMode: "multiple", state: "closed", ballotTotal: 1,
+    revision: 2, capabilities: { canVote: false, canClose: false }, ballot: { revision: 1, optionIds: [first] },
     options: [{ id: first, label: "Home", count: 1 }, { id: second, label: "Park", count: 1 }],
   } });
 });
@@ -66,7 +68,8 @@ test("selector rejects a foreign Wall, wrong identity, duplicate options and mis
     { ...sample.item.poll.options[0] }, { ...sample.item.poll.options[1], option_id: first },
   ] } } };
   const invalidTotal = { ...sample, item: { ...sample.item, poll: { ...sample.item.poll, selection_mode: "single" } } };
-  for (const response of [wrongWall, wrongPoll, duplicate, invalidTotal]) {
+  const wrongBallot = { ...sample, item: { ...sample.item, poll: { ...sample.item.poll, ballot: { revision: 1, option_ids: [other] } } } };
+  for (const response of [wrongWall, wrongPoll, duplicate, invalidTotal, wrongBallot]) {
     await assert.rejects(readFocusedWallCard(actor, wall, mark, noLegacyMark, async () => response, true), /verify this Poll/);
   }
 });
