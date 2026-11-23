@@ -73,6 +73,13 @@ BEGIN
             RAISE EXCEPTION '81 FAIL: client role % has % on service-only table public.%',
               v_role, v_privilege, v_name;
           END IF;
+          -- REFERENCES may also be granted only on individual columns, even
+          -- when the table-wide permission is denied (same trap as CRUD).
+          IF v_privilege = 'REFERENCES'
+             AND has_any_column_privilege(v_role, v_oid, 'REFERENCES') THEN
+            RAISE EXCEPTION '81 FAIL: client role % has column REFERENCES on service-only table public.%',
+              v_role, v_name;
+          END IF;
         END LOOP;
       END IF;
     END LOOP;
