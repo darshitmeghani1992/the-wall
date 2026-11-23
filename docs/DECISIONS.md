@@ -1,4 +1,4 @@
-## D-46 · 23 Nov 2026 · Separate held iOS staging TestFlight packaging from production submission
+## D-47 · 23 Nov 2026 · Separate held iOS staging TestFlight packaging from production submission
 
 - **Release need:** An unsigned iOS simulator smoke is insufficient for the first genuine full-feature iPhone testers. The existing `eas.json` lacked a named staging-specific store IPA profile, making later signed QA prone to using the generic `production` EAS build profile with ambiguous channels.
 - **ARCHITECT decision (approved draft preparation only):** Add explicit `ios-staging-testflight` EAS build profile with `distribution: store`, channel `ios-staging-testflight`, `environment: preview`, and `ios.simulator: false`; no automatic submit. Reuse the existing hard-fail `eas-build-pre-install` validation of approved staging origin, project-bound public key, and disabled sensitive feature flags. Add a source contract and a fail-closed signed-iPhone QA/rollback runbook at `docs/qa/IOS_STAGING_TESTFLIGHT_RUNBOOK.md`. This is **not** a public release environment and does not authorize an Apple signed build.
