@@ -83,7 +83,15 @@ function checkedConfig(env) {
       actors.some(a => !UUID.test(a.id || '') || !isStagingUserJwt(a.jwt, a.id))) {
     throw new Error('Three distinct authenticated actor IDs/JWTs required');
   }
-  return { apiKey: env.TW_STAGING_ANON_KEY, wallId: env.TW_PRIVATE_WALL_ID, actors };
+  if (!UUID.test(env.TW_PRIVATE_TEXT_MARK_ID || '')) {
+    throw new Error('Existing active private text Mark fixture ID required');
+  }
+  return {
+    apiKey: env.TW_STAGING_ANON_KEY,
+    wallId: env.TW_PRIVATE_WALL_ID,
+    textMarkId: env.TW_PRIVATE_TEXT_MARK_ID,
+    actors,
+  };
 }
 
 async function getJson(fetchImpl, url, apiKey, token) {
@@ -106,10 +114,17 @@ async function getJson(fetchImpl, url, apiKey, token) {
 }
 
 export async function runStagingJwtAudit(env, fetchImpl = fetch) {
-  const { actors, wallId, apiKey } = checkedConfig(env);
+  const { actors, wallId, textMarkId, apiKey } = checkedConfig(env);
   const wallUrl = new URL('/rest/v1/walls', STAGING);
   wallUrl.searchParams.set('select', 'id,type,visibility');
   wallUrl.searchParams.set('id', 'eq.' + wallId);
+  // Read metadata only, never private Mark text, author identity, or media.
+  // Require a genuine active, non-Secret text fixture to prevent an empty
+  // database from producing a meaningless privacy PASS.
+  const markUrl = new URL('/rest/v1/marks', STAGING);
+  markUrl.searchParams.set('select', 'id,wall_id,type,status,secret');
+  markUrl.searchParams.set('id', 'eq.' + textMarkId);
+  markUrl.searchParams.set('wall_id', 'eq.' + wallId);
   for (const actor of actors) {
     const user = await getJson(fetchImpl, STAGING + '/auth/v1/user', apiKey, actor.jwt);
     if (!user || user.id !== actor.id) {
@@ -120,6 +135,13 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
         (actor.expect === 1 && (rows[0]?.id !== wallId ||
           rows[0]?.type !== 'shared' || rows[0]?.visibility !== 'private'))) {
       throw new Error('Private Shared Wall RLS visibility mismatch: ' + actor.role);
+    }
+    const marks = await getJson(fetchImpl, markUrl.toString(), apiKey, actor.jwt);
+    if (!Array.isArray(marks) || marks.length !== actor.expect ||
+        (actor.expect === 1 && (marks[0]?.id !== textMarkId ||
+          marks[0]?.wall_id !== wallId || marks[0]?.type !== 'text' ||
+          marks[0]?.status !== 'active' || marks[0]?.secret !== false))) {
+      throw new Error('Private text Mark RLS visibility mismatch: ' + actor.role);
     }
   }
   // This is an *RLS* verification, not just proof that an HTTP request failed.
@@ -158,7 +180,35 @@ export async function runStagingJwtAudit(env, fetchImpl = fetch) {
   if (rows.length !== 0) {
     throw new Error('Private Shared Wall visible without authentication');
   }
-  return { status: 'PASS', httpRequests: 7, actorCount: 3, readOnly: true };
+  // The same private text Mark must also be invisible to an anonymous
+  // application-key caller. Denial at a gateway is inconclusive here, just
+  // as it is for the private Shared Wall above.
+  const anonMark = await fetchImpl(markUrl.toString(), {
+    method: 'GET',
+    redirect: 'error',
+    headers: {
+      apikey: apiKey,
+      ...(apiKey.startsWith('sb_publishable_') ? {} : { Authorization: 'Bearer ' + apiKey }),
+      Accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (anonMark.status !== 200) {
+    throw new Error('Anonymous text Mark RLS check inconclusive: expected HTTP 200, got ' + anonMark.status);
+  }
+  let anonymousMarks;
+  try {
+    anonymousMarks = await anonMark.json();
+  } catch {
+    throw new Error('Malformed anonymous text Mark HTTP JSON response');
+  }
+  if (!Array.isArray(anonymousMarks)) {
+    throw new Error('Malformed anonymous text Mark HTTP JSON response');
+  }
+  if (anonymousMarks.length !== 0) {
+    throw new Error('Private text Mark visible without authentication');
+  }
+  return { status: 'PASS', httpRequests: 11, actorCount: 3, readOnly: true };
 }
 
 if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
@@ -169,13 +219,14 @@ if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
   } else {
     try {
       const result = await runStagingJwtAudit(process.env);
-      console.log('PASS: ' + result.actorCount + ' distinct real JWT identities; private Shared Wall GET visibility');
+      console.log('PASS: ' + result.actorCount + ' distinct real JWT identities; private Shared Wall and text Mark RLS GET visibility');
     } catch (error) {
       // Only predefined error strings from this script are printed. Credentials,
       // response bodies, and fetch's arbitrary error cause are never printed.
       const message = error instanceof Error && (
         error.message.startsWith('Authenticated actor identity mismatch:') ||
         error.message.startsWith('Private Shared Wall RLS visibility mismatch:') ||
+        error.message.startsWith('Private text Mark RLS visibility mismatch:') ||
         error.message.startsWith('Authenticated staging GET failed with HTTP ') ||
         error.message.startsWith('Three distinct authenticated') ||
         error.message.startsWith('Existing private Shared') ||
@@ -186,6 +237,10 @@ if (process.argv[1]?.endsWith('staging-three-jwt-readonly.mjs')) {
         error.message.startsWith('Malformed staging HTTP') ||
         error.message.startsWith('Malformed anonymous staging HTTP') ||
         error.message.startsWith('Private Shared Wall visible without authentication') ||
+        error.message.startsWith('Private text Mark visible without authentication') ||
+        error.message.startsWith('Existing active private text Mark') ||
+        error.message.startsWith('Anonymous text Mark RLS check inconclusive:') ||
+        error.message.startsWith('Malformed anonymous text Mark HTTP') ||
         error.message.startsWith('Anonymous RLS check inconclusive:'))
         ? error.message : 'Staging network/runtime error';
       console.error('NO-GO: ' + message);
