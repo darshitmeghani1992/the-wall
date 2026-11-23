@@ -46,3 +46,13 @@ test("native photo and video picker results cannot outlive the editor or overwri
   assert.match(composer, /current\.length === 0 \? \[draft\] : current/);
   assert.match(composer, /current\.some\(\(item\) => item\.kind !== "photo"\) \? current/);
 });
+
+test("discard prevents submission and late voice metadata cannot replace another attachment", () => {
+  const composer = readFileSync(new URL("../app/create.tsx", import.meta.url), "utf8");
+  const voice = composer.split("async function attachVoiceClip")[1].split("async function toggleVoice")[0];
+  assert.match(composer, /async function submit\(\) \{\s*if \(!isCurrentScope\(\) \|\| pickerInFlight\.current \|\| !canSubmit \|\| discardConfirmedRef\.current/);
+  assert.match(voice, /const token = lifecycleRef\.current/);
+  assert.match(voice, /const canAttach = \(\) => isCurrentScope\(\) && token === lifecycleRef\.current && !discardConfirmedRef\.current && !pickerInFlight\.current/);
+  assert.match(voice, /await getLocalMediaSize\(clip\.uri\);\s*if \(!canAttach\(\)\) return/);
+  assert.match(voice, /current\.length === 0 \? \[draft\] : current/);
+});
