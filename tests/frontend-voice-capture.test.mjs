@@ -10,3 +10,20 @@ test("the recorder time limit and manual stop share the composer attachment call
   assert.match(composer, /useVoiceRecorder\(attachVoiceClip\)/);
   assert.match(composer, /if \(recording\) await recorder\.stop\(\)/);
 });
+
+test("pending microphone permission is a real composer lifecycle gate, not an idle gap", () => {
+  const recorder = readFileSync(new URL("../src/lib/recording.ts", import.meta.url), "utf8");
+  const composer = readFileSync(new URL("../app/create.tsx", import.meta.url), "utf8");
+
+  assert.match(recorder, /phase: "idle" \| "starting" \| "recording" \| "stopped"/);
+  assert.match(recorder, /starting\.current = true;\s*setPhase\("starting"\)/);
+  assert.ok(recorder.indexOf('setPhase("starting")') < recorder.indexOf("Audio.requestPermissionsAsync()"));
+  assert.match(recorder, /if \(!perm\.granted\) \{\s*setDenied\(true\);\s*setPhase\("idle"\)/);
+  assert.match(composer, /const voiceStarting = recorder\.phase === "starting"/);
+  assert.match(composer, /const voiceBusy = recording \|\| voiceStarting/);
+  assert.match(composer, /!voiceBusy && \(pollMode \? canSubmitPoll/);
+  assert.match(composer, /usePreventRemove\(\(hasContent \|\| voiceBusy \|\| submissionLocked\)/);
+  assert.match(composer, /if \(!hasContent && !voiceBusy\) return router\.back\(\)/);
+  assert.match(composer, /voiceStarting \? <View accessibilityRole="alert"/);
+  assert.match(composer, /if \(isCurrentScope\(\)\) Alert\.alert\("Couldn\\'t record"/);
+});
