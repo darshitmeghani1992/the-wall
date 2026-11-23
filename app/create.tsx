@@ -157,6 +157,8 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const [anonymous, setAnonymous] = useState(false);
   const [secret, setSecret] = useState(false);
   const [media, setMedia] = useState<MediaWriterDraft[]>([]);
+  const [pickingMedia, setPickingMedia] = useState(false);
+  const pickerInFlight = useRef(false);
   const [wallId, setWallId] = useState<string | null>(null);
   const [allowAnonymous, setAllowAnonymous] = useState(true);
   const [targetError, setTargetError] = useState<{ status: "unavailable" | "retryable"; message: string } | null>(null);
@@ -177,7 +179,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const recording = recorder.phase === "recording";
   const voiceStarting = recorder.phase === "starting";
   const voiceBusy = recording || voiceStarting;
-  const busy = phase !== "idle";
+  const busy = phase !== "idle" || pickingMedia;
   mediaRef.current = media;
 
   useEffect(() => { lifecycleRef.current += 1; }, [currentUserId, sessionGeneration, mediaAppActive]);
@@ -227,7 +229,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     }));
     await recorder.reset();
   }
-  usePreventRemove((hasContent || voiceBusy || submissionLocked) && !discardConfirmedRef.current, ({ data }) => {
+  usePreventRemove((hasContent || voiceBusy || submissionLocked || pickingMedia) && !discardConfirmedRef.current, ({ data }) => {
     if (!isCurrentScope() || submissionLocked) return;
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
@@ -274,19 +276,22 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const canSubmitPoll = isPollComposerEnabled && !secret && !anonymous && media.length === 0 && pollValidation?.status === "valid";
   const canSubmitExisting = !overLimit && hasTextOrMedia && !(secret && media.length)
     && (isMediaComposerEnabled || media.length === 0) && (!secret || isSecretComposerEnabled);
-  const canSubmit = Boolean(wallId && currentUserId && !voiceBusy && (pollMode ? canSubmitPoll : canSubmitExisting));
+  const canSubmit = Boolean(wallId && currentUserId && !pickingMedia && !voiceBusy && (pollMode ? canSubmitPoll : canSubmitExisting));
 
   function updatePollDraft(update: (draft: PollDraft) => PollDraft) {
     if (isPollComposerEnabled && pollMode) lockRef.current.runIntent(() => setPollDraft(update));
   }
 
   function requestNonSecretMedia(intent: () => void) {
-    if (!lockRef.current.allowsIntent()) return;
+    if (!isCurrentScope() || discardConfirmedRef.current || pickerInFlight.current || !lockRef.current.allowsIntent()) return;
     if (!secret) return intent();
     Alert.alert("Turn off Secret Mark?",
       "Secret media isn't supported yet. Your media will use protected Wall access, but it won't be one-time Secret content.", [
         { text: "Keep Secret", style: "cancel" },
-        { text: "Turn off & continue", onPress: () => { setSecret(false); intent(); } },
+        { text: "Turn off & continue", onPress: () => {
+          if (!isCurrentScope() || discardConfirmedRef.current || pickerInFlight.current || !lockRef.current.allowsIntent()) return;
+          setSecret(false); intent();
+        } },
       ]);
   }
 
@@ -301,11 +306,28 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
     return createMediaWriterDraft({ kind, uri: asset.uri, mime, bytes, durationMs: asset.duration ?? undefined }, createRequestId());
   }
 
+  function beginPicker(): (() => boolean) | null {
+    if (!isCurrentScope() || discardConfirmedRef.current || pickerInFlight.current || !lockRef.current.allowsIntent() || voiceBusy) return null;
+    pickerInFlight.current = true;
+    setPickingMedia(true);
+    // Native photo/camera UI can temporarily make AppState inactive. Scope and
+    // draft locks, not foreground state, decide whether its result may attach.
+    return () => isCurrentScope() && !discardConfirmedRef.current && pickerInFlight.current && lockRef.current.allowsIntent();
+  }
+
+  function finishPicker() {
+    pickerInFlight.current = false;
+    if (isCurrentScope()) setPickingMedia(false);
+  }
+
   async function pickPhotos(fromCamera: boolean) {
+    const canAttach = beginPicker();
+    if (!canAttach) return;
     try {
       if (media.some((draft) => draft.kind !== "photo") || media.length >= 5) return;
       if (fromCamera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!canAttach()) return;
         if (!permission.granted) return Alert.alert("Camera access is off", "Enable camera access in Settings to add a photo.", [
           { text: "Not now", style: "cancel" },
           { text: "Open Settings", onPress: () => void Linking.openSettings() },
@@ -316,18 +338,24 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false, quality: 0.8 })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsMultipleSelection: true, selectionLimit: remaining, orderedSelection: true, quality: 0.8 });
-      if (result.canceled) return;
+      if (result.canceled || !canAttach()) return;
       const drafts = await Promise.all(result.assets.slice(0, remaining).map((asset) => draftFromAsset("photo", asset)));
-      lockRef.current.runIntent(() => setMedia((current) => [...current, ...drafts].slice(0, 5)));
+      if (!canAttach()) return;
+      lockRef.current.runIntent(() => setMedia((current) => current.some((item) => item.kind !== "photo") ? current : [...current, ...drafts].slice(0, 5)));
     } catch (cause) {
-      Alert.alert("Couldn't add that photo", cause instanceof Error ? cause.message : "Choose another photo.");
+      if (canAttach()) Alert.alert("Couldn't add that photo", cause instanceof Error ? cause.message : "Choose another photo.");
+    } finally {
+      finishPicker();
     }
   }
 
   async function pickVideo(fromCamera: boolean) {
+    const canAttach = beginPicker();
+    if (!canAttach) return;
     try {
       if (fromCamera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!canAttach()) return;
         if (!permission.granted) return Alert.alert("Camera access is off", "Enable camera access in Settings to record a video.", [
           { text: "Not now", style: "cancel" },
           { text: "Open Settings", onPress: () => void Linking.openSettings() },
@@ -338,10 +366,14 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
       const result = fromCamera
         ? await ImagePicker.launchCameraAsync(options)
         : await ImagePicker.launchImageLibraryAsync(options);
-      if (result.canceled) return;
-      setMedia([await draftFromAsset("video", result.assets[0])]);
+      if (result.canceled || !canAttach()) return;
+      const draft = await draftFromAsset("video", result.assets[0]);
+      if (!canAttach()) return;
+      lockRef.current.runIntent(() => setMedia((current) => current.length === 0 ? [draft] : current));
     } catch (cause) {
-      Alert.alert("Couldn't add that video", cause instanceof Error ? cause.message : "Choose another video.");
+      if (canAttach()) Alert.alert("Couldn't add that video", cause instanceof Error ? cause.message : "Choose another video.");
+    } finally {
+      finishPicker();
     }
   }
 
@@ -354,21 +386,24 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function attachVoiceClip(clip: VoiceResult) {
-    const canAttach = () => isCurrentScope() && !discardConfirmedRef.current;
+    const token = lifecycleRef.current;
+    const canAttach = () => isCurrentScope() && token === lifecycleRef.current && !discardConfirmedRef.current && !pickerInFlight.current;
     if (!canAttach()) return;
     try {
       const bytes = await getLocalMediaSize(clip.uri);
       if (!canAttach()) return;
       if (bytes > MEDIA_LIMITS.audio) throw new Error("Voice recordings must be under 8 MB.");
-      lockRef.current.runIntent(() => setMedia([createMediaWriterDraft({
+      const draft = createMediaWriterDraft({
         kind: "voice", uri: clip.uri, mime: clip.mime, bytes, durationMs: clip.durationMs,
-      }, createRequestId())]));
+      }, createRequestId());
+      lockRef.current.runIntent(() => setMedia((current) => current.length === 0 ? [draft] : current));
     } catch (cause) {
       if (canAttach()) Alert.alert("Couldn't use that recording", cause instanceof Error ? cause.message : "Please record it again.");
     }
   }
 
   async function toggleVoice() {
+    if (pickerInFlight.current || !isCurrentScope() || discardConfirmedRef.current) return;
     try {
       if (recording) await recorder.stop();
       else if (!voiceStarting) await recorder.start();
@@ -392,7 +427,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function retryDraft(draft: MediaWriterDraft) {
-    if (busy) return;
+    if (busy || pickerInFlight.current) return;
     const token = lifecycleRef.current;
     let retry = draft;
     if (draft.state === "failed" && draft.errorCode) {
@@ -417,7 +452,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function removeDraft(draft: MediaWriterDraft) {
-    if (busy) return;
+    if (busy || pickerInFlight.current) return;
     try {
       if (draft.uploadId && currentUserId) {
         updateDraft(draft.clientUploadId, { ...draft, state: "cancelling" });
@@ -432,6 +467,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   function moveDraft(index: number, direction: -1 | 1) {
+    if (pickerInFlight.current) return;
     setMedia((current) => {
       const target = index + direction;
       if (target < 0 || target >= current.length) return current;
@@ -459,7 +495,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
 
   function confirmDiscard() {
     if (!isCurrentScope()) return;
-    if (!hasContent && !voiceBusy) return router.back();
+    if (!hasContent && !voiceBusy && !pickerInFlight.current) return router.back();
     Alert.alert("Discard Mark?", "Your Mark won't be saved.", [
       { text: "Keep editing", style: "cancel" },
       { text: "Discard", style: "destructive", onPress: () => {
@@ -473,7 +509,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function submit() {
-    if (!isCurrentScope() || !canSubmit || !wallId || !currentUserId || submitInFlightRef.current || !lockRef.current.tryBegin()) return;
+    if (!isCurrentScope() || pickerInFlight.current || !canSubmit || discardConfirmedRef.current || !wallId || !currentUserId || submitInFlightRef.current || !lockRef.current.tryBegin()) return;
     submitInFlightRef.current = true;
     setSubmissionLocked(true);
     const token = lifecycleRef.current;
@@ -612,7 +648,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
       <View style={{ marginBottom: 14 }}>
         <AttachButton label={pollMode ? "Back to text and media" : "Poll"}
           disabled={busy || submissionLocked || (!pollMode && (voiceBusy || secret || anonymous || media.length > 0))}
-          onPress={() => lockRef.current.runIntent(() => setPollMode((current) => !current))} />
+          onPress={() => { if (!pickerInFlight.current) lockRef.current.runIntent(() => setPollMode((current) => !current)); }} />
       </View>
     ) : null}
     {isPollComposerEnabled && pollMode
@@ -684,7 +720,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
         subtitle={allowAnonymous ? "Name hidden" : "Not allowed here"} />
     </View></View>
 
-    {isSecretComposerEnabled ? <View style={{ marginTop: 16 }}><Pressable onPress={() => lockRef.current.runIntent(() => setSecret((value) => !value))}
+    {isSecretComposerEnabled ? <View style={{ marginTop: 16 }}><Pressable onPress={() => { if (!pickerInFlight.current) lockRef.current.runIntent(() => setSecret((value) => !value)); }}
       disabled={!canToggleSecret} accessibilityRole="switch"
       accessibilityState={{ checked: secret, disabled: !canToggleSecret }}
       accessibilityLabel="Secret Mark — only the recipient can open it, once, within an hour"

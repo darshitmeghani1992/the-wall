@@ -62,7 +62,7 @@ test("stale Composer confirmations do not navigate after identity switch or slow
   assert.match(source, /if \(!isCurrentScope\(\) \|\| submissionLocked\) return/);
   assert.match(source, /if \(isCurrentScope\(\)\) navigation\.dispatch\(data\.action\)/);
   assert.match(source, /if \(isCurrentScope\(\)\) router\.back\(\)/);
-  assert.match(source, /if \(!isCurrentScope\(\) \|\| !canSubmit/);
+  assert.match(source, /async function submit\(\) \{\s*if \(!isCurrentScope\(\) \|\| pickerInFlight\.current \|\| !canSubmit/);
   assert.match(source, /const isCurrent = \(\) => isCurrentScope\(\) && token === lifecycleRef\.current/);
 });
 
