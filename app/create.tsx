@@ -193,6 +193,10 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }, [currentUserId, sessionGeneration]);
   useEffect(() => {
     if (mediaAppActive) return;
+    // iOS may background the app during a microphone permission prompt or an
+    // active recording. Discard the unfinished capture and release the mic;
+    // never resume recording without a new user tap after foregrounding.
+    void recorder.reset();
     setMedia((current) => current.map((draft) => {
       if (!["reserving", "uploading", "uploaded", "validating"].includes(draft.state)) return draft;
       const retryFrom = draft.state === "uploaded" || draft.state === "validating" ? "validation" : "upload";
