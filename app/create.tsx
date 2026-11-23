@@ -386,15 +386,17 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function attachVoiceClip(clip: VoiceResult) {
-    const canAttach = () => isCurrentScope() && !discardConfirmedRef.current;
+    const token = lifecycleRef.current;
+    const canAttach = () => isCurrentScope() && token === lifecycleRef.current && !discardConfirmedRef.current && !pickerInFlight.current;
     if (!canAttach()) return;
     try {
       const bytes = await getLocalMediaSize(clip.uri);
       if (!canAttach()) return;
       if (bytes > MEDIA_LIMITS.audio) throw new Error("Voice recordings must be under 8 MB.");
-      lockRef.current.runIntent(() => setMedia([createMediaWriterDraft({
+      const draft = createMediaWriterDraft({
         kind: "voice", uri: clip.uri, mime: clip.mime, bytes, durationMs: clip.durationMs,
-      }, createRequestId())]));
+      }, createRequestId());
+      lockRef.current.runIntent(() => setMedia((current) => current.length === 0 ? [draft] : current));
     } catch (cause) {
       if (canAttach()) Alert.alert("Couldn't use that recording", cause instanceof Error ? cause.message : "Please record it again.");
     }
@@ -507,7 +509,7 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }
 
   async function submit() {
-    if (!isCurrentScope() || pickerInFlight.current || !canSubmit || !wallId || !currentUserId || submitInFlightRef.current || !lockRef.current.tryBegin()) return;
+    if (!isCurrentScope() || pickerInFlight.current || !canSubmit || discardConfirmedRef.current || !wallId || !currentUserId || submitInFlightRef.current || !lockRef.current.tryBegin()) return;
     submitInFlightRef.current = true;
     setSubmissionLocked(true);
     const token = lifecycleRef.current;
