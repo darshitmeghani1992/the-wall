@@ -220,6 +220,11 @@ PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" TEST_DB="$TEST_DB" bash "$HER
 echo "── load: 0038_standard_poll_account_purge.sql (disposable only)"
 psql_test -f "$MIG/0038_standard_poll_account_purge.sql" >/dev/null
 psql_test -f "$HERE/87_standard_poll_account_purge.sql"
+echo "── 0038 Poll purge preapply rollback and reapply (disposable)"
+psql_test -f "$HERE/../rollbacks/0038_standard_poll_account_purge_preapply.sql" >/dev/null
+psql_test -f "$HERE/87_standard_poll_account_purge_rollback.sql"
+psql_test -f "$MIG/0038_standard_poll_account_purge.sql" >/dev/null
+psql_test -f "$HERE/87_standard_poll_account_purge.sql"
 
 for area in 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
             51_private_mark_media 52_mark_media_races 53_media_quota_outbox 57_media_worker_credentials 58_media_operations 59_media_writer_contract \
