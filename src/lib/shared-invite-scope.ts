@@ -1,3 +1,5 @@
+import type { DeferredAttemptToken } from "./deferred-destination-contract";
+
 /** Bind a private Shared Wall invitation preview and consent to one viewer and route. */
 export function sharedInviteSubjectKey(
   userId: string | null | undefined,
@@ -13,4 +15,12 @@ export function sameSharedInviteSubject(
   current: string | null,
 ): boolean {
   return typeof captured === "string" && current !== null && captured === current;
+}
+
+/** The startup lease protects arrival. An already reached invitation refreshes with normal authorization. */
+export function pendingSharedInviteArrivalToken(
+  claimed: DeferredAttemptToken | null,
+  arrived: DeferredAttemptToken | null,
+): DeferredAttemptToken | null {
+  return claimed === arrived ? null : claimed;
 }
