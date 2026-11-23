@@ -1,3 +1,11 @@
+## BETA-P0-107 · C3 worker source-stream integrity — 23 Nov 2026
+
+**ARCHITECT** release integration → **BACKEND** implementation on isolated child of #201 exact `7f7ca5a46fda09b7a50539b5ad556071ff2b6559`; #195 disposable ARM64 workflow remains separate. Worker now rejects invalid/short HTTP Content-Length after a signed download and retries short FileHandle writes rather than silently processing corrupted media. New worker tests simulate partial/zero-progress disk writes, truncated signed Storage responses, and verify failure callbacks cannot become success. No new schema, API, feature flag, hosted write or deployment.
+
+**Verification boundary:** exact new SHA CI and independent Reviewer/QA are required. CI mocks and worker image evidence are not hosted C2/C3 signed upload/playback, quotas, cleanup or installed device QA. Staging remains isolated; six-digit OTP and real 3-user JWT, Secret one-hour scheduler, account deletion 0031/purge, signing, rollback and release approvals remain unverified. Media/Secret/analytics OFF; Enhanced/open beta **NO-GO**. **Next:** check four CI jobs on new PR; independently review changed worker source; continue staging hosting preparation pending authorized resources. All #30/#34–#56/#58–#59 descendants remain unmerged.
+
+---
+
 ## BETA-P0-106 · C3 worker staging-origin safety fence and actual ARM64 image proof — 23 Nov 2026
 
 **ROLE: ARCHITECT** integration / public-beta boundary → **ROLE: BACKEND** implementation and source tests in [draft #198](https://github.com/darshitmeghani1992/the-wall/pull/198), isolated child of [draft #197](https://github.com/darshitmeghani1992/the-wall/pull/197) at immutable `38e5c474f2d7402f51d44d57f779445269a36a02`. Historic #30, #34–#56, #58/#59, and later stacked drafts retained. Sibling image-proof [draft #195](https://github.com/darshitmeghani1992/the-wall/pull/195) has **not been merged or copied** into this branch.

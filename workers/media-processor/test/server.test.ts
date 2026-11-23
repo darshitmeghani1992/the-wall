@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { processEnvelope, type ProcessorDependencies } from "../src/server.js";
+import { processEnvelope, writeCompleteChunk, type ProcessorDependencies } from "../src/server.js";
 import type { WorkerDispatchClaims } from "../src/contract.js";
 import { runTool } from "../src/photo.js";
 
@@ -72,6 +72,47 @@ test("verified but wrong callback or adjacent object URL fails before redemption
     assert.equal(redeemed, 0);
     assert.equal(reported, 0);
   }
+});
+
+test("short disk writes are completed, not accepted as partial media", async () => {
+  const observed: number[] = [];
+  const writer = {
+    write: async (bytes: Uint8Array, offset: number, length: number) => {
+      const count = Math.min(2, length);
+      observed.push(...bytes.subarray(offset, offset + count));
+      return { bytesWritten: count };
+    },
+  };
+  await writeCompleteChunk(writer, new Uint8Array([10, 11, 12, 13, 14]));
+  assert.deepEqual(observed, [10, 11, 12, 13, 14]);
+  await assert.rejects(
+    writeCompleteChunk({ write: async () => ({ bytesWritten: 0 }) }, new Uint8Array([9])),
+    (error: unknown) => error instanceof Error && error.message === "incomplete source disk write",
+  );
+});
+
+test("truncated signed source response fails before processing or success", async () => {
+  let downloads = 0;
+  let completed = 0;
+  let failed = 0;
+  const fetchImpl = (async () => {
+    downloads += 1;
+    return new Response(new Uint8Array([1, 2, 3, 4]), {
+      status: 200,
+      headers: { "content-length": "7" },
+    });
+  }) as typeof fetch;
+  await assert.rejects(processEnvelope("signed", dependencies({
+    nonceRedeemer: { redeem: async () => true },
+    fetchImpl,
+    completionReporter: {
+      complete: async () => { completed += 1; },
+      fail: async () => { failed += 1; },
+    },
+  })), (error: unknown) => error instanceof Error && error.message === "source response length mismatch");
+  assert.equal(downloads, 1, "no processing or upload is attempted");
+  assert.equal(completed, 0);
+  assert.equal(failed, 1, "redeemed failures use the existing safe callback");
 });
 
 test("lost completion response never changes the consumed token to a failure outcome", async () => {
