@@ -12,7 +12,7 @@ jobs:
   startup:
     if: github.head_ref == 'codex/disposable-ios-startup-smoke-20261123'
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,7 +58,7 @@ jobs:
             -sdk iphonesimulator -destination "id=$WALL_IOS_DEVICE" -jobs 2 \
             -derivedDataPath "$RUNNER_TEMP/wall-ios-derived" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO COMPILER_INDEX_STORE_ENABLE=NO \
-            build >"$build_log" 2>&1; then
+            -showBuildTimingSummary build 2>&1 | tee "$build_log"; then
             grep -n -E 'error:|BUILD FAILED' "$build_log" | tail -35 || true
             tail -80 "$build_log"
             exit 1
