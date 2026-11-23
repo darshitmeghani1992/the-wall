@@ -101,7 +101,7 @@ export default function SignIn() {
   }
 
   return (
-    <Screen dockInset={false}>
+    <Screen dockInset={false} keyboardShouldPersistTaps="handled">
       <View style={{ paddingTop: 24, gap: 8, marginBottom: 24 }}>
         <Text variant="label" color={colors.outline}>
           // {sent ? "CHECK YOUR EMAIL" : "SIGN IN"}

@@ -1,4 +1,4 @@
-import { View, ScrollView, type ViewStyle } from "react-native";
+import { View, ScrollView, type ScrollViewProps, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { colors, spacing } from "@/theme";
@@ -10,6 +10,7 @@ type Props = {
   /** Add the persistent bottom-dock inset (78px) so content clears the dock. */
   dockInset?: boolean;
   padded?: boolean;
+  keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"];
   style?: ViewStyle;
 };
 
@@ -23,6 +24,7 @@ export function Screen({
   scroll = true,
   dockInset = true,
   padded = true,
+  keyboardShouldPersistTaps,
   style,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -39,6 +41,7 @@ export function Screen({
         <ScrollView
           contentContainerStyle={[inner, { paddingBottom }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps={keyboardShouldPersistTaps}
         >
           {children}
         </ScrollView>
