@@ -152,7 +152,7 @@ begin
      or public.list_wall_marks_v2(auth.uid(),v_wall,null,null,null,'poll',1) <> '{"status":"invalid"}'::jsonb then
     raise exception '82 FAIL: keyset skipped same-key ordinary result or accepted partial cursor %',v_page;
   end if;
-end $;
+end $$;
 
 -- A mixed v2 Wall history must not strip fields required by ordinary
 -- photo/voice/video Marks. Exercise the private projection on a synthetic
