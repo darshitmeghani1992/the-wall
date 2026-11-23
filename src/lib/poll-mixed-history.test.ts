@@ -91,9 +91,9 @@ test("fail closed on cross-Wall rows, duplicate identities, missing media metada
   badWall.mark.wall_id = actor;
   assert.throws(() => parseMixedWallHistoryPage(page([badWall]), wall));
   assert.throws(() => parseMixedWallHistoryPage(page([ordinary(), ordinary()]), wall));
-  const missingMetadata = ordinary() as any;
-  delete missingMetadata.mark.payload;
-  assert.throws(() => parseMixedWallHistoryPage(page([missingMetadata]), wall));
+  const ordinaryMark = ordinary();
+  const { payload: _ignoredPayload, ...metadataMissing } = ordinaryMark.mark;
+  assert.throws(() => parseMixedWallHistoryPage(page([{ ...ordinaryMark, mark: metadataMissing }]), wall));
   assert.throws(() => parseMixedWallHistoryPage(page([ordinary()], {
     pinned: false, created_at: created, mark_id: mark, kind: "mark",
   }), wall));
@@ -104,9 +104,8 @@ test("fail closed on cross-Wall rows, duplicate identities, missing media metada
 
 test("reject leaked Secret text and anonymous author identity", () => {
   const secret = ordinary();
-  secret.mark.secret = true;
-  secret.mark.text = "do not display";
-  assert.throws(() => parseMixedWallHistoryPage(page([secret]), wall));
+  const leakedSecret = { ...secret, mark: { ...secret.mark, secret: true, text: "do not display" } };
+  assert.throws(() => parseMixedWallHistoryPage(page([leakedSecret]), wall));
   const anon = ordinary();
   anon.mark.anonymous = true;
   assert.throws(() => parseMixedWallHistoryPage(page([anon]), wall));
