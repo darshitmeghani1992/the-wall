@@ -1,6 +1,7 @@
 // @ts-ignore Node's strip-types contract runner loads the source extension.
 import { isCanonicalUuid } from "./deferred-destination-contract.ts";
-import { parsePoll, type FocusedPoll } from "./poll-focused-reader";
+// @ts-ignore Node's strip-types contract runner needs the source extension.
+import { parsePoll, type FocusedPoll } from "./poll-focused-reader.ts";
 import type { Mark } from "./types";
 
 /** No runtime selection of the new endpoint until hosted ACL and device QA. */
