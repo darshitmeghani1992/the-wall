@@ -19,14 +19,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: 95a1256c8e7de9b9315c377bc638b01bdf7855a1
+          ref: 603fed9f5f02f70cdf10407d0d714d1dcb4f699c
 
       - name: Build with exact disposable test pins and smoke the image
         shell: bash
         working-directory: workers/media-processor
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 95a1256c8e7de9b9315c377bc638b01bdf7855a1
+          test "$(git rev-parse HEAD)" = 603fed9f5f02f70cdf10407d0d714d1dcb4f699c
           printf 'Exact release candidate source: %s\n' "$(git rev-parse HEAD)"
           test "$(uname -m)" = aarch64
           base_tag=node:22-bookworm-slim
