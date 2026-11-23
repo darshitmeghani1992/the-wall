@@ -14,6 +14,7 @@ export type ReportRow = {
   id: string;
   reporter_id: string;
   mark_id: string | null;
+  reported_poll_id: string | null;
   reported_user_id: string | null;
   reported_wall_id: string | null;
   reason: string;
@@ -27,8 +28,9 @@ export type ReportRow = {
 export type ModerationAction = {
   id: string;
   actor_id: string | null;
-  action: "remove_mark" | "suspend_account" | "resolve_report" | "dismiss_report";
+  action: "remove_mark" | "remove_poll" | "suspend_account" | "resolve_report" | "dismiss_report";
   target_mark_id: string | null;
+  target_poll_id: string | null;
   target_user_id: string | null;
   report_id: string | null;
   reason: string | null;
@@ -66,6 +68,16 @@ export async function adminRemoveMark(expectedActorId: string, markId: string, r
   await runAdminMutation(expectedActorId, async (actorId) => {
     const { error } = await supabase.rpc("admin_remove_mark", {
       p_expected_actor_id: actorId, p_mark_id: markId, p_reason: reason,
+    });
+    if (error) throw mapActorBoundMutationError(error);
+  });
+}
+
+/** Admin: remove a Poll without ever routing its ID through legacy Mark moderation. */
+export async function adminRemovePoll(expectedActorId: string, pollId: string, reason: string): Promise<void> {
+  await runAdminMutation(expectedActorId, async (actorId) => {
+    const { error } = await supabase.rpc("admin_remove_poll", {
+      p_expected_actor_id: actorId, p_mark_id: pollId, p_reason: reason,
     });
     if (error) throw mapActorBoundMutationError(error);
   });
