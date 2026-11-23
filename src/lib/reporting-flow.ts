@@ -1,3 +1,5 @@
+import type { SharedWallCapabilitiesContract } from "./shared-wall-contract";
+
 export type UserReportFlowInput<TReason extends string> = {
   expectedActorId: string;
   targetUserId: string;
@@ -66,3 +68,30 @@ export async function runUserReportFlow<TReason extends string>({
   }
 }
 
+export type SharedWallReportLoadError = {
+  status: "retryable" | "unavailable";
+  message: string;
+};
+
+type ReportTargetCapabilities =
+  | Pick<SharedWallCapabilitiesContract, "wallType" | "joinState">
+  | { wallType: "personal" };
+
+export async function loadSharedWallReportTarget(
+  wallId: string,
+  readWall: (wallId: string) => Promise<{ id: string; type: string; name: string } | null>,
+  readCapabilities: (wallId: string) => Promise<ReportTargetCapabilities | null>,
+): Promise<{ status: "ready"; wallName: string } | SharedWallReportLoadError> {
+  try {
+    const [wall, capabilities] = await Promise.all([readWall(wallId), readCapabilities(wallId)]);
+    if (wall?.id !== wallId || wall.type !== "shared" || capabilities?.wallType !== "shared") {
+      return { status: "unavailable", message: "This Shared Wall isn’t available." };
+    }
+    if (capabilities.joinState === "owner") {
+      return { status: "unavailable", message: "You can’t report a Shared Wall you own." };
+    }
+    return { status: "ready", wallName: wall.name };
+  } catch {
+    return { status: "retryable", message: "Couldn’t open this report form. Check your connection and try again." };
+  }
+}

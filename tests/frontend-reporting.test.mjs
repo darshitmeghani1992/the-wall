@@ -11,7 +11,7 @@ test("Shared Walls expose a non-owner reporting route backed by real reports", (
   assert.match(shared, /!isOwner[\s\S]*Report Shared Wall[\s\S]*\/report-wall\//);
   assert.match(reportWall, /createReport\(subjectToken\.userId/);
   assert.match(reportWall, /wallId: targetToken\.targetId/);
-  assert.match(reportWall, /joinState === "owner"/);
+  assert.match(reportWall, /loadSharedWallReportTarget\(targetToken\.targetId, getWall, getWallCapabilities\)/);
   assert.match(reportWall, /setReportSubmitted\(true\)/);
   assert.match(reportWall, /reportSubmitted \? "Report submitted"/);
   assert.match(layout, /name="report-wall\/\[id\]"/);
