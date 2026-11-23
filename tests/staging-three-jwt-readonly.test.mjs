@@ -4,6 +4,7 @@ import { runStagingJwtAudit } from '../scripts/staging-three-jwt-readonly.mjs';
 
 const HOST = 'https://ewintxgdxdvschiqodkq.supabase.co';
 const WALL_ID = '99999999-9999-4999-8999-999999999999';
+const MARK_ID = '88888888-8888-4888-8888-888888888888';
 const OWNER_ID = '11111111-1111-4111-8111-111111111111';
 const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
 const OUTSIDER_ID = '33333333-3333-4333-8333-333333333333';
@@ -32,6 +33,7 @@ const base = {
   TW_STAGING_URL: HOST,
   TW_STAGING_ANON_KEY: 'sb_publishable_mock_staging_public',
   TW_PRIVATE_WALL_ID: WALL_ID,
+  TW_PRIVATE_TEXT_MARK_ID: MARK_ID,
   TW_OWNER_ID: OWNER_ID,
   TW_MEMBER_ID: MEMBER_ID,
   TW_OUTSIDER_ID: OUTSIDER_ID,
@@ -59,6 +61,28 @@ function fakeNetwork(options = {}) {
       return {
         status: 200,
         json: async () => ({ id: options.mismatch ? base.TW_MEMBER_ID : ids[token] }),
+      };
+    }
+    if (url.includes('/rest/v1/marks?')) {
+      const params = new URL(url).searchParams;
+      assert.equal(params.get('id'), 'eq.' + MARK_ID);
+      assert.equal(params.get('wall_id'), 'eq.' + WALL_ID);
+      assert.equal(params.get('select'), 'id,wall_id,type,status,secret');
+      const isOutsider = token === base.TW_OUTSIDER_JWT;
+      const isAnonymous = token === (options.apiKey || base.TW_STAGING_ANON_KEY);
+      if (isAnonymous && options.anonMarkStatus) return { status: options.anonMarkStatus };
+      if (isAnonymous && options.anonMarkMalformed) return { status: 200, json: async () => ({}) };
+      const visible = (!isOutsider && !isAnonymous) ||
+        (isOutsider && options.markLeak) || (isAnonymous && options.anonMarkLeak);
+      return {
+        status: 200,
+        json: async () => visible ? [{
+          id: MARK_ID,
+          wall_id: WALL_ID,
+          type: options.wrongMarkType ? 'photo' : 'text',
+          status: options.wrongMarkStatus ? 'removed' : 'active',
+          secret: options.wrongMarkSecret === true,
+        }] : [],
       };
     }
     assert.ok(url.includes('/rest/v1/walls?'));
@@ -91,17 +115,20 @@ function fakeNetwork(options = {}) {
   return { handler, calls };
 }
 
-test('seven read-only staging GETs: owner/member allowed, outsider and anonymous denied', async () => {
+test('eleven read-only staging GETs: private Wall and active text Mark actor/anonymous RLS', async () => {
   const mock = fakeNetwork();
   const result = await runStagingJwtAudit(base, mock.handler);
-  assert.deepEqual(result, { status: 'PASS', httpRequests: 7, actorCount: 3, readOnly: true });
-  assert.equal(mock.calls.length, 7);
+  assert.deepEqual(result, { status: 'PASS', httpRequests: 11, actorCount: 3, readOnly: true });
+  assert.equal(mock.calls.length, 11);
   assert.ok(mock.calls.every(([, init]) => init.method === 'GET'));
+  assert.ok(mock.calls.every(([url]) => !url.includes('text=') && !url.includes('author_id=')));
+  assert.ok(mock.calls.every(([, init]) => init.redirect === 'error'));
   // Authenticated actor requests retain the real user-JWT Authorization;
   // only the separate anonymous check omits a modern public-key Bearer.
   assert.equal(mock.calls[0][1].headers.Authorization, 'Bearer ' + base.TW_OWNER_JWT);
   assert.equal(mock.calls[1][1].headers.Authorization, 'Bearer ' + base.TW_OWNER_JWT);
-  assert.equal(mock.calls[6][1].headers.Authorization, undefined);
+  assert.equal(mock.calls[9][1].headers.Authorization, undefined);
+  assert.equal(mock.calls[10][1].headers.Authorization, undefined);
 });
 
 test('fails before network on production, wrong protocol or alternate host', async () => {
@@ -124,6 +151,8 @@ test('fails before network without explicit opt-in, three distinct JWTs and know
   await assert.rejects(runStagingJwtAudit({ ...base, TW_OUTSIDER_JWT: base.TW_OWNER_JWT }, never));
   await assert.rejects(runStagingJwtAudit({ ...base, TW_OUTSIDER_ID: base.TW_OWNER_ID }, never));
   await assert.rejects(runStagingJwtAudit({ ...base, TW_PRIVATE_WALL_ID: '' }, never));
+  await assert.rejects(runStagingJwtAudit({ ...base, TW_PRIVATE_TEXT_MARK_ID: '' }, never));
+  await assert.rejects(runStagingJwtAudit({ ...base, TW_PRIVATE_TEXT_MARK_ID: WALL_ID + '/bad' }, never));
   await assert.rejects(runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: '' }, never));
 });
 
@@ -149,14 +178,14 @@ test('rejects non-shared or non-private fixtures even when the actor visibility 
   }
 });
 
-test('auth checks happen before any wall lookup for each actor', async () => {
+test('each verified Auth actor sees Wall and text Mark before anonymous GETs', async () => {
   const mock = fakeNetwork();
   await runStagingJwtAudit(base, mock.handler);
   assert.deepEqual(mock.calls.map(([url]) => new URL(url).pathname),
-    ['/auth/v1/user', '/rest/v1/walls',
-     '/auth/v1/user', '/rest/v1/walls',
-     '/auth/v1/user', '/rest/v1/walls',
-     '/rest/v1/walls']);
+    ['/auth/v1/user', '/rest/v1/walls', '/rest/v1/marks',
+     '/auth/v1/user', '/rest/v1/walls', '/rest/v1/marks',
+     '/auth/v1/user', '/rest/v1/walls', '/rest/v1/marks',
+     '/rest/v1/walls', '/rest/v1/marks']);
 });
 
 test('rejects service-role/secret API keys before any HTTP request', async () => {
@@ -180,7 +209,7 @@ test('accepts legacy anon JWT-shaped public key only with anon role', async () =
   const mock = fakeNetwork({ apiKey: key });
   const result = await runStagingJwtAudit({ ...base, TW_STAGING_ANON_KEY: key }, mock.handler);
   assert.equal(result.status, 'PASS');
-  assert.equal(mock.calls.length, 7);
+  assert.equal(mock.calls.length, 11);
   assert.equal(mock.calls.at(-1)[1].headers.Authorization, 'Bearer ' + key);
 });
 
@@ -226,7 +255,7 @@ test('fails if the public anonymous key can read the same private Shared Wall', 
   const mock = fakeNetwork({ anonLeak: true });
   await assert.rejects(runStagingJwtAudit(base, mock.handler),
     /Private Shared Wall visible without authentication/);
-  assert.equal(mock.calls.length, 7);
+  assert.equal(mock.calls.length, 10);
   const [, request] = mock.calls.at(-1);
   assert.equal(request.headers.Authorization, undefined);
   assert.equal(request.headers.apikey, base.TW_STAGING_ANON_KEY);
@@ -241,12 +270,40 @@ test('anonymous RLS requires filtered HTTP 200; 401/403 gateway denials are not 
     const mock = fakeNetwork({ anonStatus: status });
     await assert.rejects(runStagingJwtAudit(base, mock.handler),
       new RegExp('Anonymous RLS check inconclusive: expected HTTP 200, got ' + status));
-    assert.equal(mock.calls.length, 7);
+    assert.equal(mock.calls.length, 10);
   }
   const malformed = fakeNetwork({ anonMalformed: true });
   await assert.rejects(runStagingJwtAudit(base, malformed.handler),
     /Malformed anonymous staging HTTP JSON/);
   assert.equal(malformed.calls.length, 7);
+});
+
+
+test('fails closed on text Mark denial, leakage, wrong fixture or missing metadata', async () => {
+  for (const config of [
+    { markLeak: true },
+    { wrongMarkType: true },
+    { wrongMarkStatus: true },
+    { wrongMarkSecret: true },
+  ]) {
+    await assert.rejects(
+      runStagingJwtAudit(base, fakeNetwork(config).handler),
+      /Private text Mark RLS visibility mismatch/,
+    );
+  }
+  // A gateway denial must not masquerade as authenticated RLS filtering.
+  await assert.rejects(
+    runStagingJwtAudit(base, fakeNetwork({ anonMarkStatus: 403 }).handler),
+    /Anonymous text Mark RLS check inconclusive/,
+  );
+  await assert.rejects(
+    runStagingJwtAudit(base, fakeNetwork({ anonMarkMalformed: true }).handler),
+    /Malformed anonymous text Mark HTTP JSON response/,
+  );
+  await assert.rejects(
+    runStagingJwtAudit(base, fakeNetwork({ anonMarkLeak: true }).handler),
+    /Private text Mark visible without authentication/,
+  );
 });
 
 test('anonymous negative check never bypasses the three server-verified JWT identities', async () => {
