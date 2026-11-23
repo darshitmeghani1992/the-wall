@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
+import { useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { Text } from "@/components/Text";
 import { createRequestId } from "@/lib/mark-writer-contract";
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export function FocusedPollCard({ poll, target, isCurrent, mutate, refresh }: Props) {
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState<FocusedPoll | null>(poll);
   const [selection, setSelection] = useState<readonly string[]>(poll.ballot?.optionIds ?? []);
   const [busy, setBusy] = useState<"vote" | "close" | "refresh" | null>(null);
@@ -169,6 +171,12 @@ export function FocusedPollCard({ poll, target, isCurrent, mutate, refresh }: Pr
       {canClose ? <Button label="Close Poll" variant="ghost" loading={busy === "close"} disabled={disabled} onPress={confirmClose} /> : null}
       {needsRefresh ? <Button label="Refresh Poll" variant="ghost" loading={busy === "refresh"} disabled={busy !== null}
         onPress={() => void retryRead()} /> : null}
+      <Button label="Report Poll" variant="ghost" disabled={busy !== null}
+        onPress={() => {
+          if (isCurrent() && !pending.current) {
+            router.push({ pathname: "/report-poll/[id]", params: { id: target.markId, wallId: target.wallId } });
+          }
+        }} />
     </View>
   );
 }
