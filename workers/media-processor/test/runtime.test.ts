@@ -90,7 +90,7 @@ test('bounded queue returns 503 while one verified job is still active', async (
 test('runtime fails closed when enablement or security configuration is missing', async () => {
   await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'false' }), /disabled/);
   await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', PORT: '8080' }));
-  await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', PORT: '99999' }), /port/);
+  await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', MARK_MEDIA_PROJECT_URL: 'https://ewintxgdxdvschiqodkq.supabase.co', PORT: '99999' }), /port/);
 });
 
 test('enabled media runtime accepts only the reviewed staging backend origin', async () => {
