@@ -36,7 +36,7 @@ function invalidPoll(): never {
   throw new Error("Couldn’t verify this Poll. Please try again.");
 }
 
-function parsePoll(value: unknown, wallId: string, markId: string): FocusedPoll | null {
+export function parsePoll(value: unknown, wallId: string, markId: string): FocusedPoll | null {
   if (!isRecord(value)) return invalidPoll();
   if (value.status === "unavailable") return null;
   if (value.status !== "available" || !isRecord(value.item)) return invalidPoll();
