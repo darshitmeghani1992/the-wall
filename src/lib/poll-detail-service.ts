@@ -1,4 +1,5 @@
 import { getWallMark } from "@/lib/marks";
+import { isMixedPollHistoryEnabled, readMixedWallHistory, type MixedWallCursor, type MixedWallReadRequest } from "@/lib/poll-mixed-history";
 import { isFocusedPollReaderEnabled, readFocusedPoll, readFocusedWallCard, type PollReadRequest } from "@/lib/poll-focused-reader";
 import { isPollInteractionEnabled, type PollMutation, type PollAddress } from "@/lib/poll-voting-contract";
 import { supabase } from "@/lib/supabase";
@@ -24,4 +25,14 @@ export function getFocusedWallMark(actorId: string, wallId: string, markId: stri
 
 export function refreshFocusedPoll({ actorId, wallId, markId }: PollAddress) {
   return readFocusedPoll(actorId, wallId, markId, fetchPollDetail, isFocusedPollReaderEnabled);
+}
+
+/** Versioned mixed chronology is deliberately unavailable until server/device gates pass. */
+export function loadMixedWallHistory(actorId: string, wallId: string, cursor: MixedWallCursor | null) {
+  return readMixedWallHistory(actorId, wallId, cursor, isMixedPollHistoryEnabled,
+    async (args: MixedWallReadRequest) => {
+      const { data, error } = await supabase.rpc("list_wall_marks_v2", args);
+      if (error) throw new Error("Couldn’t load this Wall history. Please try again.");
+      return data;
+    });
 }
