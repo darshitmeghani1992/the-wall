@@ -1,3 +1,9 @@
+## 23 Nov 2026 · Poll integration handoff (source-only, draft)
+
+ARCHITECT integration has merged #232's three exact reviewed Poll feedback blobs onto #231's unchanged #230 ancestor, preserving the rest of #231 and the historical stacked PRs. Source merge SHA `3cac41462927bcd62e8d97664820038f232285ff`; tree `ba9878f07274fa24a9672341573881e0236eedae`; branch `codex/integrate-poll-feedback-20261123-1658ist`. All Poll create/reader/vote/close gates OFF. Confirm full CI and independent review on the final docs-head before treating it as an integration candidate; no hosted or device claim. Canonical ready queue and two independent next actions: `docs/BUILD_STATUS.md` BETA-P0-113; tracker #57. Apple signing, physical iPhone, OTP and hosted media/Secret/deletion/Realtime remain protected and incomplete. Public Enhanced Beta NO-GO.
+
+---
+
 ## Current · 23 November 2026 · Poll ballot/closure draft (#224, BETA-P0-112)
 
 **ARCHITECT → BACKEND on isolated child** of combined Poll Backend/Frontend source [#223](https://github.com/darshitmeghani1992/the-wall/pull/223), immutable parent `b12e0744a98791c5dffbf2575c6c33884f3e763d`, tree `35eb8773988cb07c3cfb320195ab50c6a7ff05c5`, [all four CI jobs green](https://github.com/darshitmeghani1992/the-wall/actions/runs/45158637951). Separate [draft #224](https://github.com/darshitmeghani1992/the-wall/pull/224) includes additive 0036 private ballot/choice/receipt tables, typed replace/close RPCs, live aggregate-only results, FK purge accounting and a new default-OFF voting gate; rollback-isolated SQL regression #83 and runner update. Initial source CI [45159402627](https://github.com/darshitmeghani1992/the-wall/actions/runs/45159402627) must be confirmed, followed by final docs-head run, independent security review, real actor authorization and installed iPhone QA. No backend schema/role changes hosted; public beta is NO-GO.

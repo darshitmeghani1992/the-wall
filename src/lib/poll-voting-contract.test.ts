@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-ignore Dependency-free contract tests load source directly.
-import { isPollInteractionEnabled, isValidSelection, parsePollMutationResult, preparePollMutation, togglePollOption } from "./poll-voting-contract.ts";
+import { confirmedPollVoteMessage, isPollInteractionEnabled, isValidSelection, parsePollMutationResult, preparePollMutation, togglePollOption } from "./poll-voting-contract.ts";
 import type { FocusedPoll } from "./poll-focused-reader";
 
 const target = { actorId: "actor", wallId: "wall", markId: "mark" };
@@ -61,4 +61,10 @@ test("only the server-issued author close capability can produce a close request
   assert.equal(parsePollMutationResult({ status: "closed", mark_id: "mark", revision: 4 }, close, authorPoll), "confirmed");
   assert.equal(parsePollMutationResult({ status: "closed", mark_id: "mark", revision: 3 }, close, authorPoll), null);
   assert.equal(parsePollMutationResult({ status: "closed" }, close, authorPoll), "closed");
+});
+
+test("confirmed replay feedback names the latest vote rather than claiming the old selection was saved", () => {
+  assert.equal(confirmedPollVoteMessage(["home"], open), "Vote saved.");
+  assert.equal(confirmedPollVoteMessage(["park"], open), "The vote shown is your latest selection.");
+  assert.equal(confirmedPollVoteMessage(["park"], { ...open, ballot: null }), "There’s no current vote from this account.");
 });

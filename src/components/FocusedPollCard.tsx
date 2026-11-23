@@ -5,7 +5,7 @@ import { Text } from "@/components/Text";
 import { createRequestId } from "@/lib/mark-writer-contract";
 import type { FocusedPoll } from "@/lib/poll-focused-reader";
 import {
-  isPollInteractionEnabled, isValidSelection, parsePollMutationResult, preparePollMutation,
+  confirmedPollVoteMessage, isPollInteractionEnabled, isValidSelection, parsePollMutationResult, preparePollMutation,
   samePollSelection, togglePollOption, type PollAddress, type PollMutation,
 } from "@/lib/poll-voting-contract";
 import { colors, radius } from "@/theme";
@@ -31,7 +31,7 @@ export function FocusedPollCard({ poll, target, isCurrent, mutate, refresh }: Pr
   const canVote = Boolean(isPollInteractionEnabled && snapshot?.capabilities.canVote);
   const canClose = Boolean(isPollInteractionEnabled && snapshot?.capabilities.canClose);
 
-  async function reload(preserveSelection: boolean, successMessage: string | null) {
+  async function reload(preserveSelection: boolean, successMessage: string | null, submittedVote?: readonly string[]) {
     try {
       const latest = await refresh();
       if (!isCurrent()) return;
@@ -41,11 +41,12 @@ export function FocusedPollCard({ poll, target, isCurrent, mutate, refresh }: Pr
         const currentBallot = latest.ballot?.optionIds ?? [];
         setSelection((draft) => preserveSelection && isValidSelection(latest, draft) ? draft : currentBallot);
       }
-      setNotice(successMessage);
+      setNotice(latest && submittedVote ? confirmedPollVoteMessage(submittedVote, latest) : successMessage);
     } catch {
       if (!isCurrent()) return;
       setNeedsRefresh(true);
-      setNotice(successMessage ? `${successMessage} Refresh to update the Poll.` : "Couldn’t refresh the Poll. Try again.");
+      setNotice(submittedVote ? "Refresh the Poll to check your current vote."
+        : successMessage ? `${successMessage} Refresh to update the Poll.` : "Couldn’t refresh the Poll. Try again.");
     }
   }
 
@@ -63,7 +64,11 @@ export function FocusedPollCard({ poll, target, isCurrent, mutate, refresh }: Pr
       if (!result) throw new Error("Invalid Poll receipt");
       if (result === "confirmed") {
         priorIntent.current[kind] = null;
-        await reload(false, kind === "vote" ? "Vote saved." : "Poll closed.");
+        if (request.kind === "vote") {
+          await reload(false, null, request.args.p_option_ids);
+        } else {
+          await reload(false, "Poll closed.");
+        }
       } else if (result === "unavailable") {
         priorIntent.current[kind] = null;
         setSnapshot(null);
