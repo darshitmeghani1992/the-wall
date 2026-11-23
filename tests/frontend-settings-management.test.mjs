@@ -62,7 +62,7 @@ test("Settings exposes and registers both management entry routes", () => {
 
 test("Personal Wall settings protects navigation with an unsaved-change confirmation", () => {
   const source = readFileSync(new globalThis.URL("../app/personal-wall-settings.tsx", import.meta.url), "utf8");
-  assert.match(source, /beforeRemove/);
+  assert.match(source, /usePreventRemove\(\(busy \|\| dirty\) && !approvedExit/);
   assert.match(source, /Discard unsaved changes\?/);
   assert.match(source, /canManageApprovedWriters\(saved\)/);
 });

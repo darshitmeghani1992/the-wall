@@ -8,10 +8,13 @@ const source = readFileSync(new URL("../app/personal-wall-settings.tsx", import.
 
 test("unsaved Personal Wall settings confirmation is leased to the actor that opened it", () => {
   assert.match(source, /const discardPromptOpen = useRef\(false\)/);
-  assert.match(source, /if \(mutationInFlight\.current \|\| discardPromptOpen\.current\) return/);
+  assert.match(source, /usePreventRemove\(\(busy \|\| dirty\) && !approvedExit/);
+  assert.match(source, /if \(!dirtyRef\.current \|\| mutationInFlight\.current \|\| discardPromptOpen\.current\) return/);
   assert.match(source, /const token = actionFence\.current\.begin\(currentActorId\.current\)/);
-  assert.match(source, /if \(!actionFence\.current\.isCurrent\(token, currentActorId\.current\)\) return;\s+discardPromptOpen\.current = false;\s+allowBackRef\.current = true;\s+navigation\.dispatch\(event\.data\.action\)/);
+  assert.match(source, /if \(!actionFence\.current\.isCurrent\(token, currentActorId\.current\)\) return;\s+discardPromptOpen\.current = false;\s+setApprovedExit\(\{ action: data\.action, token \}\)/);
   assert.match(source, /actionFence\.current\.blur\(\);\s+discardPromptOpen\.current = false/);
+  assert.match(source, /if \(actionFence\.current\.isCurrent\(approvedExit\.token, currentActorId\.current\)\) \{\s+navigation\.dispatch\(approvedExit\.action\)/);
+  assert.match(source, /if \(mutationInFlight\.current\) event\.preventDefault\(\)/);
 });
 
 test("old actor's late discard cannot navigate after switching accounts", () => {
