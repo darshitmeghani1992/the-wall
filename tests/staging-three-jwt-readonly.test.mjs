@@ -275,7 +275,7 @@ test('anonymous RLS requires filtered HTTP 200; 401/403 gateway denials are not 
   const malformed = fakeNetwork({ anonMalformed: true });
   await assert.rejects(runStagingJwtAudit(base, malformed.handler),
     /Malformed anonymous staging HTTP JSON/);
-  assert.equal(malformed.calls.length, 7);
+  assert.equal(malformed.calls.length, 10);
 });
 
 
