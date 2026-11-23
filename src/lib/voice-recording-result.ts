@@ -19,7 +19,9 @@ export async function finishVoiceCapture(
     const status = await recording.stopAndUnloadAsync();
     if (typeof status.durationMillis === "number") durationMs = status.durationMillis;
   } catch {
-    // Keep the last capture duration if the recorder cannot return its final status.
+    // A native stop failure may leave an incomplete/unfinalized audio file.
+    // Fail closed rather than attach a URI whose contents cannot be trusted.
+    return;
   }
   const uri = recording.getURI();
   if (uri && isCurrent()) {
