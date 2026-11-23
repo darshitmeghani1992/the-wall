@@ -206,12 +206,16 @@ psql_test -f "$HERE/82_standard_poll_create_read.sql"
 psql_test -c "delete from public.marks where id='82000000-0000-4000-8000-000000000000';" >/dev/null
 echo "── load: 0036_standard_poll_ballots_close.sql"
 psql_test -f "$MIG/0036_standard_poll_ballots_close.sql" >/dev/null
+echo "── load: 0037_standard_poll_moderation.sql (draft, disposable DB only)"
+psql_test -f "$MIG/0037_standard_poll_moderation.sql" >/dev/null
 if [[ "$(ordinary_mark_catalog)" != "$ORDINARY_MARK_CATALOG" ]]; then
   echo "Poll migrations changed the legacy ordinary Mark catalog" >&2
   exit 1
 fi
 echo "── Poll migrations preserve the legacy ordinary Mark catalog"
 psql_test -f "$HERE/83_standard_poll_ballots_close.sql"
+echo "── assertion: 85_standard_poll_moderation"
+psql_test -f "$HERE/85_standard_poll_moderation.sql"
 PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" TEST_DB="$TEST_DB" bash "$HERE/84_standard_poll_mutation_races.sh"
 
 for area in 10_friendships 15_follows 20_blocking 21_blocking_full_boundary 22_blocked_users_management 25_reactions 26_reaction_access 30_anonymity 40_mark_moderation 45_mark_lifecycle 46_mark_history_reads 55_approved_writers 56_personal_contribution_contract 50_storage \
