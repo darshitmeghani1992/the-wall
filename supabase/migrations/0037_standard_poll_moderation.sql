@@ -16,7 +16,7 @@ alter table public.reports add constraint reports_one_target
 create function public.can_report_poll(p_mark_id uuid, p_actor_id uuid)
 returns boolean language sql stable security definer
 set search_path = pg_catalog, public
-as $
+as $poll_report$
   select p_actor_id is not null and p_actor_id = auth.uid()
     and public.is_active_account(p_actor_id)
     and exists (
@@ -24,7 +24,7 @@ as $
       where p.mark_id = p_mark_id and p.status = 'active'
         and public.can_view_wall(p.wall_id, p_actor_id)
     )
-$;
+$poll_report$;
 revoke all on function public.can_report_poll(uuid,uuid)
   from public,anon,authenticated,service_role;
 grant execute on function public.can_report_poll(uuid,uuid) to authenticated;
