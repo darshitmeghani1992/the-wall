@@ -13,8 +13,9 @@ import { getWall, getWallCapabilities, joinSharedWall, leaveSharedWall, type Wal
 import { getWallMark, listWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getProfile } from "@/lib/profiles";
-import { isFocusedPollReaderEnabled, readFocusedWallCard, type FocusedPoll } from "@/lib/poll-focused-reader";
+import { isFocusedPollReaderEnabled, readFocusedPoll, readFocusedWallCard, type FocusedPoll, type PollReadRequest } from "@/lib/poll-focused-reader";
 import { supabase } from "@/lib/supabase";
+import { isPollInteractionEnabled, type PollMutation } from "@/lib/poll-voting-contract";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { settleOptional } from "@/lib/optional-result";
 import { beginExclusiveMutation, endExclusiveMutation } from "@/lib/mutation-guard";
@@ -34,6 +35,21 @@ import { resolveDeferredDestination } from "@/lib/deferred-destination-resolver"
 import { destinationForAccountRoute } from "@/lib/onboarding-contract";
 
 type ClaimedAttempt = { reference: string; token: DeferredAttemptToken | null };
+
+async function fetchPollDetail(args: PollReadRequest): Promise<unknown> {
+  const { data, error } = await supabase.rpc("get_wall_mark_v2", args);
+  if (error) throw new Error("Couldn’t load this Poll. Please try again.");
+  return data;
+}
+
+async function mutateFocusedPoll(request: PollMutation): Promise<unknown> {
+  if (!isFocusedPollReaderEnabled || !isPollInteractionEnabled) throw new Error("Poll changes are unavailable.");
+  const response = request.kind === "vote"
+    ? await supabase.rpc("replace_poll_ballot", request.args)
+    : await supabase.rpc("close_poll_mark", request.args);
+  if (response.error) throw response.error;
+  return response.data;
+}
 
 export default function SharedWallScreen() {
   const router = useRouter();
@@ -70,8 +86,10 @@ export default function SharedWallScreen() {
   const mutationInFlight = useRef(false);
   const currentUserId = useRef<string | null>(userId ?? null);
   const currentWallId = useRef(wallId);
+  const currentFocusMarkId = useRef(focusMarkId);
   currentUserId.current = userId ?? null;
   currentWallId.current = wallId;
+  currentFocusMarkId.current = focusMarkId;
 
   useEffect(() => {
     if (!reference || !userId || !wallId || accountRoute !== "ready" || claimedReference.current === reference) return;
@@ -113,12 +131,7 @@ export default function SharedWallScreen() {
       const wallPromise = getWall(requestedWallId);
       const capabilitiesPromise = getWallCapabilities(requestedWallId);
       const readExact = (targetWallId: string, markId: string) => readFocusedWallCard(
-        token.userId, targetWallId, markId, getWallMark, async (args) => {
-          const { data, error } = await supabase.rpc("get_wall_mark_v2", args);
-          if (error) throw new Error("Couldn’t load this Poll. Please try again.");
-          return data;
-        },
-        isFocusedPollReaderEnabled,
+        token.userId, targetWallId, markId, getWallMark, fetchPollDetail, isFocusedPollReaderEnabled,
       );
       let markPromise: ReturnType<typeof readExact> | null = null;
       if (capturedDeferredToken) {
@@ -309,6 +322,8 @@ export default function SharedWallScreen() {
 
   const visibleFocusedPoll = loadedIdentity === `${userId}:${wallId}:${focusMarkId ?? ""}` ? focusedPoll : null;
   const visibleMarkCount = marks.length + (visibleFocusedPoll ? 1 : 0);
+  const pollGeneration = pageGeneration.current;
+  const pollActorId = session.user.id;
   const joinState = capabilities.joinState;
   const isOwner = joinState === "owner";
   const isMember = joinState === "member";
@@ -345,7 +360,14 @@ export default function SharedWallScreen() {
       {joinState === "invite_required" ? <StateNotice text={wall.visibility === "public" ? "You can view this Wall. Joining requires an invitation from the owner." : "Only accepted members can open this Wall."} /> : null}
       {joinState === "invited" ? <StateNotice text="You have an invitation waiting. Accept it before leaving Marks." /> : null}
 
-      {visibleFocusedPoll ? <FocusedPollCard poll={visibleFocusedPoll} /> : null}
+      {visibleFocusedPoll && focusMarkId ? (
+        <FocusedPollCard key={`${pollActorId}:${wallId}:${focusMarkId}:${pollGeneration}`}
+          poll={visibleFocusedPoll} target={{ actorId: pollActorId.toLowerCase(), wallId: wallId.toLowerCase(), markId: focusMarkId.toLowerCase() }}
+          isCurrent={() => currentUserId.current === pollActorId && currentWallId.current === wallId
+            && currentFocusMarkId.current === focusMarkId && pageGeneration.current === pollGeneration}
+          mutate={mutateFocusedPoll}
+          refresh={() => readFocusedPoll(pollActorId, wallId, focusMarkId, fetchPollDetail, isFocusedPollReaderEnabled)} />
+      ) : null}
       {focusedMark && (focusedMark.secret || !marks.some((mark) => mark.id === focusedMark.id)) ? (
         <View style={{ marginBottom: 16 }}>
           <Text variant="label">LINKED MARK</Text>
