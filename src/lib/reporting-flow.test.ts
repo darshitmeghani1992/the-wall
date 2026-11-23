@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-ignore Dependency-free Node runner requires the explicit source extension.
-import { runUserReportFlow } from "./reporting-flow.ts";
+import { loadSharedWallReportTarget, runUserReportFlow } from "./reporting-flow.ts";
 
 const base = () => ({
   expectedActorId: "actor-a",
@@ -90,3 +90,28 @@ test("a stale flow has no side effects or callbacks", async () => {
   assert.deepEqual(events, ["report"]);
 });
 
+const wall = { id: "wall", type: "shared", name: "Project Wall" };
+const member = { wallType: "shared", joinState: "member" };
+
+test("Shared Wall reporting verifies the exact Wall before showing its name", async () => {
+  assert.deepEqual(
+    await loadSharedWallReportTarget(wall.id, async (id) => ({ ...wall, id }), async () => member),
+    { status: "ready", wallName: wall.name },
+  );
+  assert.equal((await loadSharedWallReportTarget("different", async () => wall, async () => member)).status, "unavailable");
+  assert.equal((await loadSharedWallReportTarget(wall.id, async () => null, async () => member)).status, "unavailable");
+  assert.equal((await loadSharedWallReportTarget(wall.id, async () => wall, async () => null)).status, "unavailable");
+  assert.equal((await loadSharedWallReportTarget(wall.id, async () => wall, async () => ({ ...member, joinState: "owner" }))).status, "unavailable");
+});
+
+test("Shared Wall reporting can retry a failed lookup without changing targets", async () => {
+  const requests: string[] = [];
+  const lookup = async (id: string) => {
+    requests.push(id);
+    if (requests.length === 1) throw new Error("offline");
+    return wall;
+  };
+  assert.equal((await loadSharedWallReportTarget(wall.id, lookup, async () => member)).status, "retryable");
+  assert.equal((await loadSharedWallReportTarget(wall.id, lookup, async () => member)).status, "ready");
+  assert.deepEqual(requests, [wall.id, wall.id]);
+});

@@ -8,6 +8,7 @@ import { Text } from "@/components/Text";
 import { useAuth } from "@/lib/auth";
 import { TargetRouteFence } from "@/lib/relationship-ui";
 import { createReport, type ReportReason } from "@/lib/reports";
+import { loadSharedWallReportTarget, type SharedWallReportLoadError } from "@/lib/reporting-flow";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { getWall, getWallCapabilities } from "@/lib/walls";
 import { colors, markColors } from "@/theme";
@@ -25,7 +26,7 @@ export default function ReportSharedWallScreen() {
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SharedWallReportLoadError | null>(null);
   const currentActorId = useRef(actorId);
   const currentWallId = useRef(wallId);
   const subjectFence = useRef(new SessionFocusFence());
@@ -45,49 +46,27 @@ export default function ReportSharedWallScreen() {
       setLoadedSubject(null);
       setWallName(null);
       setLoading(false);
-      setError("This Shared Wall isn't available.");
+      setError({ status: "unavailable", message: "This Shared Wall isn’t available." });
       return;
     }
     const subjectToken = subjectFence.current.begin(actorId);
     const targetToken = targetFence.current.capture(wallId);
     if (!subjectToken || !targetToken) {
       setLoading(false);
-      setError("This Shared Wall isn't available.");
+      setError({ status: "unavailable", message: "This Shared Wall isn’t available." });
       return;
     }
     setLoadedSubject(null);
     setWallName(null);
     setLoading(true);
     setError(null);
-    try {
-      const [wall, capabilities] = await Promise.all([
-        getWall(targetToken.targetId),
-        getWallCapabilities(targetToken.targetId),
-      ]);
-      if (!subjectFence.current.isCurrent(subjectToken, currentActorId.current)
-        || !targetFence.current.isCurrent(targetToken, currentWallId.current)) return;
-      if (!wall || wall.type !== "shared" || capabilities?.wallType !== "shared") {
-        setLoadedSubject(`${subjectToken.userId}:${targetToken.targetId}`);
-        setError("This Shared Wall isn't available.");
-        return;
-      }
-      if (capabilities.joinState === "owner") {
-        setLoadedSubject(`${subjectToken.userId}:${targetToken.targetId}`);
-        setError("You can't report a Shared Wall you own.");
-        return;
-      }
-      setLoadedSubject(`${subjectToken.userId}:${targetToken.targetId}`);
-      setWallName(wall.name);
-    } catch (cause) {
-      if (subjectFence.current.isCurrent(subjectToken, currentActorId.current)
-        && targetFence.current.isCurrent(targetToken, currentWallId.current)) {
-        setLoadedSubject(`${subjectToken.userId}:${targetToken.targetId}`);
-        setError(cause instanceof Error ? cause.message : "Couldn't open this report form.");
-      }
-    } finally {
-      if (subjectFence.current.isCurrent(subjectToken, currentActorId.current)
-        && targetFence.current.isCurrent(targetToken, currentWallId.current)) setLoading(false);
-    }
+    const result = await loadSharedWallReportTarget(targetToken.targetId, getWall, getWallCapabilities);
+    if (!subjectFence.current.isCurrent(subjectToken, currentActorId.current)
+      || !targetFence.current.isCurrent(targetToken, currentWallId.current)) return;
+    setLoadedSubject(`${subjectToken.userId}:${targetToken.targetId}`);
+    if (result.status === "ready") setWallName(result.wallName);
+    else setError(result);
+    setLoading(false);
   }, [actorId, wallId]);
 
   useFocusEffect(useCallback(() => {
@@ -103,7 +82,7 @@ export default function ReportSharedWallScreen() {
     if (actorId && wallId) void load();
     else {
       setLoading(false);
-      setError("You need to be signed in to report a Shared Wall.");
+      setError({ status: "unavailable", message: "You need to be signed in to report a Shared Wall." });
     }
     return () => {
       subjectFence.current.blur();
@@ -184,9 +163,10 @@ export default function ReportSharedWallScreen() {
       ) : visibleError || !visibleWallName ? (
         <View style={{ gap: 12 }}>
           <Text accessibilityRole="alert" variant="body" color={colors.error}>
-            {visibleError ?? "This Shared Wall isn't available."}
+            {visibleError?.message ?? "This Shared Wall isn’t available."}
           </Text>
-          {actorId && wallId ? <Button label="Try again" variant="yellow" onPress={() => void load()} /> : null}
+          {visibleError?.status === "retryable" ? <Button label="Try again" variant="yellow" onPress={() => void load()} /> : null}
+          <Button label="Back to Walls" variant="ghost" onPress={() => router.replace("/(tabs)/walls")} />
         </View>
       ) : (
         <>
