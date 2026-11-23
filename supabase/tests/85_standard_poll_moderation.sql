@@ -21,12 +21,38 @@ end $$;
 begin;
 insert into public.mark_polls(mark_id,wall_id,author_id,status,question,selection_mode)
  values('85000000-0000-4000-8000-000000000001',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        '11111111-1111-1111-1111-111111111111',
+        'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        '44444444-4444-4444-4444-444444444444',
         'active','Report this poll','single');
 insert into public.mark_poll_options(mark_id,position,label)
  values('85000000-0000-4000-8000-000000000001',0,'One'),
        ('85000000-0000-4000-8000-000000000001',1,'Two');
+
+-- A private Poll can be reported by its Wall owner but not by an unrelated
+-- authenticated actor. Ordinary reports against legacy targets remain valid.
+set local role authenticated;
+set local "test.uid"='44444444-4444-4444-4444-444444444444';
+insert into public.reports(id,reporter_id,reported_poll_id,reason)
+ values('85000000-0000-4000-8000-000000000002',auth.uid(),
+        '85000000-0000-4000-8000-000000000001','spam');
+reset role;
+set local role authenticated;
+set local "test.uid"='88888888-8888-8888-8888-888888888888';
+do $
+declare v_error text;
+begin
+  begin
+    insert into public.reports(id,reporter_id,reported_poll_id,reason)
+      values('85000000-0000-4000-8000-000000000003',auth.uid(),
+             '85000000-0000-4000-8000-000000000001','spam');
+    raise exception '85 FAIL: unrelated actor reported inaccessible Poll';
+  exception when others then
+    get stacked diagnostics v_error=returned_sqlstate;
+    if v_error <> '42501' then raise exception '85 FAIL: wrong reporter denial %',v_error; end if;
+  end;
+end $;
+reset role;
+\echo '85 (private Poll reporting visibility): PASS'
 
 -- Non-admin cannot remove an otherwise legitimate Poll.
 set local role authenticated;
