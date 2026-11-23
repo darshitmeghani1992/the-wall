@@ -36,7 +36,17 @@ jobs:
           export ANDROID_HOME="$sdk_root"
           printf 'ANDROID_HOME=%s\n' "$sdk_root" >> "$GITHUB_ENV"
           "$tools/sdkmanager" --sdk_root="$sdk_root" --install "emulator" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
-          echo no | "$tools/avdmanager" create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --force
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android-user"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          printf 'ANDROID_USER_HOME=%s\nANDROID_AVD_HOME=%s\n' "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          "$tools/avdmanager" create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --device pixel --path "$ANDROID_AVD_HOME/wall-smoke.avd" --force
+          if [[ ! -s "$ANDROID_AVD_HOME/wall-smoke.ini" ]]; then
+            echo "::error::Android SDK did not create wall-smoke.ini in its explicit AVD location."
+            "$tools/avdmanager" list avd
+            exit 1
+          fi
+          "$sdk_root/emulator/emulator" -list-avds | grep -Fx wall-smoke
           printf '%s\n' "$sdk_root/emulator" "$sdk_root/platform-tools" >> "$GITHUB_PATH"
       - name: Verify emulator boot before compiling the app
         shell: bash
