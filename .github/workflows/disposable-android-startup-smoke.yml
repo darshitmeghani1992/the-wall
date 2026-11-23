@@ -1,0 +1,101 @@
+name: Disposable Android startup smoke
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/disposable-android-startup-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    if: github.head_ref == 'codex/disposable-android-startup-smoke-20261123'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dde8b90e08efbe04906d6f9d032f35aff4cf2332
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install local SDK image
+        shell: bash
+        run: |
+          test -c /dev/kvm
+          sudo chown root:"$(id -gn)" /dev/kvm
+          sudo chmod 660 /dev/kvm
+          sdkmanager --install "emulator" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
+          echo no | avdmanager create avd --name wall-smoke --package "system-images;android-34;google_apis;x86_64" --force
+      - name: Build exact source with test-only signing and no backend
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = dde8b90e08efbe04906d6f9d032f35aff4cf2332
+          test -z "$(git status --porcelain)"
+          test -z "$EXPO_PUBLIC_SUPABASE_URL"
+          test -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          npm ci --no-audit --no-fund
+          npx expo prebuild --non-interactive --platform android --no-install
+          test -n "$JAVA_HOME_17_X64"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          cd android
+          ./gradlew --no-daemon :app:assembleRelease -PreactNativeArchitectures=x86_64
+      - name: Boot and verify Welcome to sign-in without submitting anything
+        shell: bash
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          emulator -avd wall-smoke -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect >"$RUNNER_TEMP/android-emulator.log" 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          timeout 240 adb wait-for-device
+          for attempt in {1..90}; do
+            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
+              break
+            fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb shell input keyevent 82
+          adb shell svc wifi disable
+          adb shell svc data disable
+          adb install "$apk"
+          adb shell am start -W -n com.thewall.app/.MainActivity
+          python3 - <<'PY'
+          import re
+          import subprocess
+          import time
+          import xml.etree.ElementTree as ET
+
+          def adb(*args):
+              return subprocess.check_output(["adb", *args], text=True, timeout=15)
+
+          def find(label):
+              deadline = time.monotonic() + 120
+              while time.monotonic() < deadline:
+                  try:
+                      adb("shell", "rm", "-f", "/sdcard/wall-smoke.xml")
+                      adb("shell", "uiautomator", "dump", "/sdcard/wall-smoke.xml")
+                      xml = adb("exec-out", "cat", "/sdcard/wall-smoke.xml")
+                      for item in ET.fromstring(xml).iter("node"):
+                          if label in (item.get("text"), item.get("content-desc")):
+                              bounds = re.fullmatch(
+                                  r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", item.get("bounds", "")
+                              )
+                              if bounds:
+                                  x1, y1, x2, y2 = (int(value) for value in bounds.groups())
+                                  if x1 < x2 and y1 < y2:
+                                      return (x1 + x2) // 2, (y1 + y2) // 2
+                  except (subprocess.SubprocessError, ET.ParseError):
+                      pass
+                  time.sleep(2)
+              raise SystemExit(f"Could not find the expected Android UI label: {label}")
+
+          x, y = find("Get started")
+          print("Welcome is visible.")
+          adb("shell", "input", "tap", str(x), str(y))
+          find("Email me a code")
+          print("Sign-in is visible. No auth request was submitted.")
+          PY
