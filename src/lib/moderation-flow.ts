@@ -1,4 +1,4 @@
-export type ModerationTargetAction = "none" | "remove_mark" | "suspend_user";
+export type ModerationTargetAction = "none" | "remove_mark" | "remove_poll" | "suspend_user";
 
 type ModerationActionFlow = {
   expectedActorId: string;
@@ -9,6 +9,7 @@ type ModerationActionFlow = {
   reason: string;
   isCurrent: () => boolean;
   removeMark: (expectedActorId: string, markId: string, reason: string) => Promise<void>;
+  removePoll?: (expectedActorId: string, pollId: string, reason: string) => Promise<void>;
   suspendAccount: (expectedActorId: string, userId: string, reason: string) => Promise<void>;
   resolveReport: (
     expectedActorId: string,
@@ -28,6 +29,9 @@ export async function runModerationActionFlow(input: ModerationActionFlow): Prom
     if (input.targetAction === "remove_mark") {
       if (!input.targetId) throw new Error("This report no longer has a Mark target.");
       await input.removeMark(input.expectedActorId, input.targetId, input.reason);
+    } else if (input.targetAction === "remove_poll") {
+      if (!input.targetId || !input.removePoll) throw new Error("This report no longer has a Poll target.");
+      await input.removePoll(input.expectedActorId, input.targetId, input.reason);
     } else if (input.targetAction === "suspend_user") {
       if (!input.targetId) throw new Error("This report no longer has a user target.");
       await input.suspendAccount(input.expectedActorId, input.targetId, input.reason);
