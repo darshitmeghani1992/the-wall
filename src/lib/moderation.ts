@@ -14,7 +14,7 @@ export type ReportRow = {
   id: string;
   reporter_id: string;
   mark_id: string | null;
-  reported_poll_id: string | null;
+  reported_poll_id?: string | null;
   reported_user_id: string | null;
   reported_wall_id: string | null;
   reason: string;
@@ -30,7 +30,7 @@ export type ModerationAction = {
   actor_id: string | null;
   action: "remove_mark" | "remove_poll" | "suspend_account" | "resolve_report" | "dismiss_report";
   target_mark_id: string | null;
-  target_poll_id: string | null;
+  target_poll_id?: string | null;
   target_user_id: string | null;
   report_id: string | null;
   reason: string | null;
