@@ -21,6 +21,14 @@ export const requiredChecks = Object.freeze([
   { name: 'secret_payload_isolation', path: '/rest/v1/mark_secrets?select=mark_id&limit=0', acceptedStatuses: [401, 403] },
   { name: 'private_media_isolation', path: '/rest/v1/mark_media?select=mark_id&limit=0', acceptedStatuses: [401, 403] },
   { name: 'secret_rollout_isolation', path: '/rest/v1/secret_mark_rollout?select=singleton&limit=0', acceptedStatuses: [401, 403] },
+  // The read-only HTTP preflight must match SQL test 81's eight default-deny
+  // server tables. Zero-row projections never retrieve sensitive values.
+  { name: 'anonymous_author_isolation', path: '/rest/v1/anonymous_mark_authors?select=*&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'notification_origin_isolation', path: '/rest/v1/notification_origins?select=*&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'removed_member_history_isolation', path: '/rest/v1/shared_wall_member_removals?select=*&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'media_reservation_isolation', path: '/rest/v1/media_uploads?select=*&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'media_envelope_key_isolation', path: '/rest/v1/media_envelope_keys?select=*&limit=0', acceptedStatuses: [401, 403] },
+  { name: 'media_rate_limit_isolation', path: '/rest/v1/media_signing_rate_limits?select=*&limit=0', acceptedStatuses: [401, 403] },
 ]);
 
 export function validatePublicClientConfig(url, key) {

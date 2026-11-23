@@ -1,3 +1,9 @@
+## 23 Nov 2026 · BETA-P0-103 · Full eight-table HTTP privilege preflight prepared
+
+[Draft #190](https://github.com/darshitmeghani1992/the-wall/pull/190) adds six zero-row, read-only public-key GETs to the existing two, matching all eight server-only tables audited by PostgreSQL test 81. Each is required to return 401/403; a 200 or 404 is a **NO-GO for preflight** because either direct grant drift or missing schema may exist. Mock tests assert eight-table completeness and failures; final docs-head CI and independent Reviewer/QA must still be checked. This does **not** run live authenticated actor tests, claim RLS evidence or certify media/Secret. Stage `ewintxgdxdvschiqodkq` only, no production read, schema/ACL change, hosted writes, merges, deployment or tester invitation. Original domain/Apple holds, high-risk flags OFF, Enhanced Beta **NO-GO**. Rollback: leave draft unmerged or independently reviewed revert of just these probes.
+
+---
+
 ## 23 Nov 2026 · BETA-P0-102 service-versus-definer ACL regression and CI correction
 
 [Draft #189](https://github.com/darshitmeghani1992/the-wall/pull/189), child of #188 immutable `ae8626a9e1737d61a00acbd57b35f874e48f20fe`, now guards the checked-in grants: SELECT for three identity/notification/Secret side tables, CRUD for three media-worker tables, and no direct service_role CRUD for two postgres/SECURITY-DEFINER-only tables. The original six-CRUD assumption failed SEC-001 on [run 45101321241](https://github.com/darshitmeghani1992/the-wall/actions/runs/45101321241) (anonymous_mark_authors source migration 0002 only grants service_role SELECT). Corrected test commit `a26018191b5605b8f945657540de41b4d4d60482`; no permissions were broadened and client default-deny regressions remain intact. Staging SELECT shows broader service grants on three side tables; this is staging/disposable drift to reconcile before rollout, **not** proof of client exploitation.
