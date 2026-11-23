@@ -6,6 +6,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Masonry } from "@/components/Masonry";
+import { MixedWallSegments } from "@/components/MixedWallSegments";
 import { InviteCrew } from "@/components/InviteCrew";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
@@ -15,7 +16,9 @@ import { shareMyWall, inviteFriends } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { getPersonalWall } from "@/lib/profiles";
 import { listWallMarks, type MarkWithAuthor } from "@/lib/marks";
-import { getFocusedWallMark, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import { getFocusedWallMark, loadHydratedMixedWallHistory, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import { isMixedPollHistoryEnabled, type MixedWallCursor } from "@/lib/poll-mixed-history";
+import { mergeMixedWallItems, mixedItemForLiveMark, type HydratedMixedWallItem } from "@/lib/poll-mixed-wall-presenter";
 import type { FocusedPoll } from "@/lib/poll-focused-reader";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getAccessibleSharedWalls } from "@/lib/walls";
@@ -66,6 +69,8 @@ export default function MyWall() {
   const [sharedWalls, setSharedWalls] = useState<Wall[]>([]);
   const [sharedWallsError, setSharedWallsError] = useState(false);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
+  const [mixedItems, setMixedItems] = useState<HydratedMixedWallItem[]>([]);
+  const [mixedCursor, setMixedCursor] = useState<MixedWallCursor | null>(null);
   const [nextCursor, setNextCursor] = useState<MarkCursor | null>(null);
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState(false);
@@ -97,7 +102,7 @@ export default function MyWall() {
     setDeferredReadyToken(null);
     setLoading(true);
     setWall(null);
-    setMarks([]);
+    setMarks([]); setMixedItems([]); setMixedCursor(null);
     setSelectedMark(null);
     setDeferredAttempt({
       reference,
@@ -151,14 +156,15 @@ export default function MyWall() {
     let active = true;
     const generationGuard = pageGeneration;
     const generation = ++generationGuard.current;
-    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
+    setNextCursor(null); setMixedCursor(null); setMixedItems([]);
+    setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
     // Never render a prior account's friend total while a new Wall loads.
     setFriendCount(null);
     setLoadedSubject(null);
     (async () => {
       if (!userId) {
         setWall(null);
-        setMarks([]);
+        setMarks([]); setMixedItems([]); setMixedCursor(null);
         setSharedWalls([]);
         setSelectedMark(null);
         setLoading(false);
@@ -172,7 +178,7 @@ export default function MyWall() {
       setDeferredReadyToken(null);
       setFocusedMarkUnavailable(false);
       setWall(null);
-      setMarks([]);
+      setMarks([]); setMixedItems([]); setMixedCursor(null);
       setSelectedMark(null);
 
       const personalWallPromise = getPersonalWall(userId);
@@ -218,8 +224,14 @@ export default function MyWall() {
       }
 
       setWall(personalWall);
-      const [page, exactContent, friends] = await Promise.all([
-        listWallMarks(personalWall.id),
+      const pagePromise = isMixedPollHistoryEnabled
+        ? loadHydratedMixedWallHistory(userId, personalWall.id, null).then((page) => {
+          if (!page) throw new Error("Personal Wall history unavailable");
+          return { kind: "mixed" as const, page };
+        })
+        : listWallMarks(personalWall.id).then((page) => ({ kind: "legacy" as const, page }));
+      const [history, exactContent, friends] = await Promise.all([
+        pagePromise,
         focusMarkId ? (markPromise ?? readExact(personalWall.id, focusMarkId)) : Promise.resolve(null),
         settleOptional(supabase
           .from("friendships")
@@ -232,9 +244,16 @@ export default function MyWall() {
           })),
       ]);
       if (!active || generation !== pageGeneration.current || currentUserId.current !== userId) return;
-      setMarks(page.items);
+      if (history.kind === "mixed") {
+        setMixedItems(history.page.items);
+        setMixedCursor(history.page.nextCursor);
+        setMarks(history.page.items.flatMap((item) => item.kind === "mark" ? [item.mark] : []));
+        setNextCursor(null);
+      } else {
+        setMarks(history.page.items);
+        setNextCursor(history.page.nextCursor);
+      }
       setLoadedSubject(`${userId}:${focusMarkId ?? ""}`);
-      setNextCursor(page.nextCursor);
       if (focusMarkId) {
         const exactMark = exactContent?.kind === "mark" ? exactContent.mark : null;
         setFocusedMark(exactMark);
@@ -265,18 +284,26 @@ export default function MyWall() {
   }
 
   async function loadOlder() {
-    if (!wall || !userId || !nextCursor || olderBusy) return;
+    if (!wall || !userId || olderBusy || !(isMixedPollHistoryEnabled ? mixedCursor : nextCursor)) return;
     const generation = pageGeneration.current;
-    const cursor = nextCursor;
     const requestedWall = wall.id;
     setOlderBusy(true); setOlderError(false);
     try {
-      const page = await listWallMarks(requestedWall, cursor);
-      if (generation !== pageGeneration.current || currentUserId.current !== userId || wall?.id !== requestedWall) return;
-      setMarks((current) => mergeWallMarks(current, page.items));
-      setNextCursor(page.nextCursor);
+      if (isMixedPollHistoryEnabled) {
+        const page = await loadHydratedMixedWallHistory(userId, requestedWall, mixedCursor);
+        if (!page) throw new Error("Personal Wall history unavailable");
+        if (generation !== pageGeneration.current || currentUserId.current !== userId || wall?.id !== requestedWall) return;
+        setMixedItems((current) => mergeMixedWallItems(current, page.items));
+        setMarks((current) => mergeWallMarks(current, page.items.flatMap((item) => item.kind === "mark" ? [item.mark] : [])));
+        setMixedCursor(page.nextCursor);
+      } else {
+        const page = await listWallMarks(requestedWall, nextCursor!);
+        if (generation !== pageGeneration.current || currentUserId.current !== userId || wall?.id !== requestedWall) return;
+        setMarks((current) => mergeWallMarks(current, page.items));
+        setNextCursor(page.nextCursor);
+      }
     } catch {
-      if (generation === pageGeneration.current && currentUserId.current === userId) setOlderError(true);
+      if (generation === pageGeneration.current && currentUserId.current === userId && wall?.id === requestedWall) setOlderError(true);
     } finally {
       if (generation === pageGeneration.current) setOlderBusy(false);
     }
@@ -286,6 +313,7 @@ export default function MyWall() {
     if (!wall || mark.wall_id !== wall.id || loadedSubject !== `${userId}:${focusMarkId ?? ""}`) return;
     dropIds.current.add(mark.id);
     setMarks((current) => mergeWallMarks(current, [mark]));
+    if (isMixedPollHistoryEnabled) setMixedItems((current) => mergeMixedWallItems(current, [mixedItemForLiveMark(mark)]));
   });
   const gridMarks = focusedMark?.secret ? marks.filter((mark) => mark.id !== focusedMark.id) : marks;
   const reactionMarks = useMemo(
@@ -298,13 +326,19 @@ export default function MyWall() {
     () => gridMarks.filter((mark) => activeFilter.match(mark.type)),
     [gridMarks, activeFilter],
   );
+  const visibleMixed = useMemo(() => mixedItems.filter((item) => item.kind === "poll"
+    ? activeFilter.key === "all"
+    : activeFilter.match(item.mark.type) && !(focusedMark?.secret && item.id === focusedMark.id)),
+    [mixedItems, activeFilter, focusedMark?.id, focusedMark?.secret]);
   const initial = (actorProfile?.display_name?.[0] ?? "?").toUpperCase();
 
   const pollActorId = session?.user.id ?? "";
   const pollWallId = wall?.id;
   const pollGeneration = pageGeneration.current;
   const visibleFocusedPoll = loadedSubject === `${userId}:${focusMarkId ?? ""}` ? focusedPoll : null;
-  const visibleMarkCount = marks.length + (visibleFocusedPoll ? 1 : 0);
+  const focusedPollIsInHistory = isMixedPollHistoryEnabled && mixedItems.some((item) => item.kind === "poll" && item.id === focusMarkId);
+  const visibleMarkCount = (isMixedPollHistoryEnabled ? mixedItems.length : marks.length)
+    + (visibleFocusedPoll && !focusedPollIsInHistory ? 1 : 0);
 
   const Header = useCallback(
     () => (
@@ -334,7 +368,7 @@ export default function MyWall() {
               {wall?.name ?? `${actorProfile?.display_name ?? "My"}'s Wall`}
             </Text>
             <Text variant="label" color={colors.outline}>
-              {visibleMarkCount} {nextCursor ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
+              {visibleMarkCount} {(isMixedPollHistoryEnabled ? mixedCursor : nextCursor) ? "LOADED MARKS" : "MARKS"} · {friendCount === null ? "FRIENDS UNAVAILABLE" : `${friendCount} FRIENDS`}
             </Text>
           </View>
         </View>
@@ -430,7 +464,7 @@ export default function MyWall() {
         </View>
       </>
     ),
-    [filter, friendCount, initial, visibleMarkCount, nextCursor, actorProfile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
+    [filter, friendCount, initial, visibleMarkCount, nextCursor, mixedCursor, actorProfile, refreshSharedWalls, router, sharedWalls, sharedWallsError, userId, wall],
   );
 
   if (authLoading) return <Screen><ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} /></Screen>;
@@ -469,7 +503,7 @@ export default function MyWall() {
         </View>
       ) : null}
 
-      {visibleFocusedPoll && pollWallId && focusMarkId ? (
+      {visibleFocusedPoll && pollWallId && focusMarkId && !focusedPollIsInHistory ? (
         <FocusedPollCard key={`${pollActorId}:${pollWallId}:${focusMarkId}:${pollGeneration}`}
           poll={visibleFocusedPoll} target={{ actorId: pollActorId.toLowerCase(), wallId: pollWallId.toLowerCase(), markId: focusMarkId.toLowerCase() }}
           isCurrent={() => currentUserId.current === pollActorId && wall?.owner_id === pollActorId
@@ -492,14 +526,34 @@ export default function MyWall() {
         </View>
       ) : loading ? (
         <ActivityIndicator color={markColors.brandYellow} style={{ marginTop: 40 }} />
-      ) : visibleFocusedPoll && marks.length === 0 ? null : marks.length === 0 ? (
+      ) : visibleFocusedPoll && (isMixedPollHistoryEnabled ? mixedItems.length : marks.length) === 0 ? null
+      : (isMixedPollHistoryEnabled ? mixedItems.length : marks.length) === 0 ? (
         <View style={{ marginTop: 8 }}><InviteCrew handle={actorProfile?.handle} /></View>
-      ) : visible.length === 0 ? (
+      ) : (isMixedPollHistoryEnabled ? visibleMixed.length === 0 : visible.length === 0) ? (
         <Text variant="body" color={colors.outline} style={{ marginTop: 24, textAlign: "center" }}>
           {activeFilter.key === "all"
-            ? nextCursor ? "No other loaded Marks. Load older Marks to see more." : "No other Marks are visible."
-            : nextCursor ? `No loaded ${activeFilter.label.toLowerCase()} yet. Load older Marks to see more.` : `No ${activeFilter.label.toLowerCase()} yet.`}
+            ? (isMixedPollHistoryEnabled ? mixedCursor : nextCursor) ? "No other loaded Marks. Load older Marks to see more." : "No other Marks are visible."
+            : (isMixedPollHistoryEnabled ? mixedCursor : nextCursor) ? `No loaded ${activeFilter.label.toLowerCase()} yet. Load older Marks to see more.` : `No ${activeFilter.label.toLowerCase()} yet.`}
         </Text>
+      ) : isMixedPollHistoryEnabled ? (
+        <MixedWallSegments entries={visibleMixed}
+          estimateMark={estimateMarkHeight}
+          renderMark={(mark, index) => (
+            <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index}
+              highlight={mark.id === highlightedMarkId} shareable wallHandle={actorProfile?.handle}
+              shareDestination={userId ? { kind: "personal", ownerId: userId } : undefined}
+              isWallOwner reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)}
+              onOpenDetail={() => setSelectedMark(mark)} />
+          )}
+          renderPoll={(item) => (
+            <FocusedPollCard key={`${pollActorId}:${pollWallId}:${item.id}:${pollGeneration}`}
+              poll={item.poll}
+              target={{ actorId: pollActorId.toLowerCase(), wallId: (pollWallId ?? "").toLowerCase(), markId: item.id }}
+              isCurrent={() => currentUserId.current === pollActorId && wall?.owner_id === pollActorId
+                && pageGeneration.current === pollGeneration && loadedSubject === `${pollActorId}:${focusMarkId ?? ""}`}
+              mutate={mutateFocusedPoll}
+              refresh={() => refreshFocusedPoll({ actorId: pollActorId, wallId: pollWallId ?? "", markId: item.id })} />
+          )} />
       ) : (
         <Masonry
           data={visible}
@@ -523,7 +577,7 @@ export default function MyWall() {
         />
       )}
 
-      {!loadError && !loading && nextCursor ? (
+      {!loadError && !loading && (isMixedPollHistoryEnabled ? mixedCursor : nextCursor) ? (
         <View style={{ marginTop: 20, gap: 8 }}>
           {olderError ? <Text accessibilityRole="alert" variant="body" color={colors.error}>Older Marks couldn&apos;t load. Your visible Marks are still here.</Text> : null}
           <Button label={olderError ? "Retry older Marks" : "Load older Marks"} variant="primary" loading={olderBusy} onPress={() => void loadOlder()} />
@@ -542,6 +596,8 @@ export default function MyWall() {
         onClose={() => setSelectedMark(null)}
         onMarkUpdated={(markId, text) => {
           setMarks((current) => current.map((mark) => mark.id === markId ? { ...mark, text } : mark));
+          setMixedItems((current) => current.map((item) => item.kind === "mark" && item.id === markId
+            ? { ...item, mark: { ...item.mark, text } } : item));
           setSelectedMark((current) => current?.id === markId ? { ...current, text } : current);
           setFocusedMark((current) => current?.id === markId ? { ...current, text } : current);
         }}
