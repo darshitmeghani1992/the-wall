@@ -1,0 +1,54 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+// @ts-ignore Dependency-free contract tests load source directly.
+import { finishVoiceCapture, MAX_VOICE_MS } from "./voice-recording-result.ts";
+import type { VoiceResult } from "./voice-recording-result";
+
+const uri = "file:///voice.m4a";
+
+test("a manual stop and the time cap each deliver an attachable recording", async () => {
+  for (const durationMillis of [8_000, 60_100]) {
+    const clips: VoiceResult[] = [];
+    await finishVoiceCapture(
+      { stopAndUnloadAsync: async () => ({ durationMillis }), getURI: () => uri },
+      durationMillis,
+      () => true,
+      async (clip) => { clips.push(clip); },
+    );
+    assert.deepEqual(clips, [{ uri, mime: "audio/m4a", durationMs: Math.min(durationMillis, MAX_VOICE_MS) }]);
+  }
+});
+
+test("the last progress update supplies the duration when native stop omits it", async () => {
+  const clips: VoiceResult[] = [];
+  await finishVoiceCapture(
+    { stopAndUnloadAsync: async () => ({}), getURI: () => uri },
+    MAX_VOICE_MS,
+    () => true,
+    async (clip) => { clips.push(clip); },
+  );
+  assert.equal(clips[0]?.durationMs, MAX_VOICE_MS);
+});
+
+test("an interrupted stop cannot attach to a discarded recorder", async () => {
+  let current = true;
+  await finishVoiceCapture(
+    {
+      stopAndUnloadAsync: async () => { current = false; return { durationMillis: 5_000 }; },
+      getURI: () => uri,
+    },
+    5_000,
+    () => current,
+    async () => { assert.fail("discarded capture was delivered"); },
+  );
+});
+
+test("the recorder time limit and manual stop share the composer attachment callback", () => {
+  const recorder = readFileSync(new URL("./recording.ts", import.meta.url), "utf8");
+  const composer = readFileSync(new URL("../../app/create.tsx", import.meta.url), "utf8");
+  assert.match(recorder, /if \(ms >= MAX_VOICE_MS\) void stop\(\)/);
+  assert.match(recorder, /await finishVoiceCapture\(rec, latestDurationMs\.current, isCurrent, clipReady\.current\)/);
+  assert.match(composer, /useVoiceRecorder\(attachVoiceClip\)/);
+  assert.match(composer, /if \(recording\) await recorder\.stop\(\)/);
+});
