@@ -5,6 +5,7 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { FocusedPollCard } from "@/components/FocusedPollCard";
+import { MixedWallSegments } from "@/components/MixedWallSegments";
 import { Masonry } from "@/components/Masonry";
 import { MarkView, estimateMarkHeight } from "@/components/marks/MarkView";
 import { MarkDetailModal } from "@/components/marks/MarkDetailModal";
@@ -13,7 +14,9 @@ import { getWall, getWallCapabilities, joinSharedWall, leaveSharedWall, type Wal
 import { listWallMarks, type MarkWithAuthor } from "@/lib/marks";
 import { mergeWallMarks, type MarkCursor } from "@/lib/mark-history-cursor";
 import { getProfile } from "@/lib/profiles";
-import { getFocusedWallMark, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import { getFocusedWallMark, loadHydratedMixedWallHistory, mutateFocusedPoll, refreshFocusedPoll } from "@/lib/poll-detail-service";
+import { isMixedPollHistoryEnabled, type MixedWallCursor } from "@/lib/poll-mixed-history";
+import { mergeMixedWallItems, mixedItemForLiveMark, type HydratedMixedWallItem } from "@/lib/poll-mixed-wall-presenter";
 import type { FocusedPoll } from "@/lib/poll-focused-reader";
 import { SessionFocusFence } from "@/lib/session-generation";
 import { settleOptional } from "@/lib/optional-result";
@@ -51,6 +54,8 @@ export default function SharedWallScreen() {
   const [owner, setOwner] = useState<Profile | null>(null);
   const [capabilities, setCapabilities] = useState<WallCapabilities | null>(null);
   const [marks, setMarks] = useState<MarkWithAuthor[]>([]);
+  const [mixedItems, setMixedItems] = useState<HydratedMixedWallItem[]>([]);
+  const [mixedCursor, setMixedCursor] = useState<MixedWallCursor | null>(null);
   const [nextCursor, setNextCursor] = useState<MarkCursor | null>(null);
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState(false);
@@ -84,6 +89,7 @@ export default function SharedWallScreen() {
     setOwner(null);
     setCapabilities(null);
     setMarks([]);
+    setMixedItems([]); setMixedCursor(null);
     setSelectedMark(null);
     setDeferredAttempt({
       reference,
@@ -109,7 +115,8 @@ export default function SharedWallScreen() {
     setDeferredReadyToken(null);
     setError(null);
     setFocusedMarkUnavailable(false);
-    setNextCursor(null); setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
+    setNextCursor(null); setMixedCursor(null); setMixedItems([]);
+    setOlderBusy(false); setOlderError(false); setFocusedMark(null); setFocusedPoll(null);
     setLoadedIdentity(null);
     try {
       const wallPromise = getWall(requestedWallId);
@@ -148,18 +155,32 @@ export default function SharedWallScreen() {
         setError("This Shared Wall isn't available.");
         return;
       }
-      const [ownerResult, page, exactContent] = await Promise.all([
+      const pagePromise = isMixedPollHistoryEnabled
+        ? loadHydratedMixedWallHistory(token.userId, nextWall.id, null).then((page) => {
+          // Do not silently fall back to legacy history if the private v2 endpoint denies access.
+          if (!page) throw new Error("This Shared Wall history isn't available.");
+          return { kind: "mixed" as const, page };
+        })
+        : listWallMarks(nextWall.id).then((page) => ({ kind: "legacy" as const, page }));
+      const [ownerResult, history, exactContent] = await Promise.all([
         settleOptional(getProfile(nextWall.owner_id)),
-        listWallMarks(nextWall.id),
+        pagePromise,
         focusMarkId ? (markPromise ?? readExact(nextWall.id, focusMarkId)) : Promise.resolve(null),
       ]);
       if (!fence.isCurrent(token, currentUserId.current) || currentWallId.current !== requestedWallId || generation !== pageGeneration.current) return;
       setWall(nextWall);
       setCapabilities(nextCapabilities);
       setOwner(ownerResult.available ? ownerResult.value : null);
-      setMarks(page.items);
+      if (history.kind === "mixed") {
+        setMixedItems(history.page.items);
+        setMixedCursor(history.page.nextCursor);
+        setMarks(history.page.items.flatMap((item) => item.kind === "mark" ? [item.mark] : []));
+        setNextCursor(null);
+      } else {
+        setMarks(history.page.items);
+        setNextCursor(history.page.nextCursor);
+      }
       setLoadedIdentity(`${userId}:${requestedWallId}:${focusMarkId ?? ""}`);
-      setNextCursor(page.nextCursor);
       if (focusMarkId) {
         const exactMark = exactContent?.kind === "mark" ? exactContent.mark : null;
         setFocusedMark(exactMark);
@@ -182,7 +203,7 @@ export default function SharedWallScreen() {
   useFocusEffect(useCallback(() => {
     fence.focus(userId ?? null);
     mutationFence.focus(userId ?? null);
-    setWall(null); setOwner(null); setCapabilities(null); setMarks([]); setSelectedMark(null); setBusy(null);
+    setWall(null); setOwner(null); setCapabilities(null); setMarks([]); setMixedItems([]); setMixedCursor(null); setSelectedMark(null); setBusy(null);
     if (userId && accountRoute === "ready" && wallId && (!reference || deferredAttempt?.reference === reference)) void load(); else if (!reference && accountRoute === "ready") setLoading(false);
     return () => { pageGeneration.current++; fence.blur(); mutationFence.blur(); endExclusiveMutation(mutationInFlight); setBusy(null); };
   }, [accountRoute, deferredAttempt?.reference, fence, load, mutationFence, reference, userId, wallId]));
@@ -191,6 +212,7 @@ export default function SharedWallScreen() {
     if (!wall || mark.wall_id !== wall.id || loadedIdentity !== `${userId}:${wallId}:${focusMarkId ?? ""}`) return;
     dropIds.current.add(mark.id);
     setMarks((current) => mergeWallMarks(current, [mark]));
+    if (isMixedPollHistoryEnabled) setMixedItems((current) => mergeMixedWallItems(current, [mixedItemForLiveMark(mark)]));
   });
   const gridMarks = focusedMark?.secret ? marks.filter((mark) => mark.id !== focusedMark.id) : marks;
   const reactionMarks = useMemo(
@@ -275,17 +297,26 @@ export default function SharedWallScreen() {
   }
 
   async function loadOlder() {
-    if (!wall || !userId || !nextCursor || olderBusy) return;
+    if (!wall || !userId || olderBusy || !(isMixedPollHistoryEnabled ? mixedCursor : nextCursor)) return;
     const requestedWall = wall.id;
     const generation = pageGeneration.current;
     setOlderBusy(true); setOlderError(false);
     try {
-      const page = await listWallMarks(requestedWall, nextCursor);
-      if (generation !== pageGeneration.current || currentUserId.current !== userId || currentWallId.current !== requestedWall) return;
-      setMarks((current) => mergeWallMarks(current, page.items));
-      setNextCursor(page.nextCursor);
+      if (isMixedPollHistoryEnabled) {
+        const page = await loadHydratedMixedWallHistory(userId, requestedWall, mixedCursor);
+        if (!page) throw new Error("Shared Wall history unavailable");
+        if (generation !== pageGeneration.current || currentUserId.current !== userId || currentWallId.current !== requestedWall) return;
+        setMixedItems((current) => mergeMixedWallItems(current, page.items));
+        setMarks((current) => mergeWallMarks(current, page.items.flatMap((item) => item.kind === "mark" ? [item.mark] : [])));
+        setMixedCursor(page.nextCursor);
+      } else {
+        const page = await listWallMarks(requestedWall, nextCursor!);
+        if (generation !== pageGeneration.current || currentUserId.current !== userId || currentWallId.current !== requestedWall) return;
+        setMarks((current) => mergeWallMarks(current, page.items));
+        setNextCursor(page.nextCursor);
+      }
     } catch {
-      if (generation === pageGeneration.current && currentUserId.current === userId) setOlderError(true);
+      if (generation === pageGeneration.current && currentUserId.current === userId && currentWallId.current === requestedWall) setOlderError(true);
     } finally {
       if (generation === pageGeneration.current) setOlderBusy(false);
     }
@@ -303,7 +334,9 @@ export default function SharedWallScreen() {
   if (!wall || capabilities?.wallType !== "shared") return <Unavailable message="This Shared Wall isn't available." onBack={() => router.back()} onRetry={() => void retryLoad()} />;
 
   const visibleFocusedPoll = loadedIdentity === `${userId}:${wallId}:${focusMarkId ?? ""}` ? focusedPoll : null;
-  const visibleMarkCount = marks.length + (visibleFocusedPoll ? 1 : 0);
+  const focusedPollIsInHistory = isMixedPollHistoryEnabled && mixedItems.some((item) => item.kind === "poll" && item.id === focusMarkId);
+  const visibleMarkCount = (isMixedPollHistoryEnabled ? mixedItems.length : marks.length)
+    + (visibleFocusedPoll && !focusedPollIsInHistory ? 1 : 0);
   const pollGeneration = pageGeneration.current;
   const pollActorId = session.user.id;
   const joinState = capabilities.joinState;
@@ -321,7 +354,7 @@ export default function SharedWallScreen() {
       </View>
       <Text variant="display" style={{ fontSize: 26 }}>{wall.name}</Text>
       <Text variant="body" color={colors.outline} style={{ marginTop: 4 }}>
-        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {visibleMarkCount} {nextCursor ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
+        {owner ? `Started by ${owner.display_name}` : "Shared Wall"} · {visibleMarkCount} {(isMixedPollHistoryEnabled ? mixedCursor : nextCursor) ? "loaded marks" : "marks"} · {isOwner ? "owner" : isMember ? "member" : "viewer"}
       </Text>
 
       {error ? <Text accessibilityRole="alert" variant="body" color={colors.error} style={{ marginTop: 12 }}>{error}</Text> : null}
@@ -342,7 +375,7 @@ export default function SharedWallScreen() {
       {joinState === "invite_required" ? <StateNotice text={wall.visibility === "public" ? "You can view this Wall. Joining requires an invitation from the owner." : "Only accepted members can open this Wall."} /> : null}
       {joinState === "invited" ? <StateNotice text="You have an invitation waiting. Accept it before leaving Marks." /> : null}
 
-      {visibleFocusedPoll && focusMarkId ? (
+      {visibleFocusedPoll && focusMarkId && !focusedPollIsInHistory ? (
         <FocusedPollCard key={`${pollActorId}:${wallId}:${focusMarkId}:${pollGeneration}`}
           poll={visibleFocusedPoll} target={{ actorId: pollActorId.toLowerCase(), wallId: wallId.toLowerCase(), markId: focusMarkId.toLowerCase() }}
           isCurrent={() => currentUserId.current === pollActorId && currentWallId.current === wallId
@@ -356,20 +389,37 @@ export default function SharedWallScreen() {
           <MarkView mark={focusedMark} highlight isWallOwner={isOwner} reactions={summaries[focusedMark.id]} onToggleReaction={(emoji) => toggle(focusedMark.id, emoji)} onOpenDetail={focusedMark.secret ? undefined : () => setSelectedMark(focusedMark)} />
         </View>
       ) : null}
-      {marks.length ? (
+      {isMixedPollHistoryEnabled && mixedItems.length ? (
+        <MixedWallSegments
+          entries={mixedItems.filter((item) => !(item.kind === "mark" && focusedMark?.secret && item.id === focusedMark.id))}
+          estimateMark={estimateMarkHeight}
+          renderMark={(mark, index) => (
+            <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} isWallOwner={isOwner} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
+          )}
+          renderPoll={(item) => (
+            <FocusedPollCard key={`${pollActorId}:${wallId}:${item.id}:${pollGeneration}`}
+              poll={item.poll}
+              target={{ actorId: pollActorId.toLowerCase(), wallId: wallId.toLowerCase(), markId: item.id }}
+              isCurrent={() => currentUserId.current === pollActorId && currentWallId.current === wallId
+                && pageGeneration.current === pollGeneration && loadedIdentity === `${pollActorId}:${wallId}:${focusMarkId ?? ""}`}
+              mutate={mutateFocusedPoll}
+              refresh={() => refreshFocusedPoll({ actorId: pollActorId, wallId, markId: item.id })} />
+          )}
+        />
+      ) : marks.length ? (
         <Masonry data={gridMarks} keyFor={(mark) => mark.id} estimate={estimateMarkHeight} renderItem={(mark, index) => (
           <MarkView mark={mark} enter={dropIds.current.has(mark.id) ? "drop" : "settle"} enterIndex={index} highlight={mark.id === justCreatedId} isWallOwner={isOwner} reactions={summaries[mark.id]} onToggleReaction={(emoji) => toggle(mark.id, emoji)} onOpenDetail={() => setSelectedMark(mark)} />
         )} />
       ) : visibleFocusedPoll ? null : (
         <View style={{ paddingVertical: 36, alignItems: "center" }}><Text variant="headline">No Marks yet</Text><Text variant="body" color={colors.outline} style={{ marginTop: 6, textAlign: "center" }}>{canLeaveMark ? `Be the first to leave a Mark on ${wall.name}.` : "This Shared Wall is waiting for its first Mark."}</Text></View>
       )}
-      {nextCursor ? (
+      {(isMixedPollHistoryEnabled ? mixedCursor : nextCursor) ? (
         <View style={{ marginTop: 20, gap: 8 }}>
           {olderError ? <Text accessibilityRole="alert" variant="body" color={colors.error}>Older Marks couldn&apos;t load. Your visible Marks are still here.</Text> : null}
           <Button label={olderError ? "Retry older Marks" : "Load older Marks"} variant="primary" loading={olderBusy} onPress={() => void loadOlder()} />
         </View>
       ) : null}
-      <MarkDetailModal mark={selectedMark} viewerId={userId} wallOwnerId={wall.owner_id} reactions={selectedMark ? summaries[selectedMark.id] : undefined} onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined} onClose={() => setSelectedMark(null)} onMarkUpdated={(markId, text) => { setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item)); setSelectedMark((current) => current?.id === markId ? { ...current, text } : current); setFocusedMark((current) => current?.id === markId ? { ...current, text } : current); }} onMarkRemoved={() => void load()} />
+      <MarkDetailModal mark={selectedMark} viewerId={userId} wallOwnerId={wall.owner_id} reactions={selectedMark ? summaries[selectedMark.id] : undefined} onToggleReaction={selectedMark ? (emoji) => toggle(selectedMark.id, emoji) : undefined} onClose={() => setSelectedMark(null)} onMarkUpdated={(markId, text) => { setMarks((current) => current.map((item) => item.id === markId ? { ...item, text } : item)); setMixedItems((current) => current.map((item) => item.kind === "mark" && item.id === markId ? { ...item, mark: { ...item.mark, text } } : item)); setSelectedMark((current) => current?.id === markId ? { ...current, text } : current); setFocusedMark((current) => current?.id === markId ? { ...current, text } : current); }} onMarkRemoved={() => void load()} />
     </Screen>
   );
 }
