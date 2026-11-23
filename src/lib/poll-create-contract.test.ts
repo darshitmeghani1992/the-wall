@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 // @ts-ignore Node's dependency-free TypeScript runner uses the explicit .ts extension.
-import { executeStandardPollCreate, parseStandardPollCreation, PollDraftInvalid,
-  prepareStandardPoll, standardPollRpcArgs } from "./poll-create-contract.ts";
+import { executeStandardPollCreate, parseStandardPollCreation, PollDraftInvalid, prepareStandardPoll, standardPollRpcArgs } from "./poll-create-contract.ts";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const WALL = "22222222-2222-4222-8222-222222222222";
