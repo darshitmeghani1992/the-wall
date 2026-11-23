@@ -40,3 +40,12 @@ test("Find People shares neutral invite if current actor profile has not loaded"
   assert.equal(resolveHandle("B", { id: "A", handle: "private-A" }), null);
   assert.equal(resolveHandle("B", { id: "B", handle: "public-B" }), "public-B");
 });
+
+test("Find People claims one continuation before sharing or reading the draft", () => {
+  assert.match(source, /const continuationInFlight = useRef\(false\)/);
+  const begin = source.indexOf("if (!beginExclusiveMutation(continuationInFlight)) return;");
+  assert.ok(begin > 0);
+  assert.ok(begin < source.indexOf("if (share) await inviteFriends(actorHandle);"));
+  assert.ok(begin < source.indexOf("const draft = await loadOnboardingDraft(userId);"));
+  assert.match(source, /finally \{\s*if \(lifecycleFence\.current\.isCurrent\(token, liveActorId\.current\)\) \{\s*endExclusiveMutation\(continuationInFlight\);/);
+});
