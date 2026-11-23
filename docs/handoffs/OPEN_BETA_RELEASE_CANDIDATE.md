@@ -1,3 +1,9 @@
+## 23 Nov 2026 · C3 image proof and staging-only runtime origin
+
+**Verified as disposable image-build evidence, not a hosted media launch:** sibling [draft #195](https://github.com/darshitmeghani1992/the-wall/pull/195), immutable SHA `3ab84c4fd4e68e3fefe170e6a29c0e1e014d2f31`, [GitHub ARM64 image proof 45129237153](https://github.com/darshitmeghani1992/the-wall/actions/runs/45129237153) completed success. Its package tests passed 43/43 *inside the Docker build*. Runtime image smoke confirmed ARM64 architecture, non-root UID:GID 10001:10001, ffmpeg+ffprobe under no-network/read-only mode, and rejection of startup with media disabled. Temporary base digest `node@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee` and FFmpeg `7:5.1.9-0+deb12u1` were CI test inputs, **not a promoted worker image**.
+
+**Implemented and awaiting independent review:** [draft #198](https://github.com/darshitmeghani1992/the-wall/pull/198), child of #197, locks the C3 worker entrypoint to approved staging. Valid staging still fails closed if signing configuration is absent. Separate open-beta backend origin requires a newly approved and reviewed release code/config. Source/docs final-head CI remains to be verified; #195 is a sibling and not silently merged into #198. No actual pod/container was hosted; TLS, private ingress, exact egress, writable memory-only /tmp, immutable final image, rotation, quotas, signed dispatch and actual upload/playback/cleanup are runtime gates. All client media flags remain OFF. Original production project untouched.
+
 # Open beta candidate evidence
 
 Record one candidate here for the first self-serve open beta. Any eligible user must be able to install through an approved channel and create an account with the complete Enhanced Beta scope in [issue #57](https://github.com/darshitmeghani1992/the-wall/issues/57). Internal staging tests prepare that candidate.

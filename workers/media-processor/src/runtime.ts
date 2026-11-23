@@ -11,6 +11,11 @@ import { Ed25519EnvelopeVerifier, type EnvelopeVerifier, type WorkerPublicKey } 
 import { createGatewayAdapters } from './gateway.js';
 import { processEnvelope, type ProcessorDependencies } from './server.js';
 
+// This container is approved for the isolated staging project only. A distinct
+// public-beta release backend requires a separately reviewed runtime allowlist
+// and must never reuse the historical production project by accident.
+const APPROVED_STAGING_MEDIA_ORIGIN = 'https://ewintxgdxdvschiqodkq.supabase.co';
+
 const BODY_MAX = 65_536;
 const NO_STORE = {
   'Cache-Control': 'no-store',
@@ -113,6 +118,11 @@ export async function startWorkerRuntime(config: NodeJS.ProcessEnv = process.env
     host: config.MARK_MEDIA_LISTEN_HOST ?? '127.0.0.1',
     port: Number(config.PORT ?? '8080'),
   };
+  // Fail before keys, gateway construction, DNS or listening on any other project.
+  // Allow the canonical URL with an optional root slash, not a different path.
+  if (projectUrl !== APPROVED_STAGING_MEDIA_ORIGIN && projectUrl !== `${APPROVED_STAGING_MEDIA_ORIGIN}/`) {
+    throw new Error('unapproved media worker Supabase project origin');
+  }
   if (host !== '127.0.0.1' && host !== '0.0.0.0') throw new Error('invalid worker listen interface');
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('invalid worker listen port');
   const verifier = await Ed25519EnvelopeVerifier.create(readPublicKeys(keys));

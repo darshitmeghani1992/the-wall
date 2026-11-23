@@ -90,5 +90,30 @@ test('bounded queue returns 503 while one verified job is still active', async (
 test('runtime fails closed when enablement or security configuration is missing', async () => {
   await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'false' }), /disabled/);
   await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', PORT: '8080' }));
-  await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', PORT: '99999' }), /port/);
+  await assert.rejects(startWorkerRuntime({ MARK_MEDIA_RUNTIME_ENABLED: 'true', MARK_MEDIA_PROJECT_URL: 'https://ewintxgdxdvschiqodkq.supabase.co', PORT: '99999' }), /port/);
+});
+
+test('enabled media runtime accepts only the reviewed staging backend origin', async () => {
+  for (const origin of [
+    'https://wfsfafmgvxevpzrurofz.supabase.co', // protected historic production
+    'https://some-other-project.supabase.co',
+    'http://ewintxgdxdvschiqodkq.supabase.co',
+    'https://ewintxgdxdvschiqodkq.supabase.co/rest/v1/',
+    'https://ewintxgdxdvschiqodkq.supabase.co.evil.example',
+  ]) {
+    await assert.rejects(startWorkerRuntime({
+      MARK_MEDIA_RUNTIME_ENABLED: 'true',
+      MARK_MEDIA_PROJECT_URL: origin,
+    }), /unapproved media worker Supabase project origin/);
+  }
+  for (const origin of [
+    'https://ewintxgdxdvschiqodkq.supabase.co',
+    'https://ewintxgdxdvschiqodkq.supabase.co/',
+  ]) {
+    // A permitted project still cannot start with absent verification keys.
+    await assert.rejects(startWorkerRuntime({
+      MARK_MEDIA_RUNTIME_ENABLED: 'true',
+      MARK_MEDIA_PROJECT_URL: origin,
+    }), /worker public key/);
+  }
 });

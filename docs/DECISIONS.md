@@ -1,3 +1,9 @@
+## D-43 · 23 Nov 2026 · C3 worker executable is staging-only until separately approved release origin
+
+- **Risk (ARCHITECT → BACKEND):** Media gateway adapters validate the Supabase hostname shape and signed dispatch, but the container entrypoint accepted any well-formed Supabase project origin. With media ever enabled, a misdirected worker could attempt privileged processing against the historic production or an unapproved project; this is a deployment-misbinding risk, not evidence of prior exploitation.
+- **Technical decision:** This staging candidate's `startWorkerRuntime` enforces an immutable exact staging origin (optional root slash) **before** network work or listener startup. Accept no production or other environment by default. A public open beta release backend must have its own explicitly authorized and independently reviewed origin binding/code and cloud deployment, not an environment-variable-only accidental cutover. Preserve all existing feature flags and security controls OFF.
+- **Status:** [Draft #198](https://github.com/darshitmeghani1992/the-wall/pull/198), source tests and CI/Reviewer/QA pending. No hosted or distribution changes. Separate [ARM64 image proof](https://github.com/darshitmeghani1992/the-wall/actions/runs/45129237153) passed on sibling #195, **not** an approved runtime image or deployment. **Enhanced/open beta NO-GO.**
+
 ## D-42 · 23 Nov 2026 · Alert route references must be canonical UUIDs
 
 - **Risk (ARCHITECT → FRONTEND):** Alert route interpolation previously accepted any non-empty actor, Wall or focused Mark value. Real notification table IDs are UUID typed, but stale/corrupted externally rehydrated metadata could produce unintended nested paths or query components.
