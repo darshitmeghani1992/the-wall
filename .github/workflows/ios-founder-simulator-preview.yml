@@ -13,11 +13,11 @@ permissions:
 jobs:
   startup:
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 241c643c76cbaf9f67ce6fa5af6fb234b8c2759d
+          ref: 6818a581a69a8f95494e6f8a8f67d85753a7b462
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -41,10 +41,11 @@ jobs:
           ')
           device=$(xcrun simctl create "Wall iOS startup smoke" com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$runtime")
           printf 'WALL_IOS_DEVICE=%s\n' "$device" >> "$GITHUB_ENV"
+          xcrun simctl boot "$device"
       - name: Build the exact iOS app with signing disabled and no backend credentials
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = 241c643c76cbaf9f67ce6fa5af6fb234b8c2759d
+          test "$(git rev-parse HEAD)" = 6818a581a69a8f95494e6f8a8f67d85753a7b462
           test -z "$(git status --porcelain)"
           test -z "$EXPO_PUBLIC_SUPABASE_URL"
           test -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
@@ -56,10 +57,11 @@ jobs:
           scheme=$(basename "$workspace" .xcworkspace)
           build_log="$RUNNER_TEMP/wall-ios-build.log"
           if ! xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
-            -sdk iphonesimulator -destination "id=$WALL_IOS_DEVICE" -jobs 2 \
+            -sdk iphonesimulator -destination "generic/platform=iOS Simulator" -jobs 4 \
             -derivedDataPath "$RUNNER_TEMP/wall-ios-derived" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES GCC_OPTIMIZATION_LEVEL=0 SWIFT_OPTIMIZATION_LEVEL=-Onone \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO COMPILER_INDEX_STORE_ENABLE=NO \
-            build >"$build_log" 2>&1; then
+            -parallelizeTargets build 2>&1 | tee "$build_log" | awk '/^Build|error:|warning:|^CompileC|^SwiftCompile|^Ld|\*\* BUILD/ { print; fflush() }'; then
             grep -n -E 'error:|BUILD FAILED' "$build_log" | tail -35 || true
             tail -80 "$build_log"
             exit 1
@@ -71,7 +73,6 @@ jobs:
           app=$(find "$RUNNER_TEMP/wall-ios-derived/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print | head -1)
           test -n "$app"
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = com.thewall.app
-          xcrun simctl boot "$WALL_IOS_DEVICE"
           xcrun simctl bootstatus "$WALL_IOS_DEVICE" -b
           xcrun simctl install "$WALL_IOS_DEVICE" "$app"
           xcrun simctl launch "$WALL_IOS_DEVICE" com.thewall.app
@@ -139,7 +140,7 @@ jobs:
       - name: Upload only the encrypted simulator bundle
         uses: actions/upload-artifact@v4
         with:
-          name: the-wall-ios-241c643-encrypted
+          name: the-wall-ios-6818a58-encrypted
           path: ${{ runner.temp }}/the-wall-simulator.zip.der
           compression-level: 0
           if-no-files-found: error
