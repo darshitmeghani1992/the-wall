@@ -1,3 +1,7 @@
+## D-53 · 24 Nov 2026 · Discard is terminal for new composer submissions (held)
+- ARCHITECT → FRONTEND: Once a discard is confirmed, the synchronous discard ref denies any new submit before lock acquisition, including during asynchronous cancellation/cleanup. Voice metadata results are fenced by current lifecycle generation and picker lease; only an empty media draft may receive the clip. This is defensive implementation of approved discard and exclusive media semantics, not a new product/API decision.
+- #266 source/test commit `2b9daa65566a9a8f5844cc88e3124430e562c902`. Independent Reviewer and signed iPhone behavioral verification required; rollout remains OFF.
+
 ## D-52 · 24 Nov 2026 · Native picker scope rather than foreground-only cancellation (held)
 - **ARCHITECT → FRONTEND:** A native camera/gallery or permission UI may temporarily leave active AppState. Unlike protected network operations, local attachment selection must tolerate that legitimate transition while staying bound to the current composer actor/destination, discard intent and submission lock. Reserve one synchronous picker slot, check scope after each asynchronous result, block competing post/type intents, and release in finally. Do not overwrite existing different-kind media. No API, schema, rollout or product scope change.
 - **Evidence:** draft #266, source regressions and exact CI pending; physical iPhone camera/gallery, cancellation, account/destination change and protected upload acceptance remain independent. No hosted operations authorized.
