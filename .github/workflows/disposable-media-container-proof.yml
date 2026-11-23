@@ -42,6 +42,9 @@ jobs:
           docker run --rm --network none --read-only --entrypoint ffmpeg the-wall-media-proof:local -version
           docker run --rm --network none --read-only --entrypoint ffprobe the-wall-media-proof:local -version
 
+          docker run --rm --network none --read-only --entrypoint node the-wall-media-proof:local \
+            --input-type=module -e "import assert from 'node:assert/strict'; import { startWorkerRuntime } from './dist/src/runtime.js'; await assert.rejects(startWorkerRuntime({}), { message: 'media processor runtime disabled' });"
+
           set +e
           startup_output=$(timeout 20s docker run --rm --network none --read-only the-wall-media-proof:local 2>&1)
           startup_status=$?
