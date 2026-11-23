@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-ignore Dependency-free contract tests load source directly.
-import { isFocusedPollReaderEnabled, readFocusedWallCard } from "./poll-focused-reader.ts";
+import { isFocusedPollReaderEnabled, readFocusedPoll, readFocusedWallCard } from "./poll-focused-reader.ts";
 // @ts-ignore Dependency-free contract tests load source directly.
 import { resolveDeferredDestination } from "./deferred-destination-resolver.ts";
 import type { DeferredDestination } from "./deferred-destination-contract";
@@ -44,7 +44,7 @@ test("focused Poll reads send exact actor, Wall and Mark and return only display
     calls.push(args);
     return fixture();
   }, true);
-  assert.deepEqual(calls, [{ p_expected_actor_id: actor, p_wall_id: wall, p_mark_id: mark }]);
+  assert.deepEqual(calls, [{ p_expected_actor_id: actor, p_wall_id: wall, p_mark_id: mark, p_kind: "poll" }]);
   assert.deepEqual(result, { id: mark, kind: "poll", poll: {
     question: "Where?", selectionMode: "multiple", state: "closed", ballotTotal: 1,
     revision: 2, capabilities: { canVote: false, canClose: false }, ballot: { revision: 1, optionIds: [first] },
@@ -96,4 +96,17 @@ test("focused Poll arrival keeps its exact Personal or Shared destination and ho
     if (available.status !== "available") assert.fail("expected focused destination");
     assert.equal(available.href, `${route}?focusMark=${mark}`);
   }
+});
+
+
+test("private Poll focus is kind-bound and cannot interpret a colliding ordinary Mark", async () => {
+  const captured: unknown[] = [];
+  const result = await readFocusedPoll(actor, wall, mark, async (args) => {
+    captured.push(args);
+    const sample = fixture();
+    return { ...sample, item: { ...sample.item, kind: "mark" } };
+  }, true);
+  assert.equal(result, null);
+  assert.deepEqual(captured, [{ p_expected_actor_id: actor, p_wall_id: wall, p_mark_id: mark, p_kind: "poll" }]);
+  assert.equal(await readFocusedPoll(actor, wall, mark, async () => assert.fail("disabled read"), false), null);
 });
