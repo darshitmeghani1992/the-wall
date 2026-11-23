@@ -70,14 +70,64 @@ create constraint trigger poll_ballot_choices_cardinality
 
 -- One ballot per voter. Replacements are atomic and retry-safe under the poll
 -- row lock. No caller-supplied voter_id or read of other voters is accepted.
+-- Serialize against Wall membership, account lifecycle, blocks and Mark removal.
+-- Mark removal may already own the parent before it locks a profile. Never wait
+-- on either of those rows while holding the other in this opposite direction.
+create function public.lock_poll_mutation_target(p_actor uuid,p_wall_id uuid,p_mark_id uuid)
+returns public.marks language plpgsql security definer set search_path = pg_catalog, public as $poll_target$
+declare
+  v_owner uuid;
+  v_wall_type public.wall_type;
+  v_author uuid;
+  v_mark public.marks%rowtype;
+  v_pair record;
+begin
+  if p_actor is null or p_actor is distinct from auth.uid() then return null; end if;
+  select w.owner_id,w.type into v_owner,v_wall_type from public.walls w
+    where w.id=p_wall_id for share;
+  if not found then return null; end if;
+  select m.author_id into v_author from public.marks m
+    where m.id=p_mark_id and m.wall_id=p_wall_id and m.type='poll' and m.status='active'
+      and not m.secret and not m.anonymous;
+  if not found or v_author is null then return null; end if;
+
+  perform p.id from public.profiles p where p.id in (p_actor,v_author,v_owner)
+    order by p.id for share nowait;
+
+  -- Each relationship uses the same key as the existing block trigger. Take
+  -- both relevant author and Personal Wall pairs in deterministic order, without duplicates.
+  for v_pair in
+    select distinct least(p_actor,other_actor) as first_actor,greatest(p_actor,other_actor) as second_actor
+      from (values (v_author),(case when v_wall_type='personal' then v_owner end)) as pairs(other_actor)
+      where other_actor is not null and other_actor <> p_actor
+      order by first_actor,second_actor
+  loop
+    perform public.lock_user_pair(v_pair.first_actor,v_pair.second_actor);
+  end loop;
+
+  select * into v_mark from public.marks m
+    where m.id=p_mark_id and m.wall_id=p_wall_id and m.type='poll' and m.status='active'
+    for share nowait;
+  if not found or v_mark.secret or v_mark.anonymous or v_mark.author_id is distinct from v_author
+     or not public.is_active_account(p_actor) or not public.is_active_account(v_author)
+     or not public.can_view_wall(p_wall_id,p_actor) or public.is_blocked(p_actor,v_author) then
+    return null;
+  end if;
+  return v_mark;
+exception when lock_not_available then
+  -- An overlapping state change has no authorized result yet. The caller may
+  -- refresh/retry; it must not get a stale receipt or mutate a ballot.
+  return null;
+end $poll_target$;
+revoke all on function public.lock_poll_mutation_target(uuid,uuid,uuid)
+  from public,anon,authenticated,service_role;
+
 create function public.replace_poll_ballot(
   p_expected_actor_id uuid, p_request_id uuid, p_wall_id uuid, p_mark_id uuid,
   p_expected_poll_revision bigint, p_expected_ballot_revision bigint, p_option_ids uuid[]
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog, public, extensions as $$
 declare
   v_actor uuid := auth.uid();
-  v_owner uuid;
-  v_wall_type public.wall_type;
   v_mark public.marks%rowtype;
   v_poll public.mark_polls%rowtype;
   v_old_revision bigint;
@@ -102,21 +152,11 @@ begin
   end if;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,83));
-  select w.owner_id,w.type into v_owner,v_wall_type from public.walls w
-    where w.id=p_wall_id for share;
-  if not found then return '{"status":"unavailable"}'::jsonb; end if;
-  if v_wall_type='personal' then perform public.lock_user_pair(v_actor,v_owner); end if;
-  if not public.can_view_wall(p_wall_id,v_actor)
-    or not (v_owner=v_actor or public.can_contribute(p_wall_id,v_actor)) then
-    return '{"status":"unavailable"}'::jsonb;
-  end if;
-  select * into v_mark from public.marks m
-    where m.id=p_mark_id and m.wall_id=p_wall_id and m.type='poll' and m.status='active' for update;
-  if not found or v_mark.secret or v_mark.anonymous or v_mark.author_id is null
-    or not public.is_active_account(v_mark.author_id)
-    or public.is_blocked(v_actor,v_mark.author_id) then
-    return '{"status":"unavailable"}'::jsonb;
-  end if;
+  v_mark := public.lock_poll_mutation_target(v_actor,p_wall_id,p_mark_id);
+  if v_mark.id is null or not (
+    exists (select 1 from public.walls w where w.id=p_wall_id and w.owner_id=v_actor)
+    or public.can_contribute(p_wall_id,v_actor)
+  ) then return '{"status":"unavailable"}'::jsonb; end if;
   select * into v_poll from public.mark_polls p where p.mark_id=p_mark_id and p.wall_id=p_wall_id for update;
   if not found then return '{"status":"unavailable"}'::jsonb; end if;
   select * into v_receipt from public.mark_poll_mutation_requests r
@@ -187,13 +227,10 @@ begin
     return '{"status":"invalid"}'::jsonb; end if;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,83));
-  perform 1 from public.walls w where w.id=p_wall_id for share;
-  if not found or not public.can_view_wall(p_wall_id,v_actor) then
-    return '{"status":"unavailable"}'::jsonb; end if;
-  select * into v_mark from public.marks m where m.id=p_mark_id
-    and m.wall_id=p_wall_id and m.type='poll' and m.status='active' for update;
-  if not found or v_mark.author_id is distinct from v_actor or v_mark.secret or v_mark.anonymous then
-    return '{"status":"unavailable"}'::jsonb; end if;
+  v_mark := public.lock_poll_mutation_target(v_actor,p_wall_id,p_mark_id);
+  if v_mark.id is null or v_mark.author_id is distinct from v_actor then
+    return '{"status":"unavailable"}'::jsonb;
+  end if;
   select * into v_poll from public.mark_polls p where p.mark_id=p_mark_id and p.wall_id=p_wall_id for update;
   if not found then return '{"status":"unavailable"}'::jsonb; end if;
   v_hash := encode(extensions.digest(convert_to(jsonb_build_object(
