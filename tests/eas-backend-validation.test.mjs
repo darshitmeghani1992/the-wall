@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { APPROVED_BETA_STAGING_ORIGIN, selectBetaClientConfig } from '../src/lib/config.ts';
 
 const script = new URL('../scripts/validate-eas-backend.mjs', import.meta.url);
 
@@ -123,4 +124,26 @@ test('EAS blocks stale high-risk feature flags even with valid staging credentia
   }
   const inert = run(staging, undefined, Object.fromEntries(flags.map(flag => [flag, 'false'])));
   assert.equal(inert.status, 0, 'explicitly OFF beta features leave valid staging builds eligible');
+});
+
+test("EAS pre-install accepts exactly the staging URL forms the iPhone runtime accepts", () => {
+  const origin = APPROVED_BETA_STAGING_ORIGIN;
+  const key = "sb_publishable_synthetic_test_fixture";
+  const cases = [
+    [origin, true],
+    [origin + "/", true],
+    [origin + ":443", false],
+    [origin.replace("https://", "HTTPS://"), false],
+    [origin.replace(".supabase.co", ".SUPABASE.CO"), false],
+    [" " + origin, false],
+    [origin + "/auth/v1", false],
+    ["https://other.example", false],
+  ];
+
+  for (const [url, allowed] of cases) {
+    const result = run(url, key);
+    assert.ifError(result.error);
+    assert.equal(Boolean(selectBetaClientConfig(url, key).url), allowed, `runtime for ${url}`);
+    assert.equal(result.status, allowed ? 0 : 1, `EAS pre-install for ${url}`);
+  }
 });
