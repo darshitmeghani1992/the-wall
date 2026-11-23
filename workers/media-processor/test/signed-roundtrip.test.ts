@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, webcrypto } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -30,8 +30,10 @@ function target(role: WorkerObjectTarget["role"], file: string, mime: string): W
 for (const kind of ["photo", "voice", "video"] as const) {
   test("signed HTTP dispatch through real " + kind + " processing and C2 completion receipt", { timeout: 45_000 }, async () => {
     const workspace = await mkdtemp(join(tmpdir(), "signed-media-roundtrip-"));
-    const key = await webcrypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-    const verifier = await Ed25519EnvelopeVerifier.create([{ kid: "fixture", publicKey: new Uint8Array(await webcrypto.subtle.exportKey("raw", key.publicKey)) }]);
+    const key = generateKeyPairSync("ed25519");
+    const publicJwk = key.publicKey.export({ format: "jwk" });
+    assert.ok(publicJwk.x);
+    const verifier = await Ed25519EnvelopeVerifier.create([{ kid: "fixture", publicKey: Buffer.from(publicJwk.x, "base64url") }]);
     const destinations = kind === "photo"
       ? [target("full_jpeg", "full.jpg", "image/jpeg"), target("full_webp", "full.webp", "image/webp"), target("preview", "thumb.webp", "image/webp")]
       : kind === "voice" ? [target("full", "full.m4a", "audio/mp4")]
@@ -46,7 +48,7 @@ for (const kind of ["photo", "voice", "video"] as const) {
     };
     const head = encodeBase64Url(Buffer.from(canonicalJson({ alg: "EdDSA", kid: "fixture", typ: "TW-MEDIA-DISPATCH+jws" })));
     const body = encodeBase64Url(Buffer.from(canonicalJson(claims)));
-    const signature = new Uint8Array(await webcrypto.subtle.sign("Ed25519", key.privateKey, Buffer.from(head + "." + body)));
+    const signature = sign(null, Buffer.from(head + "." + body), key.privateKey);
     const compact = head + "." + body + "." + encodeBase64Url(signature);
     const invalidSignature = signature.slice();
     invalidSignature[0] = invalidSignature[0]! ^ 1;
@@ -114,7 +116,7 @@ for (const kind of ["photo", "voice", "video"] as const) {
     try {
       const input = join(workspace, kind === "photo" ? "photo.png" : kind === "voice" ? "voice.wav" : "video.mp4");
       const args = kind === "photo"
-        ? ["-f", "lavfi", "-i", "color=c=red:s=64x32", "-frames:v", "1"]
+        ? ["-f", "lavfi", "-i", "color=c=red:s=64x32:d=0.1", "-frames:v", "1"]
         : kind === "voice" ? ["-f", "lavfi", "-i", "sine=duration=1"]
         : ["-f", "lavfi", "-i", "testsrc=size=320x180:rate=30:duration=1", "-f", "lavfi", "-i", "sine=duration=1", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"];
       await runTool("ffmpeg", [...args, "-y", input], 15_000);
