@@ -128,9 +128,13 @@ async function downloadSource(
   }
   if (!response.ok || !response.body) throw new MediaProcessingError("PROCESSING_FAILED", "source download failed");
   if (response.url) assertFinalResponseOrigin(response.url, expected);
-  const announcedLength = Number(response.headers.get("content-length"));
+  const announcedLength = response.headers.get("content-length");
+  const expectedLength = announcedLength === null ? null : Number(announcedLength);
   const maximum = INPUT_BYTES[claims.kind];
-  if (Number.isFinite(announcedLength) && announcedLength > maximum) throw new MediaProcessingError("TOO_LARGE", "source is too large");
+  if (announcedLength !== null && (!/^\d+$/.test(announcedLength) || !Number.isSafeInteger(expectedLength))) {
+    throw new MediaProcessingError("PROCESSING_FAILED", "source response length invalid");
+  }
+  if (expectedLength !== null && expectedLength > maximum) throw new MediaProcessingError("TOO_LARGE", "source is too large");
 
   const handle = await open(destinationPath, "wx", 0o600);
   let received = 0;
@@ -144,12 +148,30 @@ async function downloadSource(
         await reader.cancel();
         throw new MediaProcessingError("TOO_LARGE", "source stream exceeded its byte limit");
       }
-      await handle.write(chunk.value);
+      await writeCompleteChunk(handle, chunk.value);
     }
   } finally {
     await handle.close();
   }
   if (received === 0) throw new MediaProcessingError("INVALID_MEDIA", "source is empty");
+  if (expectedLength !== null && received !== expectedLength) {
+    throw new MediaProcessingError("PROCESSING_FAILED", "source response length mismatch");
+  }
+}
+
+/** FileHandle.write may accept fewer bytes than requested; never decode a truncated object. */
+export async function writeCompleteChunk(
+  writer: { write(buffer: Uint8Array, offset: number, length: number, position: null): Promise<{ bytesWritten: number }> },
+  chunk: Uint8Array,
+): Promise<void> {
+  let offset = 0;
+  while (offset < chunk.byteLength) {
+    const { bytesWritten } = await writer.write(chunk, offset, chunk.byteLength - offset, null);
+    if (!Number.isSafeInteger(bytesWritten) || bytesWritten < 1 || bytesWritten > chunk.byteLength - offset) {
+      throw new MediaProcessingError("PROCESSING_FAILED", "incomplete source disk write");
+    }
+    offset += bytesWritten;
+  }
 }
 
 async function processLocalMedia(

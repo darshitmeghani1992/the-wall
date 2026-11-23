@@ -1,3 +1,7 @@
+## 23 Nov 2026 · C3 signed download consistency
+
+Backend source-only isolated child of #201: reject a truncated/malformed declared Storage response and retry partial worker disk writes. New tests are not hosted playback evidence; record child CI and independent review before claiming source readiness. No promoted image from #195, deployment or runtime activation. Media OFF; public/open beta still NO-GO.
+
 ## 23 Nov 2026 · C3 image proof and staging-only runtime origin
 
 **Verified as disposable image-build evidence, not a hosted media launch:** sibling [draft #195](https://github.com/darshitmeghani1992/the-wall/pull/195), immutable SHA `3ab84c4fd4e68e3fefe170e6a29c0e1e014d2f31`, [GitHub ARM64 image proof 45129237153](https://github.com/darshitmeghani1992/the-wall/actions/runs/45129237153) completed success. Its package tests passed 43/43 *inside the Docker build*. Runtime image smoke confirmed ARM64 architecture, non-root UID:GID 10001:10001, ffmpeg+ffprobe under no-network/read-only mode, and rejection of startup with media disabled. Temporary base digest `node@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee` and FFmpeg `7:5.1.9-0+deb12u1` were CI test inputs, **not a promoted worker image**.

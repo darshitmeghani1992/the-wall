@@ -1,3 +1,9 @@
+## Current · BETA-P0-107 — media stream integrity (23 Nov 2026)
+
+ARCHITECT → BACKEND isolated draft child of #201 `7f7ca5a46fda09b7a50539b5ad556071ff2b6559`. Prevent silent source truncation: strict optional Content-Length validation and all-bytes FileHandle writes prior to FFmpeg. Two new worker tests cover short writes and premature HTTP body completion with safe failure callback. Check new draft exact SHA/tree, CI four jobs, independent Reviewer/QA. No hosted worker, flags, migrations or changes to original production. Real OTP/three-user actors, media signed playback, Secret cron, 0031 account deletion, installed iOS/Android and authorization still block release. Resume via `docs/BUILD_STATUS.md` BETA-P0-107.
+
+---
+
 ## Current — BETA-P0-106 · 23 Nov 2026 · C3 staging-only worker origin
 
 **ARCHITECT → BACKEND:** [draft #198](https://github.com/darshitmeghani1992/the-wall/pull/198) builds on untouched #197 exact `38e5c474f2d7402f51d44d57f779445269a36a02`. C3 worker entrypoint now refuses every Supabase project except approved staging prior to keys, network, gateway or listener. Source regression rejects original production, other origin, HTTP, path and hostname spoof; valid staging still needs a real key. **Check final docs-head SHA/tree and all four CI jobs, then independent Reviewer and behavioral QA.** Separate #195 ARM64 Docker smoke [45129237153](https://github.com/darshitmeghani1992/the-wall/actions/runs/45129237153) PASSED 43/43 tests and fail-closed runtime; disposable test pins not approved hosting artifacts.
