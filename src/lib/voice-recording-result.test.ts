@@ -42,3 +42,19 @@ test("an interrupted stop cannot attach to a discarded recorder", async () => {
     async () => { assert.fail("discarded capture was delivered"); },
   );
 });
+
+test("a failed native stop must never attach an incomplete recording", async () => {
+  let uriRead = false;
+  let delivered = false;
+  await finishVoiceCapture(
+    {
+      stopAndUnloadAsync: async () => { throw new Error("recording could not finalize"); },
+      getURI: () => { uriRead = true; return uri; },
+    },
+    15_000,
+    () => true,
+    async () => { delivered = true; },
+  );
+  assert.equal(uriRead, false, "do not trust the recorder URI after a failed stop");
+  assert.equal(delivered, false, "do not attach an unfinalized audio file");
+});
