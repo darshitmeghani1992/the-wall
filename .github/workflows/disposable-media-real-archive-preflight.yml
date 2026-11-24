@@ -1,0 +1,47 @@
+name: Disposable real media archive preflight
+on:
+  pull_request:
+    branches:
+      - codex/media-archive-scan-preflight-20261124-auto17
+    paths:
+      - .github/workflows/disposable-media-real-archive-preflight.yml
+permissions:
+  contents: read
+jobs:
+  exact-evidence:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/media-real-archive-preflight-20261124-auto18'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: 0cd12acae3dba3b530908b9b5b76b9e1328552ee
+      - name: Run actual local image evidence helper with historical disposable pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 0cd12acae3dba3b530908b9b5b76b9e1328552ee
+          test "$(uname -m)" = aarch64
+          parent=$(mktemp -d /tmp/the-wall-evidence-proof.XXXXXXXX)
+          trap 'rm -rf -- "$parent"' EXIT
+          bash workers/media-processor/deploy/build-image-evidence.sh \
+            '0cd12acae3dba3b530908b9b5b76b9e1328552ee' \
+            'node@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee' \
+            '7:5.1.9-0+deb12u1' "$parent"
+          shopt -s nullglob
+          bundles=("$parent"/the-wall-media-evidence.*)
+          test "${#bundles[@]}" -eq 1
+          python3 workers/media-processor/deploy/verify-image-evidence.py "${bundles[0]}" "0cd12acae3dba3b530908b9b5b76b9e1328552ee"
+          cd "${bundles[0]}"
+          sha256sum --check image.tar.sha256
+          test -s image.tar
+          test -s os-packages.txt
+          test -s image-inspect.json
+          grep -Fxq 'source=0cd12acae3dba3b530908b9b5b76b9e1328552ee' inputs.txt
+          grep -Fxq '# tests 54' worker-tests.log
+          grep -Fxq '# pass 54' worker-tests.log
+          grep -Fxq '# fail 0' worker-tests.log
+          grep -Fxq 'media runtime unavailable; check approved deployment configuration' disabled-startup.log
+          cat inputs.txt image-config-id.txt image.tar.sha256 STATUS.txt
+          printf '%s\n' 'Real Docker archive preflight completed locally; no registry, hosted network, SBOM or CVE clearance.'
