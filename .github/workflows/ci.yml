@@ -101,3 +101,14 @@ jobs:
           PGPASSWORD: postgres
           ADMIN_DB: postgres
         run: bash supabase/tests/run_tests.sh
+
+      - name: Rehearse observed staging migration order on disposable DB
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          ADMIN_DB: postgres
+          TEST_DB: sec001_test
+          MIGRATION_ORDER: staging-recovery
+        run: bash supabase/tests/run_tests.sh

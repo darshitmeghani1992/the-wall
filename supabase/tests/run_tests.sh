@@ -18,6 +18,19 @@ PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-postgres}"
 ADMIN_DB="${ADMIN_DB:-postgres}"
 TEST_DB="${TEST_DB:-sec001_test}"
+MIGRATION_ORDER="${MIGRATION_ORDER:-canonical}"
+case "$MIGRATION_ORDER" in
+  canonical) ;;
+  staging-recovery)
+    if [[ "$PGHOST" != localhost && "$PGHOST" != 127.0.0.1 ]]; then
+      echo "staging-recovery requires a local disposable PostgreSQL service" >&2; exit 2
+    fi
+    if [[ "$TEST_DB" != sec001_test || "$ADMIN_DB" != postgres ]]; then
+      echo "staging-recovery requires the disposable sec001_test database" >&2; exit 2
+    fi ;;
+  *) echo "Unknown MIGRATION_ORDER: $MIGRATION_ORDER" >&2; exit 2 ;;
+esac
+echo "Migration sequence: $MIGRATION_ORDER"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIG="$HERE/../migrations"
@@ -155,10 +168,13 @@ echo "── load: 0030_actor_bound_admin_moderation.sql"
 psql_test -f "$MIG/0030_actor_bound_admin_moderation.sql" >/dev/null
 echo "── replay: 0030_actor_bound_admin_moderation.sql (idempotence)"
 psql_test -f "$MIG/0030_actor_bound_admin_moderation.sql" >/dev/null
-echo "── load: 0031_recoverable_account_deletion.sql"
-psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
-echo "── replay: 0031_recoverable_account_deletion.sql (idempotence)"
-psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
+load_0031() {
+  echo "── load: 0031_recoverable_account_deletion.sql"
+  psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
+  echo "── replay: 0031_recoverable_account_deletion.sql (idempotence)"
+  psql_test -f "$MIG/0031_recoverable_account_deletion.sql" >/dev/null
+}
+if [[ "$MIGRATION_ORDER" == canonical ]]; then load_0031; fi
 echo "── load: 0032_expire_secret_acl_hardening.sql"
 psql_test -f "$MIG/0032_expire_secret_acl_hardening.sql" >/dev/null
 echo "── replay: 0032_expire_secret_acl_hardening.sql (idempotence)"
@@ -171,6 +187,18 @@ echo "── load: 0034_secret_rollout_server_gate.sql"
 psql_test -f "$MIG/0034_secret_rollout_server_gate.sql" >/dev/null
 echo "── replay: 0034_secret_rollout_server_gate.sql (idempotence)"
 psql_test -f "$MIG/0034_secret_rollout_server_gate.sql" >/dev/null
+if [[ "$MIGRATION_ORDER" == staging-recovery ]]; then
+  # Recorded staging baseline has 0001–0030 and 0032–0034, with 0031 absent.
+  psql_test >/dev/null <<'SQL'
+do $ begin
+  if to_regclass('public.account_deletion_requests') is not null
+    or to_regprocedure('public.prepare_account_deletion_for_purge(uuid,timestamptz)') is not null
+  then raise exception '0031 unexpectedly present in staging-recovery baseline'; end if;
+end $;
+SQL
+  echo "── staging-recovery: apply held 0031 after 0034 (disposable only)"
+  load_0031
+fi
 echo "── assertion: 62_secret_rollout_server_gate (default OFF)"
 psql_test -f "$HERE/62_secret_rollout_server_gate.sql"
 echo "── isolated fixture: enable Secret only for existing local test cases"
