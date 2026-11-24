@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const script = fileURLToPath(new URL('../workers/media-processor/deploy/build-image-evidence.sh', import.meta.url));
@@ -22,3 +23,12 @@ for (const [name, args, message] of [
     assert.match(result.stderr, new RegExp(message));
   });
 }
+
+test('local image evidence uses the build invocation ID rather than a shared mutable tag', () => {
+  const source = readFileSync(script, 'utf8');
+  assert.match(source, /--iidfile "\$out\/build-image-id\.txt"/);
+  assert.match(source, /image=\$\(cat "\$out\/build-image-id\.txt"\)/);
+  assert.match(source, /docker image inspect --format '\{\{\.Id\}\}' "\$image"/);
+  assert.doesNotMatch(source, /--tag\s|docker image inspect[^\n]*"\$tag"/);
+  assert.match(source, /docker save "\$image" -o "\$out\/image\.tar"/);
+});
