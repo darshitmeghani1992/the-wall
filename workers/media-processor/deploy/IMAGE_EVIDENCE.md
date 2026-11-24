@@ -14,3 +14,13 @@ Use reviewed explicit pin values, not a mutable tag or automatically selected ap
 Before staging can use an image, authorized DevOps and independent Reviewer must: review the Dockerfile and all resolved dependencies; generate a complete SBOM and scan the exact tested image with an approved scanner and current vulnerability database; resolve or block HIGH/CRITICAL findings per container-policy; record scanner identity/version/database date and reports tied to the image; pin the resulting approved registry manifest digest and verify identity on the staging host. No scanner provider or registry authorization is assumed here. Never ship the evidence archive to an unapproved service. Enforce the existing default-deny egress, private ingress and runtime policy separately. Validate signed C2/C3 dispatch, Storage URL binding, real upload/playback, cleanup and three distinct authorized actors independently. Feature gates stay OFF until approved.
 
 Rollback: if any build evidence, digest, scan or hosted health check fails, withhold the image; do not enable ingress/media. If a later authorized deployment fails, use the separately approved disable/rollback sequence and preserve evidence. No action against the protected original production environment.
+
+## Offline scan input preflight
+
+Before handing a private evidence bundle to the already-approved local scanner, run with Python 3 (standard library only):
+
+```sh
+python3 workers/media-processor/deploy/verify-image-evidence.py "$EVIDENCE_DIR" "$EXACT_TESTED_SOURCE_SHA"
+```
+
+The preflight checks the archive checksum, raw Docker config digest, one-image manifest, recorded build/inspect IDs, ARM64/Linux platform, runtime user and source revision. It checks referenced layers exist, not their unpacked content digests. Run on a private, unchanged bundle; neither the checksum nor this utility authenticates an untrusted bundle or replaces the independently witnessed build. No extraction, Docker load, network access or scanner invocation is performed. Keep the bundle unchanged through the approved scan, compare loaded image identity, record fresh scanner/DB metadata, and do not interpret the preflight as a scan, SBOM, provenance attestation or release clearance.
