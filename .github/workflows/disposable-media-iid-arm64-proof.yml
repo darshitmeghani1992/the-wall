@@ -1,0 +1,46 @@
+name: Disposable exact media image evidence proof
+on:
+  pull_request:
+    branches:
+      - codex/ios-beta-voice-and-media-evidence-20261124
+    paths:
+      - .github/workflows/disposable-media-iid-arm64-proof.yml
+permissions:
+  contents: read
+jobs:
+  exact-evidence:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/media-iid-arm64-proof-20261124'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: b0aad3e80780301a5267af2416c8037fd46f23fc
+      - name: Run actual local image evidence helper with historical disposable pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = b0aad3e80780301a5267af2416c8037fd46f23fc
+          test "$(uname -m)" = aarch64
+          parent=$(mktemp -d /tmp/the-wall-evidence-proof.XXXXXXXX)
+          trap 'rm -rf -- "$parent"' EXIT
+          bash workers/media-processor/deploy/build-image-evidence.sh \
+            'b0aad3e80780301a5267af2416c8037fd46f23fc' \
+            'node@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee' \
+            '7:5.1.9-0+deb12u1' "$parent"
+          shopt -s nullglob
+          bundles=("$parent"/the-wall-media-evidence.*)
+          test "${#bundles[@]}" -eq 1
+          cd "${bundles[0]}"
+          sha256sum --check image.tar.sha256
+          test -s image.tar
+          test -s os-packages.txt
+          test -s image-inspect.json
+          grep -Fxq 'source=b0aad3e80780301a5267af2416c8037fd46f23fc' inputs.txt
+          grep -Fxq '# tests 54' worker-tests.log
+          grep -Fxq '# pass 54' worker-tests.log
+          grep -Fxq '# fail 0' worker-tests.log
+          grep -Fxq 'media runtime unavailable; check approved deployment configuration' disabled-startup.log
+          cat inputs.txt image-config-id.txt image.tar.sha256 STATUS.txt
+          printf '%s\n' 'Exact helper bundle verified locally; no registry, hosted network, SBOM or CVE clearance.'
