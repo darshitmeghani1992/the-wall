@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import { Audio } from "expo-av";
 import { finishVoiceCapture, MAX_VOICE_MS, type VoiceResult } from "./voice-recording-result";
 
@@ -34,45 +35,89 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
   const [elapsedMs, setElapsedMs] = useState(0);
   const [denied, setDenied] = useState(false);
   const recRef = useRef<Audio.Recording | null>(null);
+  const releaseInFlight = useRef<Promise<void> | null>(null);
   const clipReady = useRef(onClipReady);
   const captureGeneration = useRef(0);
   const starting = useRef(false);
+  const appState = useRef(AppState.currentState);
+  const permissionPending = useRef(false);
+  const settleForegroundWait = useRef<(() => void) | null>(null);
   const latestDurationMs = useRef(0);
   clipReady.current = onClipReady;
 
-  async function unload() {
+  const trackRelease = useCallback((release: Promise<void>) => {
+    const pending = release.finally(() => { releaseInFlight.current = null; });
+    releaseInFlight.current = pending;
+    return pending;
+  }, []);
+
+  const invalidateCapture = useCallback(async () => {
+    captureGeneration.current += 1;
+    permissionPending.current = false;
+    settleForegroundWait.current?.();
     const rec = recRef.current;
     recRef.current = null;
     if (rec) {
-      try {
-        await rec.stopAndUnloadAsync();
-      } catch {
-        // already stopped/unloaded — nothing to clean up
-      }
+      trackRelease(rec.stopAndUnloadAsync().then(() => undefined, () => undefined));
     }
-  }
+    if (releaseInFlight.current) {
+      // The explicit stop caller owns any finalization error.
+      await releaseInFlight.current.catch(() => undefined);
+    }
+  }, [trackRelease]);
 
-  // Safety net: unload if the component using the recorder unmounts mid-capture.
+  const reset = useCallback(async () => {
+    const released = invalidateCapture();
+    const generation = captureGeneration.current;
+    await released;
+    if (generation !== captureGeneration.current) return;
+    setElapsedMs(0);
+    setPhase("idle");
+  }, [invalidateCapture]);
+
   useEffect(() => {
+    appState.current = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (state) => {
+      appState.current = state;
+      if (state === "active") {
+        settleForegroundWait.current?.();
+      } else if (state !== "inactive" || !permissionPending.current) {
+        // An iOS permission sheet can temporarily deactivate the app. Only
+        // the permission step may survive that interruption, never capture.
+        void reset();
+      }
+    });
     return () => {
-      captureGeneration.current += 1;
-      void unload();
+      subscription.remove();
+      void invalidateCapture();
     };
-  }, []);
+  }, [invalidateCapture, reset]);
 
   async function start() {
     // A second tap must not start a second native microphone recorder.
-    if (starting.current || recRef.current) return;
+    const isForeground = () => appState.current === "active";
+    if (starting.current || recRef.current || releaseInFlight.current || !isForeground()) return;
     starting.current = true;
     setPhase("starting");
-    const generation = captureGeneration.current;
+    const generation = ++captureGeneration.current;
     const isCurrent = () => captureGeneration.current === generation;
     let rec: Audio.Recording | null = null;
 
     try {
       setDenied(false);
+      permissionPending.current = true;
       const perm = await Audio.requestPermissionsAsync();
-      if (!isCurrent()) return; // reset or unmount while native permission sheet was open
+      if (!isCurrent()) return;
+      while (appState.current === "inactive") {
+        // Native permission can resolve before iOS reports the app active.
+        await new Promise<void>((resolve) => {
+          settleForegroundWait.current = resolve;
+        });
+        settleForegroundWait.current = null;
+        if (!isCurrent()) return;
+      }
+      permissionPending.current = false;
+      if (!isForeground()) return;
       if (!perm.granted) {
         setDenied(true);
         setPhase("idle");
@@ -109,9 +154,11 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
       if (rec) {
         try { await rec.stopAndUnloadAsync(); } catch { /* cleanup best effort */ }
       }
-      if (isCurrent()) setPhase("idle");
+      if (!isCurrent()) return;
+      setPhase("idle");
       throw cause;
     } finally {
+      permissionPending.current = false;
       starting.current = false;
     }
   }
@@ -124,17 +171,10 @@ export function useVoiceRecorder(onClipReady: (clip: VoiceResult) => Promise<voi
     const generation = captureGeneration.current;
     const isCurrent = () => captureGeneration.current === generation;
     try {
-      await finishVoiceCapture(rec, latestDurationMs.current, isCurrent, clipReady.current);
+      await trackRelease(finishVoiceCapture(rec, latestDurationMs.current, isCurrent, clipReady.current));
     } finally {
       if (isCurrent()) setPhase("stopped");
     }
-  }
-
-  async function reset() {
-    captureGeneration.current += 1;
-    await unload();
-    setElapsedMs(0);
-    setPhase("idle");
   }
 
   return { phase, elapsedMs, denied, start, stop, reset };

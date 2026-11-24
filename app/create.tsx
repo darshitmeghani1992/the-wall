@@ -195,10 +195,6 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   }, [currentUserId, sessionGeneration]);
   useEffect(() => {
     if (mediaAppActive) return;
-    // iOS may background the app during a microphone permission prompt or an
-    // active recording. Discard the unfinished capture and release the mic;
-    // never resume recording without a new user tap after foregrounding.
-    void recorder.reset();
     setMedia((current) => current.map((draft) => {
       if (!["reserving", "uploading", "uploaded", "validating"].includes(draft.state)) return draft;
       const retryFrom = draft.state === "uploaded" || draft.state === "validating" ? "validation" : "upload";
@@ -222,12 +218,13 @@ function ComposerSession({ isCurrentScope }: { isCurrentScope: () => boolean }) 
   const hasTextOrMedia = text.trim().length > 0 || media.length > 0;
   const hasContent = hasTextOrMedia || hasPollDraftContent(pollDraft);
   async function cleanupDrafts() {
+    const resetRecording = recorder.reset();
     if (currentUserId) await Promise.allSettled(mediaRef.current.map(async (draft) => {
       if (!draft.uploadId) return;
       await abortProtectedMediaUpload(currentUserId, draft.uploadId);
       await cancelMediaDraft(draft, protectedMediaWriterRpc);
     }));
-    await recorder.reset();
+    await resetRecording;
   }
   usePreventRemove((hasContent || voiceBusy || submissionLocked || pickingMedia) && !discardConfirmedRef.current, ({ data }) => {
     if (!isCurrentScope() || submissionLocked) return;

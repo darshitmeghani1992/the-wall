@@ -7,18 +7,19 @@ const start = source.split("  async function start() {")[1]?.split("\n  async fu
 
 test("duplicate start taps are excluded before any async permission request", () => {
   assert.match(source, /const starting = useRef\(false\)/);
-  assert.match(start, /if \(starting\.current \|\| recRef\.current\) return;\s*starting\.current = true/);
+  assert.match(start, /if \(starting\.current \|\| recRef\.current \|\| releaseInFlight\.current \|\| !isForeground\(\)\) return;\s*starting\.current = true/);
   assert.ok(start.indexOf("starting.current = true") < start.indexOf("Audio.requestPermissionsAsync()"));
-  assert.match(start, /finally \{\s*starting\.current = false/);
+  assert.match(start, /finally \{\s*permissionPending\.current = false;\s*starting\.current = false/);
 });
 
 test("reset or unmount during permission / audio setup prevents late mic start", () => {
-  assert.match(start, /const generation = captureGeneration\.current/);
+  assert.match(start, /const generation = \+\+captureGeneration\.current/);
   assert.match(start, /const isCurrent = \(\) => captureGeneration\.current === generation/);
-  assert.ok(start.indexOf("if (!isCurrent()) return;") > start.indexOf("Audio.requestPermissionsAsync()"));
-  assert.ok(start.lastIndexOf("if (!isCurrent()) return;") > start.indexOf("Audio.setAudioModeAsync("));
-  assert.match(source, /captureGeneration\.current \+= 1;\s*void unload\(\)/);
-  assert.match(source, /async function reset\(\) \{\s*captureGeneration\.current \+= 1/);
+  assert.match(start, /await Audio\.requestPermissionsAsync\(\);\s*if \(!isCurrent\(\)\) return/);
+  assert.match(start, /await Audio\.setAudioModeAsync\([^\n]+\);\s*if \(!isCurrent\(\)\) return/);
+  assert.match(source, /const invalidateCapture = useCallback\(async \(\) => \{\s*captureGeneration\.current \+= 1/);
+  assert.match(source, /const reset = useCallback\(async \(\) => \{\s*const released = invalidateCapture\(\)/);
+  assert.match(source, /subscription\.remove\(\);\s*void invalidateCapture\(\)/);
 });
 
 test("prepared-but-cancelled mic is unloaded rather than attached", () => {
