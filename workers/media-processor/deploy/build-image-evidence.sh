@@ -27,12 +27,16 @@ trap 'rm -rf -- "$context"' EXIT
 git -C "$root" archive "$expected" workers/media-processor | tar -x -C "$context"
 cd "$context/workers/media-processor"
 printf 'source=%s\nbase=%s\nffmpeg=%s\n' "$expected" "$base_image" "$ffmpeg_version" > "$out/inputs.txt"
-tag="the-wall-media-evidence:$expected"
+# The build invocation itself records the immutable local image ID. Resolving
+# a shared tag after build could pick up a concurrent build of the same source
+# using different package pins. Do not create or resolve a mutable tag.
 docker build --platform linux/arm64 --build-arg "BASE_IMAGE=$base_image" \
   --build-arg "FFMPEG_PACKAGE_VERSION=$ffmpeg_version" \
-  --label "org.opencontainers.image.revision=$expected" --tag "$tag" . 2>&1 | tee "$out/build.log"
-image=$(docker image inspect --format '{{.Id}}' "$tag")
+  --label "org.opencontainers.image.revision=$expected" \
+  --iidfile "$out/build-image-id.txt" . 2>&1 | tee "$out/build.log"
+image=$(cat "$out/build-image-id.txt")
 [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]] || die "Image ID missing"
+test "$(docker image inspect --format '{{.Id}}' "$image")" = "$image"
 test "$(docker image inspect --format '{{.Architecture}}' "$image")" = arm64
 test "$(docker image inspect --format '{{.Config.User}}' "$image")" = 10001:10001
 test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = "$expected"
