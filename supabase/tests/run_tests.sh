@@ -190,11 +190,11 @@ psql_test -f "$MIG/0034_secret_rollout_server_gate.sql" >/dev/null
 if [[ "$MIGRATION_ORDER" == staging-recovery ]]; then
   # Recorded staging baseline has 0001–0030 and 0032–0034, with 0031 absent.
   psql_test >/dev/null <<'SQL'
-do $ begin
+do $staging_baseline$ begin
   if to_regclass('public.account_deletion_requests') is not null
     or to_regprocedure('public.prepare_account_deletion_for_purge(uuid,timestamptz)') is not null
   then raise exception '0031 unexpectedly present in staging-recovery baseline'; end if;
-end $;
+end $staging_baseline$;
 SQL
   echo "── staging-recovery: apply held 0031 after 0034 (disposable only)"
   load_0031
